@@ -1,0 +1,14 @@
+android-14/
+android-35/
+build/
+bt.zip
+plat.zip
+ecj.jar
+nanohttpd.jar
+*.zip
+*.keystore
+.vercel
+.gradle/
+local.properties
+app/build/
+.kotlin/

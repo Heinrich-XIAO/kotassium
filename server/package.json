@@ -1,0 +1,1 @@
+{"description": "Kotassium Spotify token-exchange proxy (holds client secret server-side)", "engines": {"node": "22.x"}, "name": "kotassium-auth", "private": true, "version": "1.0.0"}
