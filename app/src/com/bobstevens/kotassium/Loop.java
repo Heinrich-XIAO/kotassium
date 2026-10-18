@@ -36,6 +36,8 @@ public class Loop {
     static String scCid = "";
     static final Map<String, String> CACHE = new ConcurrentHashMap<>();
     static File libDir;
+    static File coverDir;
+    static File coverMapFile;
     ServerSocket server;
     ServerSocket oauthServer;
 
@@ -163,6 +165,9 @@ public class Loop {
         if (!Python.isStarted()) Python.start(new AndroidPlatform(appCtx));
         libDir = new File(ctx.getExternalFilesDir(null), "Music");
         if (!libDir.exists()) libDir.mkdirs();
+        coverDir = new File(ctx.getExternalFilesDir(null), "covers");
+        if (!coverDir.exists()) coverDir.mkdirs();
+        coverMapFile = new File(ctx.getExternalFilesDir(null), "covers.json");
         server = new ServerSocket(8421, 64, InetAddress.getByName("127.0.0.1"));
         Thread t = new Thread(() -> {
             while (true) {
@@ -225,7 +230,7 @@ public class Loop {
             o.put("dur", t.optInt("duration")); o.put("id", String.valueOf(t.optLong("id")));
             o.put("preview", t.optString("preview")); o.put("full", false);
             JSONObject alb = t.optJSONObject("album");
-            if (alb != null) o.put("cover", alb.optString("cover"));
+            if (alb != null) o.put("cover", coverLocal(alb.optString("cover")));
             out.put(o);
         }
         return out.toString();
@@ -516,6 +521,38 @@ public class Loop {
 
     // ---- routing ----
 
+    static synchronized JSONObject readCoverMap() {
+        try {
+            if (coverMapFile != null && coverMapFile.exists())
+                return new JSONObject(new String(fileBytes(coverMapFile), "UTF-8"));
+        } catch (Exception ignored) {}
+        return new JSONObject();
+    }
+    static synchronized void writeCoverMap(JSONObject m) {
+        try {
+            FileOutputStream o = new FileOutputStream(coverMapFile);
+            o.write(m.toString().getBytes("UTF-8")); o.close();
+        } catch (Exception ignored) {}
+    }
+    static String coverLocal(String url) {
+        if (url == null || url.isEmpty() || url.startsWith("/cover/")) return url;
+        try {
+            JSONObject m = readCoverMap();
+            if (m.has(url)) return "/cover/" + m.optString(url);
+        } catch (Exception ignored) {}
+        return url;
+    }
+    static void applyCoverLocalToArray(JSONArray arr) {
+        if (arr == null) return;
+        for (int i = 0; i < arr.length(); i++) {
+            try {
+                JSONObject o = arr.getJSONObject(i);
+                if (o.has("cover")) o.put("cover", coverLocal(o.optString("cover")));
+                if (o.has("tracks") && o.optJSONArray("tracks") != null) applyCoverLocalToArray(o.optJSONArray("tracks"));
+            } catch (Exception ignored) {}
+        }
+    }
+
     void handle(Socket s) {
         try {
             InputStream in = s.getInputStream();
@@ -524,6 +561,7 @@ public class Loop {
             while ((line = br.readLine()) != null && !line.isEmpty()) req += line + "\n";
             if (req.isEmpty()) { s.close(); return; }
             String[] first = req.split("\n")[0].split(" ");
+            String method = first.length > 0 ? first[0] : "GET";
             String uri = first.length > 1 ? first[1] : "/";
             String path = uri;
             Map<String, String> params = new HashMap<>();
@@ -535,6 +573,23 @@ public class Loop {
                     if (eq > 0) params.put(URLDecoder.decode(kv.substring(0, eq), "UTF-8"),
                             URLDecoder.decode(kv.substring(eq + 1), "UTF-8"));
                 }
+            }
+            // read request body if present
+            String bodyStr = "";
+            int cl = 0;
+            for (String hl : req.split("\n")) {
+                if (hl.toLowerCase().startsWith("content-length:")) {
+                    try { cl = Integer.parseInt(hl.substring(hl.indexOf(':')+1).trim()); } catch (Exception ignored) {}
+                }
+            }
+            if (cl > 0) {
+                StringBuilder bb = new StringBuilder();
+                for (int i = 0; i < cl; i++) {
+                    int c = br.read();
+                    if (c < 0) break;
+                    bb.append((char) c);
+                }
+                bodyStr = bb.toString();
             }
             byte[] resp;
             String type = "text/html; charset=utf-8";
@@ -671,7 +726,7 @@ public class Loop {
                                         o.put("dur", tk.optInt("duration")); o.put("id", String.valueOf(tk.optLong("id")));
                                         o.put("preview", tk.optString("preview")); o.put("full", false);
                                         JSONObject alb = tk.optJSONObject("album");
-                                        if (alb != null) o.put("cover", alb.optString("cover"));
+                                        if (alb != null) o.put("cover", coverLocal(alb.optString("cover")));
                                         out.put(o); added++;
                                     }
                                 }
@@ -756,6 +811,7 @@ public class Loop {
                             int t = fetchSongCount(link);
                             if (t > 0) jr.put("total", t);
                         }
+                        applyCoverLocalToArray(jr.optJSONArray("tracks"));
                         saveLink(link, jr);
                         r = jr.toString();
                     }
@@ -784,6 +840,7 @@ public class Loop {
                 try {
                     JSONObject e = findLink(params.get("url"));
                     if (e == null) throw new Exception("not saved");
+                    applyCoverLocalToArray(e.optJSONArray("tracks"));
                     resp = e.toString().getBytes("UTF-8");
                 } catch (Exception ex) {
                     resp = ("{\"error\":\"not_found\"}").getBytes("UTF-8");
@@ -880,6 +937,51 @@ public class Loop {
                 }
                 resp = ("{\"library\":" + out.toString() + "}").getBytes("UTF-8");
                 type = "application/json";
+            } else if (path.equals("/api/cover/cache")) {
+                try {
+                    JSONObject j = new JSONObject(bodyStr);
+                    String url = j.optString("url", "");
+                    String data = j.optString("data", "");
+                    if (url.isEmpty() || data.isEmpty()) throw new Exception("missing");
+                    java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+                    byte[] hb = md.digest(url.getBytes("UTF-8"));
+                    StringBuilder hex = new StringBuilder();
+                    for (int i = 0; i < 8; i++) hex.append(String.format("%02x", hb[i]));
+                    String key = hex.toString();
+                    String ext = "jpg";
+                    String low = url.toLowerCase();
+                    if (low.contains(".png")) ext = "png";
+                    else if (low.contains(".webp")) ext = "webp";
+                    else if (low.contains(".gif")) ext = "gif";
+                    String b64 = data;
+                    int comma = b64.indexOf(',');
+                    if (comma >= 0) b64 = b64.substring(comma + 1);
+                    byte[] bytes = java.util.Base64.getDecoder().decode(b64);
+                    File out = new File(coverDir, key + "." + ext);
+                    FileOutputStream fos = new FileOutputStream(out);
+                    fos.write(bytes); fos.close();
+                    JSONObject m = readCoverMap();
+                    m.put(url, key + "." + ext);
+                    writeCoverMap(m);
+                    resp = ("{\"ok\":true,\"key\":\""+key+"\",\"file\":\""+key+"."+ext+"\"}").getBytes("UTF-8");
+                } catch (Exception e) {
+                    resp = ("{\"error\":\""+e.toString().replace("\"","")+"\"}").getBytes("UTF-8");
+                }
+                type = "application/json";
+            } else if (path.startsWith("/cover/")) {
+                String name = path.substring("/cover/".length());
+                name = name.replaceAll("[^A-Za-z0-9._-]", "");
+                File f = new File(coverDir, name);
+                if (f.exists()) {
+                    resp = fileBytes(f);
+                    String ext = name.toLowerCase();
+                    if (ext.endsWith(".png")) type = "image/png";
+                    else if (ext.endsWith(".webp")) type = "image/webp";
+                    else if (ext.endsWith(".gif")) type = "image/gif";
+                    else type = "image/jpeg";
+                } else {
+                    resp = new byte[0]; type = "text/plain";
+                }
             } else if (path.startsWith("/lib/")) {
                 File f = new File(libDir, path.substring(5));
                 resp = f.exists() ? fileBytes(f) : new byte[0];
