@@ -4,7 +4,6 @@ import json, os, re, subprocess, sys, threading, time, urllib.parse, urllib.requ
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-HTML = os.path.join(BASE, "app", "assets", "index.html")
 HOME = os.path.expanduser("~")
 LIB = os.path.join(HOME, "Music", "Kotassium")
 STATE = os.path.join(LIB, "webstate")
@@ -60,8 +59,55 @@ def follow(url):
         return r.status, r.read().decode("utf-8", "replace")
 
 def yt_search(q):
-    # minimal: delegate to youtubei not implemented; return []
-    return {"results": []}
+    # Scrape YouTube's public results page for video ids (no API key).
+    UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+    try:
+        req = urllib.request.Request(
+            "https://www.youtube.com/results?search_query=" + urllib.parse.quote(q) + "&hl=en&gl=US",
+            headers={"User-Agent": UA, "Accept-Language": "en"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            html = r.read().decode("utf-8", "replace")
+        m = re.search(r"var ytInitialData = (\{.*?\});</script>", html, re.S)
+        if not m:
+            return {"results": []}
+        d = json.loads(m.group(1))
+        out = []
+
+        def walk(o):
+            if isinstance(o, dict):
+                v = o.get("videoRenderer")
+                if isinstance(v, dict) and v.get("videoId"):
+                    title = ""
+                    tit = v.get("title") or {}
+                    runs = tit.get("runs") or []
+                    if runs and isinstance(runs[0], dict):
+                        title = runs[0].get("text", "")
+                    if not title:
+                        title = tit.get("simpleText") or ""
+                    if title:
+                        dur = 0
+                        parts = ((v.get("lengthText") or {}).get("simpleText") or "").split(":")
+                        try:
+                            if len(parts) == 3: dur = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                            elif len(parts) == 2: dur = int(parts[0]) * 60 + int(parts[1])
+                        except Exception:
+                            dur = 0
+                        author = ""
+                        orr = (v.get("ownerText") or {}).get("runs") or []
+                        if orr and isinstance(orr[0], dict):
+                            author = orr[0].get("text", "YouTube")
+                        out.append({"source": "youtube", "title": title, "artist": author,
+                                    "dur": dur, "id": v.get("videoId"), "full": True})
+                for x in o.values():
+                    walk(x)
+            elif isinstance(o, list):
+                for x in o:
+                    walk(x)
+
+        walk(d)
+        return {"results": out[:12]}
+    except Exception:
+        return {"results": []}
 
 def dz_search(q):
     try:
@@ -113,9 +159,6 @@ def ytdl(vid):
                 os.replace(src, out)
                 return os.path.basename(out)
     raise RuntimeError("yt-dlp failed")
-
-def fetch_song_count(link):
-    return 0
 
 def cover_local(url):
     if not url or url.startswith("/cover/"):
@@ -184,17 +227,14 @@ def handle(path, params, hdr):
         out, errs = [], {}
         lanes = []
         if src not in ("deezer", "archive"):
-            lanes.append(("youtube", None))
+            lanes.append(("youtube", yt_search))
         if src not in ("youtube", "archive"):
             lanes.append(("deezer", dz_search))
         if src in ("all", "soundcloud"):
             lanes.append(("soundcloud", sc_search))
         if src in ("all", "archive"):
             lanes.append(("archive", ia_search))
-        # youtube lane: try yt search via youtubei not available; skip
         for name, fn in lanes:
-            if fn is None:
-                continue
             try:
                 j = fn(q)
                 out.extend(j.get("results", []))
@@ -203,11 +243,6 @@ def handle(path, params, hdr):
         return 200, "application/json", json.dumps({"results": out, "errors": errs}).encode(), None, False
     if path == "/api/play":
         src, tid = one("src"), one("id")
-        if src == "youtube":
-            body = ("<html><body style='background:#000;margin:0;display:grid;place-items:center;height:100vh'>"
-                    "<iframe width='100%' height='60%' src='https://www.youtube-nocookie.com/embed/" + re.sub(r'[^A-Za-z0-9_-]', "", tid)
-                    + "?autoplay=1' style='border:0' allow='autoplay; encrypted-media' allowfullscreen></iframe></body></html>")
-            return 200, "text/html", body.encode(), None, False
         if src == "deezer":
             f = dl_file("deezer", tid, one("preview"))
             return 200, "audio/mpeg", open(f, "rb").read(), None, False
@@ -228,31 +263,16 @@ def handle(path, params, hdr):
             if not re.match(r"(?i)https?://\S+", link or "") or len(link) > 2000:
                 raise RuntimeError("need an http(s) link")
             m = re.search(r"(?:open\.)?spotify\.com/(?:intl-[a-z]{2}/)?(playlist|album|track)/([A-Za-z0-9]+)", link)
-            if m:
-                try:
-                    import spotify_get
-                    name, tracks = spotify_get.resolve(link)
-                    fmt = [{"t": t["title"], "a": t["artist"], "ms": int(round(t.get("dur", 0) * 1000)),
-                            "album": t.get("album") or "", "cover": cover_local(t.get("cover") or "")} for t in tracks]
-                    jr = {"type": m.group(1), "name": name, "tracks": fmt, "count": len(fmt),
-                          "total": len(fmt), "truncated": False, "partial": False}
-                    save_link(link, jr)
-                    return 200, "application/json", json.dumps(jr).encode(), None, False
-                except Exception:
-                    pass
-            _, r = follow("https://kotassium-auth.vercel.app/api/spot/resolve?url=" + urllib.parse.quote(link, safe=""))
-            jr = json.loads(r)
-            if "error" not in jr and "tracks" in jr:
-                if jr.get("partial") and jr.get("total") is None and jr.get("type") == "playlist":
-                    t = fetch_song_count(link)
-                    if t > 0:
-                        jr["total"] = t
-                for tr in (jr.get("tracks") or []):
-                    if isinstance(tr, dict) and tr.get("cover"):
-                        tr["cover"] = cover_local(tr["cover"])
-                save_link(link, jr)
-                r = json.dumps(jr)
-            return 200, "application/json", r.encode(), None, False
+            if not m:
+                raise RuntimeError("need a spotify playlist, album, or track link")
+            import spotify_get
+            name, tracks = spotify_get.resolve(link)
+            fmt = [{"t": t["title"], "a": t["artist"], "ms": int(round(t.get("dur", 0) * 1000)),
+                    "album": t.get("album") or "", "cover": cover_local(t.get("cover") or "")} for t in tracks]
+            jr = {"type": m.group(1), "name": name, "tracks": fmt, "count": len(fmt),
+                  "total": len(fmt), "truncated": False, "partial": False}
+            save_link(link, jr)
+            return 200, "application/json", json.dumps(jr).encode(), None, False
         except Exception as e:
             return 200, "application/json", json.dumps({"error": "resolve_failed", "error_description": str(e)[:200]}).encode(), None, False
     if path == "/api/spot/playlist":
@@ -375,6 +395,5 @@ if __name__ == "__main__":
     if os.path.exists(YTDLP):
         print("[kotassium-web] yt-dlp found - youtube download lane enabled", flush=True)
     else:
-        print("[kotassium-web] yt-dlp missing - youtube tracks are embed-only", flush=True)
+        print("[kotassium-web] yt-dlp missing - youtube full tracks disabled (deezer previews only)", flush=True)
     srv.serve_forever()
-PY

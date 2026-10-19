@@ -1,24 +1,21 @@
 # Kotassium
 
-Kotassium is a browser-based music player. One Python server, one HTML page — nothing else.
+Kotassium is a browser-based music player. One Python server, one HTML page —
+nothing else.
 
-- **Cloud URL: https://kotassium-auth.vercel.app** — serverless edition
-  (Spotify resolve, Deezer search + previews, YouTube via the IFrame embed
-  player; playlists live in the browser's localStorage). Deployed from
-  `server/` with `vercel --prod`.
-- `serve_web.py` — the full local edition: permanent MP3 downloads via
-  `yt-dlp`, on-disk library, cover caching. Serves the same `web/index.html`.
+- `serve_web.py` — the server: Spotify link resolution, multi-source search,
+  permanent MP3 downloads via `yt-dlp`, on-disk library, cover caching.
+  Serves `web/index.html`.
 - `web/index.html` — the UI (single file, no build step).
-- `server/` — one Vercel project (`kotassium-auth`) that serves BOTH the
-  cloud UI (`server/index.html` — a synced copy of `web/index.html`) and the
-  API functions: `/api/spot/resolve` (token-exchange + resolve fallback,
-  original role), `/api/search`, `/api/ytsearch`, `/api/cover`. Deploy from
-  `server/` with `vercel --prod`. If `web/index.html` changes, re-copy it
-  to `server/index.html` before deploying.
-- `venv/` — local Python env supplying `yt-dlp`.
+- `spotify_get.py` / `harvest_token.py` — Spotify resolution helpers used by
+  `serve_web.py`.
+- `venv/` — local Python env supplying `yt-dlp` (gitignored).
 
-Everything else (Android APK, macOS wrapper, desktop daemons, PWA server) was
-removed; the earlier APK releases live on GitHub Releases.
+There is no cloud edition anymore: the `server/` Vercel project (UI copy +
+serverless API, including the leftover APK-serving routes) was removed, and
+`serve_web.py` no longer falls back to it for Spotify resolution — the local
+`spotify_get.resolve` lane handles playlists, albums, and tracks on its own.
+Earlier APK releases live on GitHub Releases.
 
 ## Run
 
