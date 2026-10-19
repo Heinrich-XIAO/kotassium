@@ -1,41 +1,32 @@
 # Kotassium
 
-Personal-use music player for Android. Everything runs on-device: search across
-YouTube (playback), SoundCloud, Deezer and Internet Archive, an in-process
-loopback server, Spotify account sign-in (OAuth PKCE, read-only), and passive
-downloading — songs cache while you listen.
+Kotassium is a browser-based music player. One Python server, one HTML page — nothing else.
 
-## Install
+- `serve_web.py` — the whole app: serves `web/index.html`, resolves playlists
+  (Spotify via `spotify_get.py` / the `kotassium-auth` Vercel proxy), searches
+  sources (Deezer etc.), and downloads audio through `yt-dlp`.
+- `web/index.html` — the UI (single file, no build step).
+- `server/` — the `kotassium-auth` Vercel function (Spotify token exchange +
+  resolve fallback). It holds the Spotify client secret server-side.
+- `venv/` — local Python env supplying `yt-dlp`.
 
-Grab `Kotassium-v4.apk` from [Releases](../../releases) and sideload it
-(allow unknown apps). No Play Store, no Tailscale, no server.
+Everything else (Android APK, macOS wrapper, desktop daemons, PWA server) was
+removed; the earlier APK releases live on GitHub Releases.
 
-## Build from source
+## Run
 
-Raw Android toolchain (no Gradle):
-
-```
-aapt2 compile --dir app/res -o res.zip
-aapt2 link -o base.apk -I android.jar --manifest app/AndroidManifest.xml -A app/assets res.zip
-java -jar ecj.jar -source 8 -target 8 -cp android.jar -d classes app/src/com/bobstevens/kotassium/*.java
-d8 --release --lib android.jar --output . classes/com/bobstevens/kotassium/*.class
-zip -j base.apk classes.dex
-zipalign -f 4 base.apk aligned.apk
-apksigner sign --ks keystore --out Kotassium.apk aligned.apk
+```sh
+venv/bin/python3 serve_web.py        # 0.0.0.0:8421
 ```
 
-## The engine (desktop)
+Open `http://<machine-ip>:8421` from any browser (e.g. the Tailscale IP).
 
-The Python engine (`spotify_get.py`, `playerd.py`, `serve_pwa.py`,
-`spotify_port.py`) is the desktop sibling: multi-source resolution with
-duration-fingerprint matching, adaptive rate governor, headless token
-harvesting, account porting. Included here for reference.
+Downloads and state live outside the repo in `~/Music/Kotassium`.
 
-## Honest limitations
+## Dependencies
 
-- YouTube *downloads* need the extractor lane (poToken wall) — YouTube tracks
-  stream via the embed player instead. SoundCloud/Deezer/Archive tracks
-  download fully.
-- Deezer full-audio needs your own account cookie (`arl`).
-- Personal use only.
+Only the Python standard library plus `yt-dlp` (expected at `venv/bin/yt-dlp`):
 
+```sh
+python3 -m venv venv && venv/bin/pip install yt-dlp
+```
