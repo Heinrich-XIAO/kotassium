@@ -513,6 +513,7 @@ if('mediaSession' in navigator){try{
   navigator.mediaSession.setActionHandler('pause',function(){AU.pause()});
   navigator.mediaSession.setActionHandler('nexttrack',nx);
   navigator.mediaSession.setActionHandler('previoustrack',pv)}catch(e){}}
+try{var _v=parseFloat(localStorage.getItem('kot_vol'));if(!isNaN(_v)){AU.volume=_v;document.getElementById('volf').style.width=(_v*100)+'%'}}catch(e){}
 window.addEventListener('load',function(){loadSide().then(renderHome)});
 </script>
 </body></html>
