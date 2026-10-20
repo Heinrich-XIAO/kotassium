@@ -434,7 +434,7 @@ function localResolve(tr,fresh){
         AU.src='/lib/'+encodeURIComponent(prevF);
         AU.play().catch(function(){AU.src='/lib/'+encodeURIComponent(fullF);AU.play();});
         AU.addEventListener('timeupdate',doSwap2);
-        if(Q[QI+1])prefetch(Q[QI+1]); if(Q[QI+2])prefetch(Q[QI+2]); if(Q[QI+2])prefetch(Q[QI+2]);
+        var ni1=nextIndex(); if(ni1>=0&&Q[ni1])prefetch(Q[ni1]);
       }else{delete _cache[key];localResolveFresh(tr)}
     },function(){delete _cache[key];localResolveFresh(tr)});
     return
@@ -466,7 +466,7 @@ function tryCands(cands,k,tr){
       AU.src='/lib/'+encodeURIComponent(prevF);
       AU.play().catch(function(){AU.src='/lib/'+encodeURIComponent(fullF);AU.play();});
       AU.addEventListener('timeupdate',doSwap);
-      if(Q[QI+1])prefetch(Q[QI+1]);
+      var ni1=nextIndex(); if(ni1>=0&&Q[ni1])prefetch(Q[ni1]);
     }else{tryCands(cands,k+1,tr)}
   },function(){tryCands(cands,k+1,tr)});
 }
@@ -487,7 +487,7 @@ function nx(){
 function qiR(){var n;do{n=Math.floor(Math.random()*Q.length)}while(n===QI&&Q.length>1);return n}
 function playIdx(i){QI=i;playTrack(Q[i])}
 function pv(){if(QI>0)playIdx(QI-1)}
-function toggleShuffle(){SHUF=!SHUF;document.querySelectorAll('.aicon#shufb,.aicon#shuf2').forEach(function(b){b.classList.toggle('on',SHUF)});try{localStorage.setItem('kot_shuf',SHUF?'1':'0')}catch(e){}}
+function toggleShuffle(){SHUF=!SHUF;document.querySelectorAll('.aicon#shufb,.aicon#shuf2').forEach(function(b){b.classList.toggle('on',SHUF)});if(SHUF)rebuildShuffle();try{localStorage.setItem('kot_shuf',SHUF?'1':'0')}catch(e){}}
 function toggleRepeat(){REPEAT=(REPEAT+1)%3;updateRepeatUI();toast('repeat '+(REPEAT===0?'off':REPEAT===1?'all':'one'));try{localStorage.setItem('kot_repeat',REPEAT)}catch(e){}}
 function updateRepeatUI(){
   var on=REPEAT>0;
