@@ -94,6 +94,41 @@ def preflight():
     return missing
 
 
+def selftest():
+    """Report what this installation can do. Used by CI and for support."""
+    from importlib.metadata import version as pkg_version
+
+    ok = True
+    print("python  %s" % sys.version.split()[0])
+    print("frozen  %s" % bool(getattr(sys, "frozen", False)))
+    print("base    %s" % serve_web.BASE)
+    for rel in ("web/index.html", "assets/kotassium.svg"):
+        p = os.path.join(serve_web.BASE, rel)
+        print("%-7s %s" % ("ok" if os.path.isfile(p) else "MISSING", p))
+        ok = ok and os.path.isfile(p)
+    try:
+        import webview  # noqa: F401
+        try:
+            ver = pkg_version("pywebview")
+        except Exception:
+            ver = getattr(webview, "__version__", "unknown")
+        print("webview %s" % ver)
+    except Exception as e:
+        ok = False
+        print("webview MISSING (%s)" % e)
+    if IS_MAC:
+        try:
+            import WebKit  # noqa: F401
+            print("webkit  ok")
+        except Exception as e:
+            ok = False
+            print("webkit  MISSING (%s)" % e)
+    print("yt-dlp  %s" % (serve_web.YTDLP or "MISSING"))
+    print("ffmpeg  %s" % (serve_web.FFMPEG or "MISSING"))
+    print("RESULT  %s" % ("ok" if ok else "incomplete"))
+    return 0 if ok else 1
+
+
 def run(host, port, dev=False, no_window=False, notify_tracks=True):
     lock = acquire_lock()
     if not lock:
@@ -284,7 +319,11 @@ def main(argv=None):
     ap.add_argument("--no-window", action="store_true", help="server only")
     ap.add_argument("--no-notify", action="store_true",
                     help="don't send a notification on track change")
+    ap.add_argument("--selftest", action="store_true",
+                    help="print what this installation can do, then exit")
     a = ap.parse_args(argv)
+    if a.selftest:
+        return selftest()
     host = "0.0.0.0" if a.lan else "127.0.0.1"
     return run(host, a.port, dev=a.dev, no_window=a.no_window,
                notify_tracks=not a.no_notify)

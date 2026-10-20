@@ -54,6 +54,21 @@ jobs:
           KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
         run: ./build-macos.sh
 
+      - name: Smoke test the bundle
+        run: |
+          APP=dist/Kotassium.app/Contents/MacOS/Kotassium
+          codesign --verify --deep --strict dist/Kotassium.app
+          "$APP" --selftest | tee selftest.txt
+          grep -q "RESULT  ok" selftest.txt
+          grep -q "Resources/bin/yt-dlp" selftest.txt
+          KOTASSIUM_LIB="$RUNNER_TEMP/lib" "$APP" --no-window --port 8421 &
+          PID=$!
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8421/api/health && break || sleep 1
+          done
+          curl -fsS http://127.0.0.1:8421/ | grep -qi "<title>Kotassium"
+          kill "$PID"
+
       - name: Make the DMG
         env:
           KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
