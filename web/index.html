@@ -504,7 +504,7 @@ document.getElementById('prog').addEventListener('click',function(e){
   AU.currentTime=(e.clientX-r.left)/r.width*AU.duration});
 (function(){
   var vol=document.getElementById('vol');var volf=document.getElementById('volf');
-  function setVol(e){var r=vol.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));AU.volume=v*v;AU.muted=false;volf.style.width=(v*100)+'%';try{localStorage.setItem('kot_vol',v)}catch(e){};updateVolIcon()
+  function setVol(e){var r=vol.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));AU.volume=v*v;AU.muted=false;volf.style.width=(v*100)+'%';try{localStorage.setItem('kot_vol',v)}catch(e){};updateVolIcon()}
   vol.addEventListener('mousedown',function(e){vol.classList.add('dragging');setVol(e);
     function move(ev){setVol(ev)}
     function up(){vol.classList.remove('dragging');document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up)}
