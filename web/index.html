@@ -408,6 +408,24 @@ function stopSrc(){try{AU.pause()}catch(e){}try{AU.removeAttribute('src');AU.loa
 var _cache={};
 function localResolve(tr,fresh){
   stopSrc();setPausedIcon(true);
+  var key=(tr.t||'')+'|'+(tr.a||'');
+  var cached=_cache[key];
+  if(cached){
+    toast('resolving '+(tr.t||'')+'...');
+    API('/api/ytdl?id='+encodeURIComponent(cached)).then(function(d){
+      if(d.file&&!d.error){
+        var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
+        if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
+        AU.src='/lib/'+encodeURIComponent(d.file);AU.play();
+        if(Q[QI+1])prefetch(Q[QI+1]);
+      }else{delete _cache[key];localResolveFresh(tr)}
+    },function(){delete _cache[key];localResolveFresh(tr)});
+    return
+  }
+  localResolveFresh(tr)
+}
+function localResolveFresh(tr){
+  stopSrc();setPausedIcon(true);
   toast('resolving '+(tr.t||'')+'...');
   var key=(tr.t||'')+'|'+(tr.a||'');
   API('/api/search?src=youtube&q='+encodeURIComponent((tr.a?tr.a+' ':'')+(tr.t||''))).then(function(j){
