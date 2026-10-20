@@ -520,8 +520,12 @@ AU.addEventListener('timeupdate',function(){
   var un=document.getElementById('upnext');
   if(AU.duration && AU.duration-AU.currentTime<=30){
     var ni=nextIndex();
-    if(ni>=0 && Q[ni]){un.textContent='Up next: '+(Q[ni].t||'')+' — '+(Q[ni].a||'');un.style.opacity=1}
-    else un.style.opacity=0;
+    if(ni>=0 && Q[ni]){
+      var t=Q[ni];
+      var cov=t.cover?('/cover/'+(window._coverCache&&window._coverCache[t.cover]||'')||t.cover):'';
+      un.innerHTML='<span style="color:#b3b3b3;font-size:11px;margin-right:8px">Up next</span><div style="display:flex;align-items:center;gap:8px"><div style="width:36px;height:36px;border-radius:4px;background:#282828;flex:none;background-size:cover;background-position:center;'+(t.cover?'background-image:url(\''+t.cover.replace(/'/g,'')+'\')':'')+'"></div><div style="min-width:0"><b style="display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.t||'')+'</b><small style="display:block;font-size:11px;color:#b3b3b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.a||'')+'</small></div></div>';
+      un.style.opacity=1;
+    } else un.style.opacity=0;
   }else un.style.opacity=0;});
 document.getElementById('prog').addEventListener('click',function(e){
   if(!AU.duration)return;var r=this.getBoundingClientRect();
