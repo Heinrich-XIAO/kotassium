@@ -410,7 +410,7 @@ function playTrack(tr){
   localResolve(tr,true);
 }
 function stopSrc(){try{AU.pause()}catch(e){}try{AU.removeAttribute('src');AU.load()}catch(e){}}
-var _cache={};
+var _cache={};try{var _c=JSON.parse(localStorage.getItem('kot_ytcache')||'{}');for(var k in _c)_cache[k]=_c[k]}catch(e){}
 function localResolve(tr,fresh){
   stopSrc();setPausedIcon(true);
   var key=(tr.t||'')+'|'+(tr.a||'');
@@ -445,7 +445,7 @@ function tryCands(cands,k,tr){
     if(d.file&&!d.error){
       var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
       if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
-      _cache[tr.t+'|'+tr.a]=c.id;
+      _cache[tr.t+'|'+tr.a]=c.id;try{localStorage.setItem('kot_ytcache',JSON.stringify(_cache))}catch(e){}
       AU.src='/lib/'+encodeURIComponent(d.file);AU.play();
       if(Q[QI+1])prefetch(Q[QI+1]);
     }else{tryCands(cands,k+1,tr)}
