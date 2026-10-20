@@ -514,9 +514,10 @@ AU.addEventListener('play',function(){setPausedIcon(false)});
 AU.addEventListener('pause',function(){if(AU.src)setPausedIcon(true)});
 AU.addEventListener('ended',function(){if(REPEAT===2){AU.currentTime=0;AU.play();return}nx()});
 AU.addEventListener('timeupdate',function(){
-  document.getElementById('progf').style.width=(AU.duration?AU.currentTime/AU.duration*100:0)+'%';
+  var _dur=(Q[QI]&&Q[QI].ms)?Q[QI].ms/1000:(AU.duration||0);
+  document.getElementById('progf').style.width=(_dur?AU.currentTime/_dur*100:0)+'%';
   document.getElementById('curt').textContent=secs(AU.currentTime);
-  if(AU.duration)document.getElementById('tott').textContent=secs(AU.duration);
+  if(_dur)document.getElementById('tott').textContent=secs(_dur);
   var un=document.getElementById('upnext');
   if(AU.duration && AU.duration-AU.currentTime<=30){
     var ni=nextIndex();
