@@ -7,3 +7,4 @@ __pycache__/
 *.jar
 *.zip
 *.keystore
+desktop-venv/

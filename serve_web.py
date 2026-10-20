@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """serve_web.py - Kotassium as a plain website for fast iteration."""
-import json, os, re, subprocess, sys, threading, time, urllib.parse, urllib.request, hashlib, base64
+import argparse, ipaddress, json, os, re, shutil, signal, subprocess, sys, threading, time, urllib.parse, urllib.request, hashlib, base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -15,9 +15,101 @@ COVERS_JSON = os.path.join(STATE, "covers.json")
 PORT = 8421
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
 
-YTDLP = os.path.join(BASE, "venv", "bin", "yt-dlp")
+def find_ytdlp():
+    """Locate a usable yt-dlp: explicit env, project venv, PATH, then the module."""
+    env = os.environ.get("KOTASSIUM_YTDLP")
+    if env:
+        return [env]
+    local = os.path.join(BASE, "venv", "bin", "yt-dlp")
+    if os.path.exists(local):
+        return [local]
+    exe = shutil.which("yt-dlp")
+    if exe:
+        return [exe]
+    try:
+        import yt_dlp  # noqa: F401
+        return [sys.executable, "-m", "yt_dlp"]
+    except Exception:
+        return None
+
+YTDLP = find_ytdlp()
+FFMPEG = shutil.which("ffmpeg")
 LINKS = os.path.join(STATE, "links.json")
 _lock = threading.RLock()
+
+_procs = set()
+_procs_lock = threading.Lock()
+
+def _kill_proc(p):
+    try:
+        if os.name == "posix":
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        else:
+            p.kill()
+    except Exception:
+        try:
+            p.kill()
+        except Exception:
+            pass
+
+def run_proc(cmd, timeout, **kw):
+    """Run a child process, tracking it so a window close can kill it."""
+    if os.name == "posix":
+        kw.setdefault("start_new_session", True)
+    p = subprocess.Popen(cmd, **kw)
+    with _procs_lock:
+        _procs.add(p)
+    try:
+        return p.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_proc(p)
+        raise
+    finally:
+        with _procs_lock:
+            _procs.discard(p)
+
+def stop_children():
+    with _procs_lock:
+        procs = list(_procs)
+    for p in procs:
+        _kill_proc(p)
+        try:
+            p.wait(timeout=2)
+        except Exception:
+            pass
+        with _procs_lock:
+            _procs.discard(p)
+
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", ""}
+
+def _hostname(host_header):
+    try:
+        return (urllib.parse.urlsplit("//" + (host_header or "").strip()).hostname or "").lower()
+    except Exception:
+        return ""
+
+def host_allowed(host_header):
+    """Allow loopback names and IP literals; reject hostnames (DNS rebinding)."""
+    h = _hostname(host_header)
+    if h in LOCAL_HOSTS:
+        return True
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        return False
+
+def origin_allowed(origin, host_header):
+    """Same-origin only. Requests without an Origin (curl, tests) are allowed."""
+    if not origin:
+        return True
+    try:
+        o = urllib.parse.urlsplit(origin)
+    except Exception:
+        return False
+    if o.scheme not in ("http", "https"):
+        return False
+    return o.netloc.lower() == (host_header or "").lower()
 
 def read_links():
     with _lock:
@@ -147,11 +239,15 @@ def ytdl(vid):
     out = os.path.join(LIB, vid + ".mp3")
     if os.path.exists(out):
         return os.path.basename(out)
+    if not YTDLP:
+        raise RuntimeError("yt-dlp not found")
+    if not FFMPEG:
+        raise RuntimeError("ffmpeg not found - needed to convert downloads to mp3")
     # use yt-dlp
     tmp = os.path.join(LIB, ".yt_" + vid + ".%(ext)s")
-    subprocess.run([YTDLP, "-x", "--audio-format", "mp3", "--audio-quality", "128K",
-                    "--no-overwrites", "-o", tmp, "https://www.youtube.com/watch?v=" + vid],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+    run_proc(YTDLP + ["-x", "--audio-format", "mp3", "--audio-quality", "128K",
+                      "--no-overwrites", "-o", tmp, "https://www.youtube.com/watch?v=" + vid],
+             timeout=300, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for f in os.listdir(LIB):
         if f.startswith(".yt_" + vid + "."):
             src = os.path.join(LIB, f)
@@ -160,8 +256,8 @@ def ytdl(vid):
                 # generate 5s preview clip
                 prev = os.path.join(LIB, vid + "_preview.mp3")
                 try:
-                    subprocess.run(["ffmpeg","-y","-i",out,"-t","5","-c","copy",prev],
-                                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=60)
+                    run_proc([FFMPEG, "-y", "-i", out, "-t", "5", "-c", "copy", prev],
+                             timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except Exception:
                     pass
                 return os.path.basename(out)
@@ -178,7 +274,11 @@ def cover_local(url):
         return "/cover/" + m[url]
     return url
 
-def handle_post(path, raw, hdr):
+def handle_post(path, params, raw, hdr):
+    pp = urllib.parse.parse_qs(params, keep_blank_values=True)
+    if path == "/api/links/drop":
+        drop_link(pp.get("url", [""])[0])
+        return 200, "application/json", b'{"ok":true}', None, False
     if path == "/api/cover/cache":
         try:
             j = json.loads(raw.decode("utf-8", "replace"))
@@ -301,9 +401,8 @@ def handle(path, params, hdr):
             if isinstance(t, dict) and t.get("cover"):
                 t["cover"] = cover_local(t["cover"])
         return 200, "application/json", json.dumps(e).encode(), None, False
-    if path == "/api/links/drop":
-        drop_link(one("url"))
-        return 200, "application/json", b'{"ok":true}', None, False
+    if path == "/api/health":
+        return 200, "application/json", json.dumps({"ok": True, "app": "kotassium", "pid": os.getpid()}).encode(), None, False
     if path == "/api/ytdl":
         try:
             return 200, "application/json", json.dumps({"file": ytdl(one("id"))}).encode(), None, False
@@ -327,10 +426,10 @@ def handle(path, params, hdr):
         if (not os.path.exists(f)) and base.endswith("_preview.mp3"):
             vid = base[:-len("_preview.mp3")]
             src = os.path.join(LIB, vid + ".mp3")
-            if os.path.exists(src):
+            if os.path.exists(src) and FFMPEG:
                 try:
-                    subprocess.run(["ffmpeg","-y","-i",src,"-t","5","-c","copy",f],
-                                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=60)
+                    run_proc([FFMPEG, "-y", "-i", src, "-t", "5", "-c", "copy", f],
+                             timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except Exception:
                     pass
         if os.path.exists(f):
@@ -363,19 +462,33 @@ def handle(path, params, hdr):
     return 404, "text/plain", b"nope", None, False
 
 class H(BaseHTTPRequestHandler):
+    def _send(self, code, ctype, body, extra=None):
+        self._code = code
+        self.send_response(code)
+        if ctype:
+            self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _guard(self, mutating):
+        """Reject DNS-rebinding hosts and cross-origin writes."""
+        if not host_allowed(self.headers.get("Host")):
+            return "forbidden host"
+        if mutating and not origin_allowed(self.headers.get("Origin"), self.headers.get("Host")):
+            return "forbidden origin"
+        return None
+
     def do_GET(self):
         try:
+            bad = self._guard(False)
+            if bad:
+                return self._send(403, "text/plain", bad.encode())
             parts = urllib.parse.urlsplit(self.path)
             code, ctype, body, extra, _ = handle(parts.path, parts.query, self.headers)
-            self._code = code
-            self.send_response(code)
-            if ctype:
-                self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(body)))
-            for k, v in (extra or {}).items():
-                self.send_header(k, v)
-            self.end_headers()
-            self.wfile.write(body)
+            self._send(code, ctype, body, extra)
         except Exception:
             try:
                 self.wfile.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -384,19 +497,14 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            bad = self._guard(True)
+            if bad:
+                return self._send(403, "text/plain", bad.encode())
             parts = urllib.parse.urlsplit(self.path)
             n = int(self.headers.get("Content-Length", "0") or 0)
             raw = self.rfile.read(n) if n else b""
-            code, ctype, body, extra, _ = handle_post(parts.path, raw, self.headers)
-            self._code = code
-            self.send_response(code)
-            if ctype:
-                self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(body)))
-            for k, v in (extra or {}).items():
-                self.send_header(k, v)
-            self.end_headers()
-            self.wfile.write(body)
+            code, ctype, body, extra, _ = handle_post(parts.path, parts.query, raw, self.headers)
+            self._send(code, ctype, body, extra)
         except Exception:
             try:
                 self.wfile.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -409,13 +517,34 @@ class H(BaseHTTPRequestHandler):
         except Exception:
             pass
 
-if __name__ == "__main__":
-    srv = ThreadingHTTPServer(("0.0.0.0", PORT), H)
+def make_server(host="0.0.0.0", port=PORT):
+    """Build (but do not start) the HTTP server. Import-safe for desktop.py."""
+    return ThreadingHTTPServer((host, port), H)
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Kotassium local server")
+    ap.add_argument("--host", default="0.0.0.0", help="bind address (default 0.0.0.0)")
+    ap.add_argument("--port", type=int, default=PORT)
+    a = ap.parse_args(argv)
+    if not a.host.startswith("127.") and not a.host.startswith("::1") and a.host != "localhost":
+        print("[kotassium-web] WARNING: bound to %s - anyone who can reach this port can read and delete playlists" % a.host, flush=True)
+    srv = make_server(a.host, a.port)
     print("[kotassium-web] UI: " + os.path.join(BASE, "web", "index.html"))
     print("[kotassium-web] lib: " + LIB)
-    print("[kotassium-web] http://0.0.0.0:" + str(PORT) + " - open via tailscale IP", flush=True)
-    if os.path.exists(YTDLP):
-        print("[kotassium-web] yt-dlp found - youtube download lane enabled", flush=True)
+    print("[kotassium-web] http://%s:%d/" % (a.host, a.port), flush=True)
+    if YTDLP:
+        print("[kotassium-web] yt-dlp: " + " ".join(YTDLP), flush=True)
     else:
         print("[kotassium-web] yt-dlp missing - youtube full tracks disabled (deezer previews only)", flush=True)
-    srv.serve_forever()
+    if not FFMPEG:
+        print("[kotassium-web] ffmpeg missing - downloads and preview clips disabled", flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_children()
+        srv.server_close()
+
+if __name__ == "__main__":
+    main()
