@@ -42,10 +42,16 @@ def which(name):
     return None
 
 def find_ytdlp():
-    """Locate a usable yt-dlp: explicit env, project venv, PATH, then the module."""
+    """Locate a usable yt-dlp: explicit env, bundled copy, project venv, PATH,
+    then the module."""
     env = os.environ.get("KOTASSIUM_YTDLP")
     if env:
         return [env]
+    # Inside Kotassium.app the standalone binary ships next to the web assets.
+    for rel in (("bin", "yt-dlp"), ("yt-dlp",)):
+        p = os.path.join(BASE, *rel)
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return [p]
     local = os.path.join(BASE, "venv", "bin", "yt-dlp")
     if os.path.exists(local):
         return [local]

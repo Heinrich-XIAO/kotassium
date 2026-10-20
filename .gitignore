@@ -8,3 +8,7 @@ __pycache__/
 *.zip
 *.keystore
 desktop-venv/
+vendor/
+dist/
+build/
+*.dmg

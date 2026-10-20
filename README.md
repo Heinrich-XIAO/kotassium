@@ -50,12 +50,24 @@ desktop-venv/bin/python desktop.py
 ./install.sh                # Linux: add to the app grid
 ```
 
-macOS, as a real app bundle (run these on the Mac — they cannot be built here):
+macOS: install the DMG from [GitHub Releases](https://github.com/Heinrich-XIAO/kotassium/releases)
+(`Kotassium-*-arm64.dmg` for Apple Silicon, `Kotassium-*-x86_64.dmg` for
+Intel), drag **Kotassium** into **Applications**, then right-click → **Open**
+the first time (the app is unsigned). Downloads still need `ffmpeg`:
+`brew install ffmpeg` — `yt-dlp` is bundled inside the app.
+
+Building the app yourself (on the Mac — it cannot be cross-compiled here):
 
 ```sh
 ./install-macos.sh          # py2app -> /Applications/Kotassium.app
+./build-macos.sh            # just build dist/Kotassium.app
+./make-dmg.sh               # wrap it in Kotassium-<version>.dmg
 ./install-macos.sh --wrapper   # fallback: tiny AppleScript app
 ```
+
+CI builds both architectures on every `v*` tag
+(`.github/workflows/macos-release.yml`); a manual run of that workflow only
+uploads artifacts, so it is the safe way to test packaging changes.
 
 `install.sh` rewrites the launcher with this checkout's absolute path. Closing
 the window stops the server.

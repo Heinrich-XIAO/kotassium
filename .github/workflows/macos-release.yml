@@ -1,0 +1,107 @@
+name: macOS DMG
+
+# Builds Kotassium.app with py2app on GitHub's macOS runners and wraps it in a
+# DMG. Tag pushes (v*) publish the DMG to a GitHub Release; manual runs only
+# upload workflow artifacts, which is the safe way to test a change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version stamped into the app bundle
+        required: false
+        default: "2.0.0"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14        # Apple Silicon
+            arch: arm64
+          - runner: macos-15-intel  # Intel (best effort)
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    # Keep a missing/retired Intel runner from failing the whole release.
+    continue-on-error: ${{ matrix.arch == 'x86_64' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build the app bundle
+        env:
+          KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
+        run: ./build-macos.sh
+
+      - name: Make the DMG
+        env:
+          KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
+        run: ./make-dmg.sh "Kotassium-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kotassium-${{ matrix.arch }}
+          path: Kotassium-*.dmg
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.dmg
+          generate_release_notes: true
+          body: |
+            ## Kotassium for macOS
+
+            Download the DMG for your Mac and drag **Kotassium** into
+            **Applications**:
+
+            - `Kotassium-*-arm64.dmg` — Apple Silicon (M1 and later)
+            - `Kotassium-*-x86_64.dmg` — Intel
+
+            The app is **unsigned and not notarized**. On first launch macOS
+            will refuse to open it. Either right-click the app → **Open** →
+            **Open**, or run:
+
+            ```sh
+            xattr -dr com.apple.quarantine /Applications/Kotassium.app
+            ```
+
+            Downloads need `ffmpeg` on the PATH:
+
+            ```sh
+            brew install ffmpeg
+            ```
+
+            `yt-dlp` is bundled inside the app. Library and state live in
+            `~/Music/Kotassium`.

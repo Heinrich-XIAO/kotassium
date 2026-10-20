@@ -4,7 +4,11 @@
 
 produces dist/Kotassium.app. Not testable from Linux - see README.
 """
+import os
+
 from setuptools import setup
+
+VERSION = os.environ.get("KOTASSIUM_VERSION", "2.0.0").lstrip("v")
 
 APP = ["desktop.py"]
 DATA_FILES = [
@@ -21,7 +25,8 @@ OPTIONS = {
         "CFBundleName": "Kotassium",
         "CFBundleDisplayName": "Kotassium",
         "CFBundleIdentifier": "app.kotassium.desktop",
-        "CFBundleShortVersionString": "1.0",
+        "CFBundleShortVersionString": VERSION,
+        "CFBundleVersion": VERSION,
         "NSHighResolutionCapable": True,
         "LSMinimumSystemVersion": "11.0",
     },
