@@ -157,6 +157,13 @@ def ytdl(vid):
             src = os.path.join(LIB, f)
             if os.path.exists(src):
                 os.replace(src, out)
+                # generate 5s preview clip
+                prev = os.path.join(LIB, vid + "_preview.mp3")
+                try:
+                    subprocess.run(["ffmpeg","-y","-i",out,"-t","5","-c","copy",prev],
+                                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=60)
+                except Exception:
+                    pass
                 return os.path.basename(out)
     raise RuntimeError("yt-dlp failed")
 
