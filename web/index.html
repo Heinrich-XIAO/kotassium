@@ -121,6 +121,7 @@ svg{display:block}
 #rside{display:flex;justify-content:flex-end;align-items:center;gap:10px;color:#b3b3b3}
 #vol{width:90px;height:4px;background:#ffffff33;border-radius:2px;position:relative;cursor:pointer}
 #volf{position:absolute;left:0;top:0;bottom:0;background:#fff;border-radius:2px}
+#vol.dragging #volf{background:#1ed760}
 #toast{position:fixed;bottom:88px;right:20px;background:#1db954;color:#000;font-weight:600;padding:10px 16px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:99}
 #empty{color:#b3b3b3;padding:24px 8px;font-size:14px}
 #empty h3{color:#fff;margin:0 0 6px}
@@ -497,10 +498,14 @@ AU.addEventListener('timeupdate',function(){
 document.getElementById('prog').addEventListener('click',function(e){
   if(!AU.duration)return;var r=this.getBoundingClientRect();
   AU.currentTime=(e.clientX-r.left)/r.width*AU.duration});
-document.getElementById('vol').addEventListener('click',function(e){
-  var r=this.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
-  AU.volume=v;AU.muted=false;document.getElementById('volf').style.width=(v*100)+'%'});
-function muteVol(){AU.muted=!AU.muted;document.getElementById('volf').style.width=AU.muted?'0%':'80%'}
+(function(){
+  var vol=document.getElementById('vol');var volf=document.getElementById('volf');
+  function setVol(e){var r=vol.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));AU.volume=v;AU.muted=false;volf.style.width=(v*100)+'%'}
+  vol.addEventListener('mousedown',function(e){vol.classList.add('dragging');setVol(e);
+    function move(ev){setVol(ev)}
+    function up(){vol.classList.remove('dragging');document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up)}
+    document.addEventListener('mousemove',move);document.addEventListener('mouseup',up)});
+})();function muteVol(){AU.muted=!AU.muted;document.getElementById('volf').style.width=AU.muted?'0%':'80%'}
 document.addEventListener('keydown',function(e){
   if(e.code==='Space'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();toggle()}});
 if('mediaSession' in navigator){try{
