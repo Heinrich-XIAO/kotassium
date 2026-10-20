@@ -30,4 +30,4 @@ else
     fi
 fi
 
-desktop-venv/bin/python -c "import webview; print('pywebview', webview.__version__)"
+desktop-venv/bin/python -c "import webview; from importlib.metadata import version; print('pywebview', version('pywebview'))"
