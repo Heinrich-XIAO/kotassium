@@ -330,7 +330,7 @@ function renderPlaylistView(name,tracks){
   '<button class=aicon id=shuf2 onclick=toggleShuffle() title="Shuffle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>'+
   '<button class=aicon id=rb2 onclick=toggleRepeat() title="Repeat"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>'+
   '</div>'+
-  '<div id=tbl><div class=tr-head><span>#</span><span>Title</span><span>Album</span><span>Date added</span><span style="text-align:right;color:#b3b3b3">&#9202;</span></div></div>';
+  '<div id=tbl><div class=tr-head><span>#</span><span>Title</span><span>Album</span><span>Date added</span><span style="text-align:right;color:#b3b3b3;font-size:16px">&#9202;</span></div></div>';
   var t=document.getElementById('tbl');
   tracks.forEach(function(tr,i){
     var row=document.createElement('div');row.className='row';row.dataset.i=i;
