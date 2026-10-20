@@ -508,7 +508,7 @@ document.getElementById('prog').addEventListener('click',function(e){
     function move(ev){setVol(ev)}
     function up(){vol.classList.remove('dragging');document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up)}
     document.addEventListener('mousemove',move);document.addEventListener('mouseup',up)});
-})();function muteVol(){AU.muted=!AU.muted;document.getElementById('volf').style.width=AU.muted?'0%':'80%'}
+})();function muteVol(){AU.muted=!AU.muted;document.getElementById('volf').style.width=AU.muted?'0%':(AU.volume*100)+'%'}
 document.addEventListener('keydown',function(e){
   if(e.code==='Space'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();toggle()}});
 if('mediaSession' in navigator){try{
