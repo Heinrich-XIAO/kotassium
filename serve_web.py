@@ -3,9 +3,22 @@
 import argparse, ipaddress, json, os, re, shutil, signal, subprocess, sys, threading, time, urllib.parse, urllib.request, hashlib, base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+def _base_dir():
+    """Project root. Inside a py2app bundle __file__ lives several levels down
+    (Contents/Resources/lib/python3.x), so walk up until web/index.html is
+    found."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cand = here
+    for _ in range(6):
+        if os.path.isfile(os.path.join(cand, "web", "index.html")):
+            return cand
+        cand = os.path.dirname(cand)
+    return here
+
+
+BASE = _base_dir()
 HOME = os.path.expanduser("~")
-LIB = os.path.join(HOME, "Music", "Kotassium")
+LIB = os.path.expanduser(os.environ.get("KOTASSIUM_LIB", "~/Music/Kotassium"))
 STATE = os.path.join(LIB, "webstate")
 os.makedirs(LIB, exist_ok=True)
 os.makedirs(STATE, exist_ok=True)
@@ -15,6 +28,19 @@ COVERS_JSON = os.path.join(STATE, "covers.json")
 PORT = 8421
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
 
+EXTRA_BIN = ["/opt/homebrew/bin", "/usr/local/bin", os.path.expanduser("~/.local/bin")]
+
+def which(name):
+    """shutil.which, plus the places a GUI-launched app's PATH usually misses."""
+    found = shutil.which(name)
+    if found:
+        return found
+    for d in EXTRA_BIN:
+        p = os.path.join(d, name)
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
 def find_ytdlp():
     """Locate a usable yt-dlp: explicit env, project venv, PATH, then the module."""
     env = os.environ.get("KOTASSIUM_YTDLP")
@@ -23,7 +49,7 @@ def find_ytdlp():
     local = os.path.join(BASE, "venv", "bin", "yt-dlp")
     if os.path.exists(local):
         return [local]
-    exe = shutil.which("yt-dlp")
+    exe = which("yt-dlp")
     if exe:
         return [exe]
     try:
@@ -33,7 +59,7 @@ def find_ytdlp():
         return None
 
 YTDLP = find_ytdlp()
-FFMPEG = shutil.which("ffmpeg")
+FFMPEG = which("ffmpeg")
 LINKS = os.path.join(STATE, "links.json")
 _lock = threading.RLock()
 
@@ -80,8 +106,77 @@ def stop_children():
         with _procs_lock:
             _procs.discard(p)
 
-LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", ""}
+_jobs = {}
+_jobs_lock = threading.Lock()
+_job_seq = 0
 
+def job_new(label):
+    global _job_seq
+    now = time.time()
+    with _jobs_lock:
+        _job_seq += 1
+        jid = str(_job_seq)
+        _jobs[jid] = {"id": jid, "label": label, "status": "queued", "pct": 0.0,
+                      "file": None, "error": None, "ts": now}
+        for k in [k for k, v in _jobs.items() if now - v["ts"] > 3600]:
+            _jobs.pop(k, None)
+    return jid
+
+def job_update(jid, **kw):
+    with _jobs_lock:
+        j = _jobs.get(jid)
+        if j:
+            j.update(kw)
+            j["ts"] = time.time()
+
+def job_get(jid):
+    with _jobs_lock:
+        j = _jobs.get(jid)
+        return dict(j) if j else None
+
+def job_running(label):
+    with _jobs_lock:
+        for j in _jobs.values():
+            if j["label"] == label and j["status"] in ("queued", "running"):
+                return j["id"]
+    return None
+
+def job_start_ytdl(vid):
+    vid = re.sub(r"[^A-Za-z0-9_-]", "", vid or "")
+    if not vid:
+        raise RuntimeError("bad id")
+    existing = job_running(vid)
+    if existing:
+        return existing
+    jid = job_new(vid)
+
+    def work():
+        try:
+            job_update(jid, status="running")
+            f = ytdl(vid, lambda p: job_update(jid, pct=round(p, 1)))
+            job_update(jid, status="done", pct=100.0, file=f)
+        except Exception as e:
+            job_update(jid, status="error", error=str(e)[:200])
+
+    threading.Thread(target=work, daemon=True).start()
+    return jid
+
+_now_lock = threading.Lock()
+_now = {"t": "", "a": "", "album": "", "cover": "", "ms": 0, "pos": 0,
+        "state": "stopped", "ts": 0}
+
+def set_now(d):
+    with _now_lock:
+        for k in ("t", "a", "album", "cover", "ms", "pos", "state"):
+            if k in d:
+                _now[k] = d[k]
+        _now["ts"] = int(time.time())
+
+def get_now():
+    with _now_lock:
+        return dict(_now)
+
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", ""}
 def _hostname(host_header):
     try:
         return (urllib.parse.urlsplit("//" + (host_header or "").strip()).hostname or "").lower()
@@ -234,20 +329,42 @@ def dl_file(src, tid, url):
 def sc_resolve(tid):
     return ""
 
-def ytdl(vid):
+def ytdl(vid, progress=None):
     vid = re.sub(r"[^A-Za-z0-9_-]", "", vid or "")
     out = os.path.join(LIB, vid + ".mp3")
     if os.path.exists(out):
+        if progress:
+            progress(100.0)
         return os.path.basename(out)
     if not YTDLP:
         raise RuntimeError("yt-dlp not found")
     if not FFMPEG:
         raise RuntimeError("ffmpeg not found - needed to convert downloads to mp3")
-    # use yt-dlp
     tmp = os.path.join(LIB, ".yt_" + vid + ".%(ext)s")
-    run_proc(YTDLP + ["-x", "--audio-format", "mp3", "--audio-quality", "128K",
-                      "--no-overwrites", "-o", tmp, "https://www.youtube.com/watch?v=" + vid],
-             timeout=300, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    cmd = YTDLP + ["-x", "--audio-format", "mp3", "--audio-quality", "128K",
+                   "--no-overwrites", "--newline", "-o", tmp,
+                   "https://www.youtube.com/watch?v=" + vid]
+    if os.name == "posix":
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             text=True, bufsize=1, start_new_session=True)
+    else:
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             text=True, bufsize=1)
+    with _procs_lock:
+        _procs.add(p)
+    watchdog = threading.Timer(300, _kill_proc, [p])
+    watchdog.start()
+    try:
+        for line in p.stdout:
+            if progress:
+                m = re.search(r"\[download\]\s+(\d+(?:\.\d+)?)%", line)
+                if m:
+                    progress(float(m.group(1)))
+        p.wait()
+    finally:
+        watchdog.cancel()
+        with _procs_lock:
+            _procs.discard(p)
     for f in os.listdir(LIB):
         if f.startswith(".yt_" + vid + "."):
             src = os.path.join(LIB, f)
@@ -260,6 +377,8 @@ def ytdl(vid):
                              timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except Exception:
                     pass
+                if progress:
+                    progress(100.0)
                 return os.path.basename(out)
     raise RuntimeError("yt-dlp failed")
 
@@ -278,6 +397,12 @@ def handle_post(path, params, raw, hdr):
     pp = urllib.parse.parse_qs(params, keep_blank_values=True)
     if path == "/api/links/drop":
         drop_link(pp.get("url", [""])[0])
+        return 200, "application/json", b'{"ok":true}', None, False
+    if path == "/api/nowplaying":
+        try:
+            set_now(json.loads(raw.decode("utf-8", "replace") or "{}"))
+        except Exception:
+            pass
         return 200, "application/json", b'{"ok":true}', None, False
     if path == "/api/cover/cache":
         try:
@@ -405,9 +530,16 @@ def handle(path, params, hdr):
         return 200, "application/json", json.dumps({"ok": True, "app": "kotassium", "pid": os.getpid()}).encode(), None, False
     if path == "/api/ytdl":
         try:
-            return 200, "application/json", json.dumps({"file": ytdl(one("id"))}).encode(), None, False
+            return 200, "application/json", json.dumps({"job": job_start_ytdl(one("id"))}).encode(), None, False
         except Exception as e:
             return 200, "application/json", json.dumps({"error": str(e)[:200]}).encode(), None, False
+    if path == "/api/job":
+        j = job_get(one("id"))
+        if not j:
+            return 200, "application/json", b'{"error":"not_found"}', None, False
+        return 200, "application/json", json.dumps(j).encode(), None, False
+    if path == "/api/nowplaying":
+        return 200, "application/json", json.dumps(get_now()).encode(), None, False
     if path == "/api/manifest":
         try:
             return 200, "application/json", open(os.path.join(STATE, "manifest.json"), "rb").read(), None, False

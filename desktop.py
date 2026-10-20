@@ -1,17 +1,27 @@
 #!/usr/bin/env python3
-"""desktop.py - Kotassium in a native window.
+"""desktop.py - Kotassium in a native window (Linux + macOS).
 
 Starts the existing local server on loopback and shows web/index.html in a
-WebKitGTK window (pywebview). The web edition (`serve_web.py`) is unchanged;
-this file is only a shell.
+native webview (WebKitGTK on Linux, WKWebView on macOS) via pywebview. The web
+edition (`serve_web.py`) is unchanged; this file is only a shell plus the OS
+integration that a browser tab cannot do:
+
+  * MPRIS v2 on Linux (media keys, GNOME media widget, lock screen)
+  * track-change notifications (notify-send / osascript)
+  * a single instance and remembered window geometry
+
+The page reports what it is playing to the server (/api/nowplaying); this
+process polls that and feeds the OS. Media-key presses are queued to a worker
+thread because calling evaluate_js on the GTK main loop would deadlock.
 """
-import argparse, json, os, sys, threading, time, urllib.request
+import argparse, json, os, queue, sys, threading, time, urllib.request
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 if BASE not in sys.path:
     sys.path.insert(0, BASE)
 
 import serve_web
+import notify as notify_mod
 
 STATE = serve_web.STATE
 WIN_FILE = os.path.join(STATE, "window.json")
@@ -19,6 +29,8 @@ LOCK_FILE = os.path.join(STATE, "desktop.lock")
 DEFAULT_PORT = serve_web.PORT
 DEFAULT_SIZE = (1200, 800)
 MIN_SIZE = (900, 600)
+IS_LINUX = sys.platform.startswith("linux")
+IS_MAC = sys.platform == "darwin"
 
 
 def health(port, timeout=0.5):
@@ -82,7 +94,7 @@ def preflight():
     return missing
 
 
-def run(host, port, dev=False, no_window=False):
+def run(host, port, dev=False, no_window=False, notify_tracks=True):
     lock = acquire_lock()
     if not lock:
         if health(port):
@@ -108,7 +120,7 @@ def run(host, port, dev=False, no_window=False):
             if no_window:
                 while True:
                     time.sleep(3600)
-            return show_window(port, dev)
+            return show_window(port, dev, notify_tracks)
         finally:
             srv.shutdown()
             serve_web.stop_children()
@@ -121,7 +133,11 @@ def run(host, port, dev=False, no_window=False):
 def relax_autoplay():
     """WebKitGTK rejects programmatic play() by default (reported as
     NotSupportedError). The preview -> full-track swap calls play() without a
-    gesture, so the app must opt out. pywebview does not expose this setting."""
+    gesture, so the app must opt out. pywebview does not expose this setting.
+    WKWebView (macOS) allows this after the first user gesture, so it is a
+    Linux-only fix."""
+    if not IS_LINUX:
+        return False
     try:
         from webview.platforms.gtk import BrowserView
     except Exception:
@@ -140,25 +156,101 @@ def relax_autoplay():
     return False
 
 
-def show_window(port, dev):
+def start_nowplaying_watch(port, mpris, notify_tracks):
+    """Poll the page's now-playing report; drive MPRIS and notifications."""
+    url = "http://127.0.0.1:%d/api/nowplaying" % port
+    last = {"title": None}
+
+    def loop():
+        while True:
+            time.sleep(1.0)
+            try:
+                with urllib.request.urlopen(url, timeout=1.0) as r:
+                    np = json.loads(r.read().decode("utf-8", "replace"))
+            except Exception:
+                continue
+            try:
+                if mpris:
+                    mpris.update(np)
+            except Exception:
+                pass
+            title = (np.get("t") or "").strip()
+            artist = (np.get("a") or "").strip()
+            if title and title != last["title"]:
+                if last["title"] is not None and notify_tracks and np.get("state") == "playing":
+                    notify_mod.notify(title, artist or "Kotassium")
+                last["title"] = title
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
+def show_window(port, dev, notify_tracks=True, on_start=None):
     try:
         import webview
     except Exception as e:
         print("pywebview unavailable: %s" % e)
-        print("Run ./install.sh to create desktop-venv, or use ./kotassium-app.sh (Epiphany).")
+        print("Run ./setup.sh (Linux) or ./setup-macos.sh to create desktop-venv.")
         return 1
 
     geom = load_geometry()
     kwargs = dict(geom) if geom else {"width": DEFAULT_SIZE[0], "height": DEFAULT_SIZE[1]}
+    url = "http://127.0.0.1:%d/" % port
+    if not dev:
+        # desktop=1 stops the page from polling /api/mtime every 2s: that
+        # reload-on-change behaviour is only wanted while editing the UI.
+        url += "?desktop=1"
     w = webview.create_window(
         "Kotassium",
-        "http://127.0.0.1:%d/" % port,
+        url,
         min_size=MIN_SIZE,
         background_color="#000000",
         **kwargs
     )
 
     missing = preflight()
+
+    # Media keys arrive on the GTK main loop; evaluate_js there would deadlock,
+    # so hand every command to a worker thread.
+    cmds = queue.Queue()
+
+    def control(name):
+        cmds.put(name)
+
+    def control_worker():
+        js = {"playpause": "toggle()", "play": "AU.play()", "pause": "AU.pause()",
+              "next": "nx()", "previous": "pv()", "stop": "AU.pause()"}
+        while True:
+            name = cmds.get()
+            code = js.get(name)
+            if not code:
+                continue
+            try:
+                w.evaluate_js(code)
+            except Exception:
+                pass
+
+    threading.Thread(target=control_worker, daemon=True).start()
+
+    mpris = None
+    if IS_LINUX:
+        try:
+            from mpris_linux import MprisLinux
+            mpris = MprisLinux(
+                "http://127.0.0.1:%d" % port,
+                {"playpause": lambda: control("playpause"),
+                 "play": lambda: control("play"),
+                 "pause": lambda: control("pause"),
+                 "next": lambda: control("next"),
+                 "previous": lambda: control("previous"),
+                 "stop": lambda: control("stop"),
+                 "quit": lambda: control("stop")},
+            )
+            if not mpris.conn:
+                mpris = None
+        except Exception as e:
+            print("[kotassium] MPRIS unavailable: %s" % e)
+
+    start_nowplaying_watch(port, mpris, notify_tracks)
 
     def on_loaded():
         relax_autoplay()
@@ -174,7 +266,12 @@ def show_window(port, dev):
 
     w.events.loaded += on_loaded
     w.events.closed += on_closed
-    webview.start(debug=dev, gui="gtk")
+    # gui is auto-detected: gtk on Linux, cocoa on macOS. Forcing "gtk" here
+    # is what would break macOS. on_start is pywebview's own hook for running
+    # a function once the GUI loop is up (used by tools/demo.py).
+    # private_mode=True (pywebview's default) makes localStorage null, which
+    # would throw away the YouTube-id cache, volume and shuffle every launch.
+    webview.start(func=on_start, debug=dev, private_mode=False)
     return 0
 
 
@@ -185,9 +282,12 @@ def main(argv=None):
                     help="bind 0.0.0.0 so phones can connect too")
     ap.add_argument("--dev", action="store_true", help="open the WebKit inspector")
     ap.add_argument("--no-window", action="store_true", help="server only")
+    ap.add_argument("--no-notify", action="store_true",
+                    help="don't send a notification on track change")
     a = ap.parse_args(argv)
     host = "0.0.0.0" if a.lan else "127.0.0.1"
-    return run(host, a.port, dev=a.dev, no_window=a.no_window)
+    return run(host, a.port, dev=a.dev, no_window=a.no_window,
+               notify_tracks=not a.no_notify)
 
 
 if __name__ == "__main__":

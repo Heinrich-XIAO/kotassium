@@ -1,20 +1,18 @@
 #!/bin/sh
-# Install the Kotassium desktop launcher for the current user.
-#
-# Prerequisite (once):
-#   python3 -m venv --system-site-packages desktop-venv
-#   desktop-venv/bin/pip install pywebview
+# Install the Kotassium desktop launcher for the current user (Linux).
 set -eu
 cd "$(dirname "$0")"
 ROOT=$(pwd)
-PY="$ROOT/desktop-venv/bin/python"
 
-if [ ! -x "$PY" ]; then
-    echo "desktop-venv is missing. Create it first:" >&2
-    echo "  python3 -m venv --system-site-packages desktop-venv" >&2
-    echo "  desktop-venv/bin/pip install pywebview" >&2
+if [ "$(uname -s)" = "Darwin" ]; then
+    echo "On macOS use ./install-macos.sh instead." >&2
     exit 1
 fi
+
+if [ ! -x "$ROOT/desktop-venv/bin/python" ]; then
+    ./setup.sh
+fi
+PY="$ROOT/desktop-venv/bin/python"
 
 APPS="$HOME/.local/share/applications"
 ICONS="$HOME/.local/share/icons/hicolor/scalable/apps"

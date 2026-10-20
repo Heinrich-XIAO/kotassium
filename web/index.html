@@ -125,6 +125,12 @@ svg{display:block}
 #vol.dragging #volf{background:#1ed760}
 #toast{position:fixed;bottom:88px;right:20px;background:#1db954;color:#000;font-weight:600;padding:10px 16px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:99}
 #upnext{position:fixed;top:88px;right:20px;background:#181818;color:#fff;padding:10px 14px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:99;max-width:260px}
+#dl{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:#181818;border:1px solid #ffffff1f;color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;display:none;align-items:center;gap:10px;z-index:99;min-width:280px;max-width:420px}
+#dl.on{display:flex}
+#dllabel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+#dlbar{flex:1;height:4px;background:#ffffff26;border-radius:2px;overflow:hidden;min-width:80px}
+#dlfill{display:block;height:100%;width:0;background:#1ed760;transition:width .2s}
+#dlpct{color:#b3b3b3;font-variant-numeric:tabular-nums;min-width:32px;text-align:right}
 #empty{color:#b3b3b3;padding:24px 8px;font-size:14px}
 #empty h3{color:#fff;margin:0 0 6px}
 #bigplayBtns{display:flex}
@@ -197,6 +203,7 @@ body{-webkit-tap-highlight-color:transparent}
 </div>
 <div id=toast></div>
 <div id=upnext></div>
+<div id=dl><span id=dllabel>fetching</span><div id=dlbar><i id=dlfill></i></div><span id=dlpct>0%</span></div>
 <audio id=au preload=auto></audio>
 <script>
 var AU=document.getElementById('au');
@@ -214,6 +221,51 @@ function gcss(name){if(!name)return 'linear-gradient(135deg,#333,#555)';
 /* cover caching: client fetches image, POSTs to server, rewrites UI */
 var _coverCache={};
 function postJSON(u,o){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}).then(function(r){return r.json()})}
+/* ---------------- download jobs ---------------- */
+function showDl(label,pct,status){
+  var d=document.getElementById('dl');if(!d)return;
+  d.classList.add('on');
+  document.getElementById('dllabel').textContent=(status==='done'?'ready: ':status==='error'?'failed: ':'downloading ')+(label||'');
+  document.getElementById('dlpct').textContent=Math.round(pct||0)+'%';
+  document.getElementById('dlfill').style.width=Math.max(0,Math.min(100,pct||0))+'%';
+}
+function hideDl(){var d=document.getElementById('dl');if(d)d.classList.remove('on')}
+var _dlActive=null;
+function dlJob(id,label,quiet){
+  return API('/api/ytdl?id='+encodeURIComponent(id)).then(function(j){
+    if(j.error)throw new Error(j.error);
+    if(j.file)return j;
+    if(!j.job)throw new Error('no job');
+    var mine=j.job;
+    function done(){if(!quiet&&_dlActive===mine){_dlActive=null;hideDl()}}
+    return new Promise(function(res,rej){
+      (function tick(){
+        API('/api/job?id='+j.job).then(function(s){
+          if(!s||s.error){done();return rej(new Error('job lost'))}
+          if(!quiet){
+            if(_dlActive===null)_dlActive=mine;
+            if(_dlActive===mine&&s.status!=='done'&&s.status!=='error')
+              showDl(label||s.label,s.pct,s.status);
+          }
+          if(s.status==='done'){done();res({file:s.file})}
+          else if(s.status==='error'){done();rej(new Error(s.error||'download failed'))}
+          else setTimeout(tick,350);
+        },function(){setTimeout(tick,800)});
+      })();
+    });
+  });
+}
+/* ---------------- now playing (desktop MPRIS / notifications) ---------------- */
+var _npKey='',_npAt=0;
+function reportNow(state,tr){
+  tr=tr||Q[QI];if(!tr)return;
+  state=state||(AU.paused?'paused':'playing');
+  var now=Date.now(),key=[tr.t,tr.a,state].join('|');
+  if(key===_npKey&&now-_npAt<2500)return;
+  _npKey=key;_npAt=now;
+  postJSON('/api/nowplaying',{t:tr.t||'',a:tr.a||'',album:tr.album||'',cover:tr.cover||'',
+    ms:tr.ms||0,pos:Math.round((AU.currentTime||0)*1000),state:state}).catch(function(){});
+}
 function cacheCover(url){
   if(!url||url.indexOf('/cover/')===0){return Promise.resolve(null)}
   if(_coverCache[url]==='pending')return Promise.resolve(null);
@@ -400,6 +452,7 @@ function showNow(tr){
   var c=document.getElementById('nowc');
   if(tr.cover){c.style.background=coverBg(tr.cover);c.setAttribute('data-cover-url',tr.cover)}
   else{c.style.background=gcss(tr.t);c.removeAttribute('data-cover-url')}
+  reportNow('playing',tr);
 }
 function meta(t){if('mediaSession' in navigator)try{navigator.mediaSession.metadata=new MediaMetadata({title:t.t||'?',artist:t.a||'',album:t.album||''})}catch(e){}}
 function setPausedIcon(p){document.getElementById('pbIcon').innerHTML=p?'<path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(0.6 0)"/>':'<path d="M5.7 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z"/>'}
@@ -415,6 +468,22 @@ function playTrack(tr){
   localResolve(tr,true);
 }
 function stopSrc(){try{AU.pause()}catch(e){}try{AU.removeAttribute('src');AU.load()}catch(e){}}
+/* Switch from the 5s preview to the full file. Setting src + currentTime +
+   play() in one go can leave WebKit paused (the clock freezes at the swap
+   point), so wait for metadata, then seek and play. */
+function swapTo(src,at){
+  var done=false;
+  function go(){
+    if(done)return;done=true;
+    AU.removeEventListener('loadedmetadata',go);
+    try{if(at>0)AU.currentTime=at}catch(e){}
+    AU.play().catch(function(){setTimeout(function(){AU.play().catch(function(){})},300)});
+  }
+  AU.addEventListener('loadedmetadata',go);
+  AU.src=src;
+  if(AU.readyState>=1)go();
+  setTimeout(go,1500);
+}
 var _cache={};try{var _c=JSON.parse(localStorage.getItem('kot_ytcache')||'{}');for(var k in _c)_cache[k]=_c[k]}catch(e){}
 function localResolve(tr,fresh){
   stopSrc();setPausedIcon(true);
@@ -422,17 +491,17 @@ function localResolve(tr,fresh){
   var cached=_cache[key];
   if(cached){
     toast('fetching new '+(tr.t||'')+'...');
-    API('/api/ytdl?id='+encodeURIComponent(cached)).then(function(d){
+    dlJob(cached,tr.t).then(function(d){
       if(d.file&&!d.error){
         var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
         if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
         var fullF=d.file, prevF=cached+'_preview.mp3';
         var swapped=false;
         function doSwap2(){if(swapped)return; if(AU.currentTime<4) return; swapped=true;
-          var t=AU.currentTime; AU.src='/lib/'+encodeURIComponent(fullF); AU.currentTime=t; AU.play();
-          AU.removeEventListener('timeupdate',doSwap2);}
+          AU.removeEventListener('timeupdate',doSwap2);
+          swapTo('/lib/'+encodeURIComponent(fullF),AU.currentTime);}
         AU.src='/lib/'+encodeURIComponent(prevF);
-        AU.play().catch(function(){AU.src='/lib/'+encodeURIComponent(fullF);AU.play();});
+        AU.play().catch(function(){swapTo('/lib/'+encodeURIComponent(fullF),0)});
         AU.addEventListener('timeupdate',doSwap2);
         var ni1=nextIndex(); if(ni1>=0&&Q[ni1])prefetch(Q[ni1]);
       }else{delete _cache[key];localResolveFresh(tr)}
@@ -453,7 +522,7 @@ function localResolveFresh(tr){
 function tryCands(cands,k,tr){
   if(k>=cands.length){toast('could not download '+(tr.t||'')+' - skipped');nx();return}
   var c=cands[k];
-  API('/api/ytdl?id='+encodeURIComponent(c.id)).then(function(d){
+  dlJob(c.id,tr&&tr.t).then(function(d){
     if(d.file&&!d.error){
       var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
       if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
@@ -461,10 +530,10 @@ function tryCands(cands,k,tr){
       var fullF=d.file, prevF=c.id+'_preview.mp3';
       var swapped=false;
       function doSwap(){if(swapped)return; if(AU.currentTime<4) return; swapped=true;
-        var t=AU.currentTime; AU.src='/lib/'+encodeURIComponent(fullF); AU.currentTime=t; AU.play();
-        AU.removeEventListener('timeupdate',doSwap);}
+        AU.removeEventListener('timeupdate',doSwap);
+        swapTo('/lib/'+encodeURIComponent(fullF),AU.currentTime);}
       AU.src='/lib/'+encodeURIComponent(prevF);
-      AU.play().catch(function(){AU.src='/lib/'+encodeURIComponent(fullF);AU.play();});
+      AU.play().catch(function(){swapTo('/lib/'+encodeURIComponent(fullF),0)});
       AU.addEventListener('timeupdate',doSwap);
       var ni1=nextIndex(); if(ni1>=0&&Q[ni1])prefetch(Q[ni1]);
     }else{tryCands(cands,k+1,tr)}
@@ -474,7 +543,7 @@ function prefetch(tr){
   if(!tr||tr.source)return;
   API('/api/search?src=youtube&q='+encodeURIComponent((tr.a?tr.a+' ':'')+(tr.t||''))).then(function(j){
     var c=(j.results||[]).filter(function(r){return r.source==='youtube'})[0];
-    if(c)API('/api/ytdl?id='+encodeURIComponent(c.id)).catch(function(){})});
+    if(c)dlJob(c.id,tr.t,true).catch(function(){})});
 }
 function toggle(){
   if(AU.src){AU.paused?AU.play():AU.pause()}else if(Q.length)playT(QI<0?0:QI,false)}
@@ -510,8 +579,8 @@ function radioNext(){
 
 
 /* media wiring */
-AU.addEventListener('play',function(){setPausedIcon(false)});
-AU.addEventListener('pause',function(){if(AU.src)setPausedIcon(true)});
+AU.addEventListener('play',function(){setPausedIcon(false);reportNow('playing')});
+AU.addEventListener('pause',function(){if(AU.src){setPausedIcon(true);reportNow('paused')}});
 AU.addEventListener('ended',function(){if(REPEAT===2){AU.currentTime=0;AU.play();return}nx()});
 AU.addEventListener('timeupdate',function(){
   var _dur=(Q[QI]&&Q[QI].ms)?Q[QI].ms/1000:(AU.duration||0);
@@ -527,7 +596,8 @@ AU.addEventListener('timeupdate',function(){
       un.innerHTML='<span style="color:#b3b3b3;font-size:11px;margin-right:8px">Up next</span><div style="display:flex;align-items:center;gap:8px"><div style="width:36px;height:36px;border-radius:4px;background:#282828;flex:none;background-size:cover;background-position:center;'+(t.cover?'background-image:url(\''+t.cover.replace(/'/g,'')+'\')':'')+'"></div><div style="min-width:0"><b style="display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.t||'')+'</b><small style="display:block;font-size:11px;color:#b3b3b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.a||'')+'</small></div></div>';
       un.style.opacity=1;
     } else un.style.opacity=0;
-  }else un.style.opacity=0;});
+  }else un.style.opacity=0;
+  reportNow();});
 document.getElementById('prog').addEventListener('click',function(e){
   if(!AU.duration)return;var r=this.getBoundingClientRect();
   AU.currentTime=(e.clientX-r.left)/r.width*AU.duration});
@@ -560,8 +630,10 @@ if('mediaSession' in navigator){try{
 try{var _v=parseFloat(localStorage.getItem('kot_vol'));if(!isNaN(_v)){AU.volume=_v*_v;document.getElementById('volf').style.width=(_v*100)+'%';updateVolIcon()}}catch(e){}
 try{if(localStorage.getItem('kot_shuf')==='1'){SHUF=true;document.querySelectorAll('.aicon#shufb,.aicon#shuf2').forEach(function(b){b.classList.add('on')})}}catch(e){}
 try{var _r=parseInt(localStorage.getItem('kot_repeat'));if(!isNaN(_r)){REPEAT=_r;updateRepeatUI()}}catch(e){}
+if(!/[?&]desktop=1/.test(location.search)){
 var _mt=0;fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){_mt=j.mtime||0}).catch(function(){});
 setInterval(function(){fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){if(_mt&&j.mtime&&j.mtime!==_mt)location.reload()}).catch(function(){})},2000);
+}
 window.addEventListener('load',function(){loadSide().then(renderHome)});
 </script>
 </body></html>
