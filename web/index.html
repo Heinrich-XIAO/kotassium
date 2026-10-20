@@ -504,12 +504,12 @@ document.getElementById('prog').addEventListener('click',function(e){
   AU.currentTime=(e.clientX-r.left)/r.width*AU.duration});
 (function(){
   var vol=document.getElementById('vol');var volf=document.getElementById('volf');
-  function setVol(e){var r=vol.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));AU.volume=v;AU.muted=false;volf.style.width=(v*100)+'%';try{localStorage.setItem('kot_vol',v)}catch(e){}}
+  function setVol(e){var r=vol.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));AU.volume=v*v;AU.muted=false;volf.style.width=(v*100)+'%';try{localStorage.setItem('kot_vol',v)}catch(e){}}
   vol.addEventListener('mousedown',function(e){vol.classList.add('dragging');setVol(e);
     function move(ev){setVol(ev)}
     function up(){vol.classList.remove('dragging');document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up)}
     document.addEventListener('mousemove',move);document.addEventListener('mouseup',up)});
-})();function muteVol(){AU.muted=!AU.muted;document.getElementById('volf').style.width=AU.muted?'0%':(AU.volume*100)+'%';
+})();function muteVol(){AU.muted=!AU.muted;document.getElementById('volf').style.width=AU.muted?'0%':(Math.sqrt(AU.volume)*100)+'%';
   var vi=document.getElementById('volIcon');
   if(vi) vi.innerHTML=AU.muted?'<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>':'<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'}
 document.addEventListener('keydown',function(e){
@@ -519,7 +519,7 @@ if('mediaSession' in navigator){try{
   navigator.mediaSession.setActionHandler('pause',function(){AU.pause()});
   navigator.mediaSession.setActionHandler('nexttrack',nx);
   navigator.mediaSession.setActionHandler('previoustrack',pv)}catch(e){}}
-try{var _v=parseFloat(localStorage.getItem('kot_vol'));if(!isNaN(_v)){AU.volume=_v;document.getElementById('volf').style.width=(_v*100)+'%'}}catch(e){}
+try{var _v=parseFloat(localStorage.getItem('kot_vol'));if(!isNaN(_v)){AU.volume=_v*_v;document.getElementById('volf').style.width=(_v*100)+'%'}}catch(e){}
 var _mt=0;fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){_mt=j.mtime||0}).catch(function(){});
 setInterval(function(){fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){if(_mt&&j.mtime&&j.mtime!==_mt)location.reload()}).catch(function(){})},2000);
 window.addEventListener('load',function(){loadSide().then(renderHome)});
