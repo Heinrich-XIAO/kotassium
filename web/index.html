@@ -421,7 +421,14 @@ function localResolve(tr,fresh){
       if(d.file&&!d.error){
         var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
         if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
-        AU.src='/lib/'+encodeURIComponent(d.file);AU.play();
+        var fullF=d.file, prevF=cached+'_preview.mp3';
+        var swapped=false;
+        function doSwap2(){if(swapped)return; if(AU.currentTime<4) return; swapped=true;
+          var t=AU.currentTime; AU.src='/lib/'+encodeURIComponent(fullF); AU.currentTime=t; AU.play();
+          AU.removeEventListener('timeupdate',doSwap2);}
+        AU.src='/lib/'+encodeURIComponent(prevF);
+        AU.play().catch(function(){AU.src='/lib/'+encodeURIComponent(fullF);AU.play();});
+        AU.addEventListener('timeupdate',doSwap2);
         if(Q[QI+1])prefetch(Q[QI+1]);
       }else{delete _cache[key];localResolveFresh(tr)}
     },function(){delete _cache[key];localResolveFresh(tr)});
@@ -446,7 +453,14 @@ function tryCands(cands,k,tr){
       var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
       if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
       _cache[tr.t+'|'+tr.a]=c.id;try{localStorage.setItem('kot_ytcache',JSON.stringify(_cache))}catch(e){}
-      AU.src='/lib/'+encodeURIComponent(d.file);AU.play();
+      var fullF=d.file, prevF=c.id+'_preview.mp3';
+      var swapped=false;
+      function doSwap(){if(swapped)return; if(AU.currentTime<4) return; swapped=true;
+        var t=AU.currentTime; AU.src='/lib/'+encodeURIComponent(fullF); AU.currentTime=t; AU.play();
+        AU.removeEventListener('timeupdate',doSwap);}
+      AU.src='/lib/'+encodeURIComponent(prevF);
+      AU.play().catch(function(){AU.src='/lib/'+encodeURIComponent(fullF);AU.play();});
+      AU.addEventListener('timeupdate',doSwap);
       if(Q[QI+1])prefetch(Q[QI+1]);
     }else{tryCands(cands,k+1,tr)}
   },function(){tryCands(cands,k+1,tr)});
