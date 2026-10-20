@@ -323,6 +323,16 @@ def handle(path, params, hdr):
     if path.startswith("/lib/"):
         base = os.path.basename(urllib.parse.unquote(path[5:]))
         f = os.path.join(LIB, base)
+        # on-demand preview clip generation
+        if (not os.path.exists(f)) and base.endswith("_preview.mp3"):
+            vid = base[:-len("_preview.mp3")]
+            src = os.path.join(LIB, vid + ".mp3")
+            if os.path.exists(src):
+                try:
+                    subprocess.run(["ffmpeg","-y","-i",src,"-t","5","-c","copy",f],
+                                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=60)
+                except Exception:
+                    pass
         if os.path.exists(f):
             ctype = "audio/mp4" if base.endswith(".m4a") else "audio/mpeg"
             size = os.path.getsize(f)
