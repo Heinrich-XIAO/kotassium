@@ -421,7 +421,7 @@ function localResolve(tr,fresh){
   var key=(tr.t||'')+'|'+(tr.a||'');
   var cached=_cache[key];
   if(cached){
-    toast('resolving '+(tr.t||'')+'...');
+    toast('fetching new '+(tr.t||'')+'...');
     API('/api/ytdl?id='+encodeURIComponent(cached)).then(function(d){
       if(d.file&&!d.error){
         var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
@@ -443,7 +443,7 @@ function localResolve(tr,fresh){
 }
 function localResolveFresh(tr){
   stopSrc();setPausedIcon(true);
-  toast('resolving '+(tr.t||'')+'...');
+  toast('fetching new '+(tr.t||'')+'...');
   var key=(tr.t||'')+'|'+(tr.a||'');
   API('/api/search?src=youtube&q='+encodeURIComponent((tr.a?tr.a+' ':'')+(tr.t||''))).then(function(j){
     var cands=(j.results||[]).filter(function(r){return r.source==='youtube'}).slice(0,5);
