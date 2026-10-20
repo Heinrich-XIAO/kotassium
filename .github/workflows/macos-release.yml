@@ -74,6 +74,16 @@ jobs:
           KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
         run: ./make-dmg.sh "Kotassium-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.dmg"
 
+      - name: Verify the DMG
+        run: |
+          hdiutil attach -nobrowse -readonly Kotassium-*.dmg | tail -1
+          test -d /Volumes/Kotassium/Kotassium.app
+          test -L /Volumes/Kotassium/Applications
+          test -x /Volumes/Kotassium/Kotassium.app/Contents/MacOS/Kotassium
+          test -f /Volumes/Kotassium/Kotassium.app/Contents/Resources/web/index.html
+          test -x /Volumes/Kotassium/Kotassium.app/Contents/Resources/bin/yt-dlp
+          hdiutil detach /Volumes/Kotassium
+
       - uses: actions/upload-artifact@v4
         with:
           name: Kotassium-${{ matrix.arch }}
