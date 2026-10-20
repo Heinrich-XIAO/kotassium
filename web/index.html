@@ -517,6 +517,8 @@ if('mediaSession' in navigator){try{
   navigator.mediaSession.setActionHandler('nexttrack',nx);
   navigator.mediaSession.setActionHandler('previoustrack',pv)}catch(e){}}
 try{var _v=parseFloat(localStorage.getItem('kot_vol'));if(!isNaN(_v)){AU.volume=_v;document.getElementById('volf').style.width=(_v*100)+'%'}}catch(e){}
+var _mt=0;fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){_mt=j.mtime||0}).catch(function(){});
+setInterval(function(){fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){if(_mt&&j.mtime&&j.mtime!==_mt)location.reload()}).catch(function(){})},2000);
 window.addEventListener('load',function(){loadSide().then(renderHome)});
 </script>
 </body></html>

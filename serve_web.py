@@ -338,6 +338,11 @@ def handle(path, params, hdr):
                 body = fh.read(end - start + 1)
             return code, ctype, body, extra, False
         return 404, "text/plain", b"nope", None, False
+    if path == "/api/mtime":
+        try:
+            return 200, "application/json", json.dumps({"mtime": os.path.getmtime(os.path.join(BASE, "web", "index.html"))}).encode(), None, False
+        except Exception:
+            return 200, "application/json", b'{"mtime":0}', None, False
     return 404, "text/plain", b"nope", None, False
 
 class H(BaseHTTPRequestHandler):
