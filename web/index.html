@@ -134,6 +134,7 @@ svg{display:block}
 @media(max-width:820px){
 body{-webkit-tap-highlight-color:transparent}
 #libBtn{display:grid}
+#collSide{display:none}
 #searchwrap{flex:1 1 auto;min-width:0}
 #mid{position:relative;padding:4px}
 #side{position:absolute;z-index:30;left:4px;right:4px;top:4px;bottom:4px;display:none;background:#181818;border-radius:8px;box-shadow:0 12px 32px #000d;flex:none}
@@ -244,6 +245,7 @@ function toggleSide(){
 }
 function applySide(){
   var s=document.getElementById('side');if(!s)return;
+  if(window.matchMedia('(max-width:820px)').matches){SIDECOLL=false;s.classList.remove('collapsed');return}
   s.classList.toggle('collapsed',SIDECOLL);
   var b=document.getElementById('collSide');
   if(b){b.title=SIDECOLL?'Expand library':'Collapse library';
