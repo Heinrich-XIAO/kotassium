@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """serve_web.py - Kotassium as a plain website for fast iteration."""
-import argparse, base64, hashlib, hmac, http.cookies, ipaddress, json, os, re, shutil, signal, subprocess, sys, threading, time, urllib.parse, urllib.request
+import argparse, base64, hashlib, hmac, html, http.cookies, ipaddress, json, os, re, shutil, signal, subprocess, sys, threading, time, urllib.parse, urllib.request
 
 import updater
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -515,7 +515,9 @@ def handle(path, params, hdr):
             return 200, ctype, open(f, "rb").read(), None, False
         return 404, "text/plain", b"nope", None, False
     if path == "/login":
-        return 200, "text/html; charset=utf-8", login_page().encode(), None, False
+        q = urllib.parse.parse_qs(params)
+        nxt = safe_next((q.get("next") or ["/"])[0])
+        return 200, "text/html; charset=utf-8", login_page(next_url=nxt).encode(), None, False
     if path == "/manifest.webmanifest":
         return 200, "application/manifest+json", open(os.path.join(BASE, "web", "manifest.webmanifest"), "rb").read(), None, False
     if path == "/sw.js":
@@ -670,7 +672,7 @@ def handle(path, params, hdr):
             return 200, "application/json", b'{"mtime":0}', None, False
     return 404, "text/plain", b"nope", None, False
 
-def login_page(error=""):
+def login_page(error="", next_url="/"):
     msg = ('<p class=err>%s</p>' % error) if error else ""
     return ("""<!doctype html><html><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -686,10 +688,20 @@ button{background:#1ed760;color:#000;border:0;border-radius:999px;padding:10px;
 font:inherit;font-weight:700;cursor:pointer}
 .err{color:#ff6b6b}</style></head><body>
 <form method=post action=/login>
-<h1>Kotassium</h1><p>This library is private. Enter the family password.</p>%s
+<h1>Kotassium</h1><p>This library is private. Enter the family password.</p>{MSG}
+<input type=hidden name=next value="{NEXT}">
 <input type=password name=password placeholder=Password autofocus autocomplete=current-password>
 <button type=submit>Open library</button>
-</form></body></html>""" % msg)
+</form></body></html>""").replace("{MSG}", msg).replace("{NEXT}", html.escape(next_url, quote=True))
+
+
+def safe_next(value):
+    """Only local paths: `next` comes from the URL and must not become an
+    open redirect."""
+    value = (value or "").strip()
+    if not value.startswith("/") or value.startswith("//"):
+        return "/"
+    return value
 
 
 class H(BaseHTTPRequestHandler):
@@ -730,20 +742,21 @@ class H(BaseHTTPRequestHandler):
 
     def _handle_login(self, raw):
         ip = self.client_address[0]
+        form = urllib.parse.parse_qs(raw.decode("utf-8", "replace"), keep_blank_values=True)
+        nxt = safe_next((form.get("next") or ["/"])[0])
         if login_blocked(ip):
             return self._send(429, "text/html; charset=utf-8",
-                              login_page("Too many attempts - wait a minute.").encode())
-        form = urllib.parse.parse_qs(raw.decode("utf-8", "replace"), keep_blank_values=True)
+                              login_page("Too many attempts - wait a minute.", nxt).encode())
         given = (form.get("password") or [""])[0]
         if not hmac.compare_digest(given.encode(), PASSWORD.encode()):
             login_note(ip, False)
             return self._send(401, "text/html; charset=utf-8",
-                              login_page("Wrong password.").encode())
+                              login_page("Wrong password.", nxt).encode())
         login_note(ip, True)
         secure = (self.headers.get("X-Forwarded-Proto") or "").lower() == "https"
         cookie = "kot_session=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000%s" % (
             SESSION, "; Secure" if secure else "")
-        self._send(303, "text/plain", b"", {"Location": "/", "Set-Cookie": cookie})
+        self._send(303, "text/plain", b"", {"Location": nxt, "Set-Cookie": cookie})
 
     def do_GET(self):
         try:
@@ -752,7 +765,11 @@ class H(BaseHTTPRequestHandler):
                 path = urllib.parse.urlsplit(self.path).path
                 if path.startswith(("/api/", "/lib/", "/cover/")):
                     return self._send(401, "application/json", b'{"error":"auth"}')
-                return self._send(303, "text/plain", b"", {"Location": "/login"})
+                # Keep the destination (and ?desktop=1) across the login form.
+                want = path + (("?" + urllib.parse.urlsplit(self.path).query)
+                               if urllib.parse.urlsplit(self.path).query else "")
+                return self._send(303, "text/plain", b"", {
+                    "Location": "/login?next=" + urllib.parse.quote(want, safe="")})
             if bad:
                 return self._send(403, "text/plain", bad.encode())
             parts = urllib.parse.urlsplit(self.path)

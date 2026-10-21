@@ -6,6 +6,7 @@ import os
 import sys
 import threading
 import unittest
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -131,7 +132,7 @@ class AuthTests(unittest.TestCase):
     def test_page_redirects_to_login(self):
         code, hdrs, _ = self.req("GET", "/")
         self.assertEqual(code, 303)
-        self.assertEqual(hdrs.get("Location"), "/login")
+        self.assertTrue(hdrs.get("Location", "").startswith("/login"))
 
     def test_api_is_closed(self):
         code, _, body = self.req("GET", "/api/library")
@@ -169,6 +170,30 @@ class AuthTests(unittest.TestCase):
         self.assertIn(b"Kotassium", body)
         code, _, _ = self.req("GET", "/api/library", headers={"Cookie": "kot_session=" + tok})
         self.assertEqual(code, 200)
+
+    def test_login_keeps_the_destination(self):
+        # The shells open /?desktop=1; losing that flag after login would start
+        # the 2s reload poll and reload the app mid-track on every deploy.
+        code, hdrs, _ = self.req("GET", "/?desktop=1")
+        self.assertEqual(code, 303)
+        loc = hdrs.get("Location", "")
+        self.assertTrue(loc.startswith("/login?next="))
+        self.assertEqual(urllib.parse.unquote(loc.split("next=")[1]), "/?desktop=1")
+
+        code, hdrs, _ = self.req(
+            "POST", "/login", body="password=hunter2&next=%2F%3Fdesktop%3D1",
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Origin": "http://127.0.0.1:%d" % self.port})
+        self.assertEqual(code, 303)
+        self.assertEqual(hdrs.get("Location"), "/?desktop=1")
+
+    def test_login_does_not_redirect_off_site(self):
+        code, hdrs, _ = self.req(
+            "POST", "/login", body="password=hunter2&next=%2F%2Fevil.example",
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Origin": "http://127.0.0.1:%d" % self.port})
+        self.assertEqual(code, 303)
+        self.assertEqual(hdrs.get("Location"), "/")
 
     def test_forged_cookie_is_rejected(self):
         code, _, _ = self.req("GET", "/", headers={"Cookie": "kot_session=deadbeef"})
