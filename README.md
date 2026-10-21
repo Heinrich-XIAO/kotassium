@@ -14,8 +14,9 @@ lands on every platform at once.
 - `desktop.py` — desktop shell: either runs the same server on `127.0.0.1`
   and shows the page, or (`--remote`) points at a shared server.
 - `updater.py` — macOS self-update from GitHub Releases.
-- `android/` — WebView APK: an icon, a persistent session and a back button
-  around the same URL. No markup, no logic.
+- `android/` — APK that either points at a shared URL or runs `serve_web.py`
+  inside the app (Chaquopy embeds CPython and `yt-dlp`). No markup, no UI
+  logic.
 - `mpris_linux.py` — MPRIS v2 service (Linux): media keys, GNOME media widget,
   lock screen.
 - `notify.py` — track-change notifications (`notify-send` on Linux,
@@ -59,7 +60,36 @@ Leave it unset for a purely local server.
   features for now.
 - **Android** — `Kotassium-<version>.apk` from the releases, or open the URL
   in Chrome and **Add to Home Screen** (the PWA is the same page, no build).
+  With no URL baked into the APK, the first launch asks: **This phone** runs
+  the server inside the app, **Shared server** opens the home box.
 - **Web** — just the URL.
+
+## Android as its own server
+
+The APK embeds CPython through [Chaquopy](https://chaquo.com/chaquopy/), so
+"this phone" mode runs the same `serve_web.py` and the same `web/index.html`
+as every other platform — not a port, not a copy. `kotassium_boot.py` only
+sets two paths and starts the loopback server.
+
+What differs from desktop, and why:
+
+- **No ffmpeg.** yt-dlp cannot convert to mp3, so a download keeps yt-dlp's
+  own container (usually `.m4a`). The library, `/lib/` and the player all work
+  off the file extension instead of assuming mp3, and a `_preview.mp3` request
+  redirects to the full track when there is no clip to generate.
+- **No subprocesses.** Android cannot exec a `yt-dlp` binary, so the download
+  runs in-process (`KOTASSIUM_YTDLP=inproc`) with yt-dlp's progress hooks.
+- **Loopback only.** The local server binds `127.0.0.1`: the phone serves
+  itself, with no password and nothing exposed to the network it happens to be
+  on. Sharing the phone's library to other devices needs a password and a bind
+  address, which is a deliberate follow-up rather than a default.
+- **Serves while the app is open.** There is no foreground service yet, so
+  Android may stop the process once the app is backgrounded.
+- **Library location.** `Android/data/app.kotassium.mobile/files/Music` — the
+  app's own external directory. Syncthing cannot reach it on Android 11+, so
+  tracks downloaded on the phone stay on the phone.
+- **Size.** The CPython runtime makes the APK tens of megabytes instead of
+  tens of kilobytes.
 
 ## Run
 

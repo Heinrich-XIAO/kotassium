@@ -221,5 +221,86 @@ class AuthTests(unittest.TestCase):
         self.assertIn("Max-Age=0", hdrs.get("Set-Cookie", ""))
 
 
+class LibraryFormatTests(unittest.TestCase):
+    """Android has no ffmpeg, so the library must accept whatever container
+    yt-dlp produced instead of assuming every track is an mp3."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._lib = serve_web.LIB
+        cls.tmp = tempfile.mkdtemp(prefix="kot-lib-")
+        for name, data in (("abc.m4a", b"\0\1\2\3"), ("def.mp3", b"\0\1")):
+            with open(os.path.join(cls.tmp, name), "wb") as f:
+                f.write(data)
+        serve_web.LIB = cls.tmp
+        cls.srv = serve_web.make_server("127.0.0.1", 0)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        serve_web.LIB = cls._lib
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def req(self, path):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request("GET", path)
+        r = c.getresponse()
+        data = r.read()
+        hdrs = dict(r.getheaders())
+        c.close()
+        return r.status, hdrs, data
+
+    def test_m4a_and_mp3_are_listed(self):
+        code, _, body = self.req("/api/library")
+        self.assertEqual(code, 200)
+        names = {e["name"] for e in json.loads(body)["library"]}
+        self.assertEqual(names, {"abc", "def"})
+
+    def test_m4a_served_as_mp4(self):
+        code, hdrs, body = self.req("/lib/abc.m4a")
+        self.assertEqual(code, 200)
+        self.assertEqual(hdrs["Content-Type"], "audio/mp4")
+        self.assertEqual(body, b"\0\1\2\3")
+
+    def test_track_path_finds_any_container(self):
+        self.assertTrue(serve_web.track_path("abc").endswith("abc.m4a"))
+        self.assertTrue(serve_web.track_path("def").endswith("def.mp3"))
+        self.assertIsNone(serve_web.track_path("missing"))
+
+    def test_preview_redirects_when_ffmpeg_is_missing(self):
+        # Without ffmpeg the player must still start: the preview URL is a
+        # redirect to the real track, not a 404.
+        saved = serve_web.FFMPEG
+        serve_web.FFMPEG = None
+        try:
+            code, hdrs, _ = self.req("/lib/abc_preview.mp3")
+            self.assertEqual(code, 302)
+            self.assertEqual(hdrs["Location"], "/lib/abc.m4a")
+        finally:
+            serve_web.FFMPEG = saved
+
+    def test_previews_are_not_tracks(self):
+        self.assertIsNone(serve_web.track_name("abc_preview.mp3"))
+        self.assertIsNone(serve_web.track_name(".yt_abc.m4a"))
+        self.assertIsNone(serve_web.track_name("links.json"))
+        self.assertEqual(serve_web.track_name("abc.m4a"), "abc")
+
+
+class BaseDirTests(unittest.TestCase):
+    def test_env_override_wins(self):
+        saved = os.environ.get("KOTASSIUM_BASE")
+        os.environ["KOTASSIUM_BASE"] = "/tmp/kotassium-android"
+        try:
+            self.assertEqual(serve_web._base_dir(), "/tmp/kotassium-android")
+        finally:
+            if saved is None:
+                os.environ.pop("KOTASSIUM_BASE", None)
+            else:
+                os.environ["KOTASSIUM_BASE"] = saved
+
+
 if __name__ == "__main__":
     unittest.main()

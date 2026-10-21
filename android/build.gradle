@@ -1,3 +1,6 @@
 plugins {
-    id 'com.android.application' version '8.5.2' apply false
+    id 'com.android.application' version '8.7.3' apply false
+    // Chaquopy embeds CPython in the APK, which is what lets the phone run
+    // serve_web.py itself instead of only being a client.
+    id 'com.chaquo.python' version '17.1.0' apply false
 }

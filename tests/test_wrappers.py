@@ -40,6 +40,22 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("<title>Kotassium</title>", page)
         self.assertIn("serviceWorker", page)
 
+    def test_android_runs_the_real_server(self):
+        # The APK embeds CPython, but it must import the repo's server, not a
+        # copy: the Gradle build stages these files from the repo root.
+        gradle = read("android/app/build.gradle")
+        for name in ("serve_web.py", "spotify_get.py", "updater.py"):
+            self.assertIn(name, gradle, "android build must stage %s" % name)
+        self.assertIn("new File(repoRoot, \"web\")", gradle)
+        boot = read("android/app/src/main/python/kotassium_boot.py")
+        self.assertIn("serve_web.serve_local", boot)
+        self.assertIn("inproc", boot)
+
+    def test_android_holds_no_copy_of_the_server_or_page(self):
+        for dirpath, _, files in os.walk(os.path.join(ROOT, "android")):
+            for name in ("serve_web.py", "index.html", "spotify_get.py", "updater.py"):
+                self.assertNotIn(name, files, "%s must not be duplicated under android/" % name)
+
 
 if __name__ == "__main__":
     unittest.main()

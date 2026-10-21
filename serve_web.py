@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """serve_web.py - Kotassium as a plain website for fast iteration."""
-import argparse, base64, hashlib, hmac, html, http.cookies, ipaddress, json, os, re, shutil, signal, subprocess, sys, threading, time, urllib.parse, urllib.request
+import argparse, base64, hashlib, hmac, html, http.cookies, ipaddress, json, os, re, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.parse, urllib.request
 
 import updater
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -8,7 +8,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 def _base_dir():
     """Project root. Inside a py2app bundle __file__ lives several levels down
     (Contents/Resources/lib/python3.x), so walk up until web/index.html is
-    found."""
+    found. KOTASSIUM_BASE wins: on Android the page is unpacked into app
+    storage, so __file__ (inside the APK) says nothing about where it is."""
+    env = os.environ.get("KOTASSIUM_BASE")
+    if env:
+        return os.path.abspath(env)
     here = os.path.dirname(os.path.abspath(__file__))
     cand = here
     for _ in range(6):
@@ -21,6 +25,10 @@ def _base_dir():
 BASE = _base_dir()
 HOME = os.path.expanduser("~")
 LIB = os.path.expanduser(os.environ.get("KOTASSIUM_LIB", "~/Music/Kotassium"))
+if LIB.startswith("~"):
+    # Android has no home directory in the Unix sense. The shell always passes
+    # KOTASSIUM_LIB, but never create a directory literally called "~".
+    LIB = os.path.join(tempfile.gettempdir(), "Kotassium")
 STATE = os.path.join(LIB, "webstate")
 os.makedirs(LIB, exist_ok=True)
 os.makedirs(STATE, exist_ok=True)
@@ -29,6 +37,35 @@ os.makedirs(COVER_DIR, exist_ok=True)
 COVERS_JSON = os.path.join(STATE, "covers.json")
 PORT = 8421
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
+
+# --------------------------------------------------------------- audio files
+# Desktop downloads are converted to mp3 by ffmpeg. Android has no ffmpeg, so
+# it keeps whatever yt-dlp fetched (usually m4a). The library, the /lib/ route
+# and the player all work off the extension rather than assuming mp3.
+AUDIO_EXTS = (".mp3", ".m4a", ".webm", ".opus", ".ogg", ".aac", ".flac")
+AUDIO_TYPES = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".webm": "audio/webm",
+               ".opus": "audio/ogg", ".ogg": "audio/ogg", ".aac": "audio/aac",
+               ".flac": "audio/flac"}
+
+def audio_ext(path):
+    return os.path.splitext(path)[1].lower()
+
+def track_path(tid):
+    """The file for a track id in any supported format, or None."""
+    for ext in AUDIO_EXTS:
+        p = os.path.join(LIB, tid + ext)
+        if os.path.exists(p):
+            return p
+    return None
+
+def track_name(path):
+    """Track id for a library file, or None for previews and stray files."""
+    base = os.path.basename(path)
+    if base.startswith(".") or "_preview." in base:
+        return None
+    if audio_ext(base) not in AUDIO_EXTS:
+        return None
+    return os.path.splitext(base)[0]
 
 # ------------------------------------------------------------------ auth
 # Off by default (the desktop app is loopback-only). Set KOTASSIUM_PASSWORD
@@ -96,7 +133,7 @@ def find_ytdlp():
     """Locate a usable yt-dlp: explicit env, bundled copy, project venv, PATH,
     then the module."""
     env = os.environ.get("KOTASSIUM_YTDLP")
-    if env:
+    if env and env != "inproc":
         return [env]
     # Inside Kotassium.app the standalone binary ships next to the web assets.
     for rel in (("bin", "yt-dlp"), ("yt-dlp",)):
@@ -117,6 +154,11 @@ def find_ytdlp():
 
 YTDLP = find_ytdlp()
 FFMPEG = which("ffmpeg")
+# Android (Chaquopy) embeds CPython but cannot exec a yt-dlp binary, and has no
+# ffmpeg. There the download runs in this process and keeps yt-dlp's own
+# container. Desktops keep the subprocess + mp3 conversion path.
+YTDLP_INPROC = (os.environ.get("KOTASSIUM_YTDLP") == "inproc"
+                or (YTDLP is None and hasattr(sys, "getandroidapilevel")))
 LINKS = os.path.join(STATE, "links.json")
 _lock = threading.RLock()
 
@@ -394,13 +436,87 @@ def dl_file(src, tid, url):
 def sc_resolve(tid):
     return ""
 
+def _make_preview(out, vid):
+    """A 5s clip so playback starts instantly. Needs ffmpeg; without it the
+    /lib/ route redirects the preview to the full track instead."""
+    if not FFMPEG:
+        return
+    prev = os.path.join(LIB, vid + "_preview.mp3")
+    try:
+        run_proc([FFMPEG, "-y", "-i", out, "-t", "5", "-c", "copy", prev],
+                 timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+def _take_download(vid, progress=None):
+    """Move the finished .yt_<id>.<ext> into place and return its basename."""
+    for f in sorted(os.listdir(LIB)):
+        if f.startswith(".yt_" + vid + "."):
+            src = os.path.join(LIB, f)
+            if os.path.exists(src):
+                out = os.path.join(LIB, vid + audio_ext(f))
+                os.replace(src, out)
+                _make_preview(out, vid)
+                if progress:
+                    progress(100.0)
+                return os.path.basename(out)
+    return None
+
+def _ytdl_inproc(vid, progress=None):
+    """Download without a subprocess (Android).
+
+    ffmpeg is optional here: with it the track becomes mp3 like on desktop,
+    without it yt-dlp's own audio container (usually m4a) is kept. The page
+    plays either one.
+    """
+    import yt_dlp
+
+    last = [0.0]
+
+    def hook(d):
+        if not progress:
+            return
+        if d.get("status") == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            got = d.get("downloaded_bytes") or 0
+            if total:
+                last[0] = max(last[0], min(99.0, got * 100.0 / total))
+                progress(round(last[0], 1))
+        elif d.get("status") == "finished":
+            progress(99.0)
+
+    opts = {
+        "outtmpl": os.path.join(LIB, ".yt_" + vid + ".%(ext)s"),
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "noplaylist": True,
+        "nooverwrites": True,
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+        "progress_hooks": [hook],
+        "socket_timeout": 30,
+        "retries": 3,
+    }
+    if FFMPEG:
+        opts["postprocessors"] = [{"key": "FFmpegExtractAudio",
+                                   "preferredcodec": "mp3",
+                                   "preferredquality": "128"}]
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.download(["https://www.youtube.com/watch?v=" + vid])
+    name = _take_download(vid, progress)
+    if not name:
+        raise RuntimeError("yt-dlp failed")
+    return name
+
 def ytdl(vid, progress=None):
     vid = re.sub(r"[^A-Za-z0-9_-]", "", vid or "")
-    out = os.path.join(LIB, vid + ".mp3")
-    if os.path.exists(out):
+    existing = track_path(vid)
+    if existing:
         if progress:
             progress(100.0)
-        return os.path.basename(out)
+        return os.path.basename(existing)
+    if YTDLP_INPROC:
+        return _ytdl_inproc(vid, progress)
     if not YTDLP:
         raise RuntimeError("yt-dlp not found")
     if not FFMPEG:
@@ -430,22 +546,10 @@ def ytdl(vid, progress=None):
         watchdog.cancel()
         with _procs_lock:
             _procs.discard(p)
-    for f in os.listdir(LIB):
-        if f.startswith(".yt_" + vid + "."):
-            src = os.path.join(LIB, f)
-            if os.path.exists(src):
-                os.replace(src, out)
-                # generate 5s preview clip
-                prev = os.path.join(LIB, vid + "_preview.mp3")
-                try:
-                    run_proc([FFMPEG, "-y", "-i", out, "-t", "5", "-c", "copy", prev],
-                             timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                except Exception:
-                    pass
-                if progress:
-                    progress(100.0)
-                return os.path.basename(out)
-    raise RuntimeError("yt-dlp failed")
+    name = _take_download(vid, progress)
+    if not name:
+        raise RuntimeError("yt-dlp failed")
+    return name
 
 def cover_local(url):
     if not url or url.startswith("/cover/"):
@@ -634,9 +738,10 @@ def handle(path, params, hdr):
             return 200, "application/json", b"{}", None, False
     if path == "/api/library":
         out = []
-        for f in os.listdir(LIB):
-            if f.endswith(".mp3"):
-                out.append({"name": f[:-4], "size": os.path.getsize(os.path.join(LIB, f))})
+        for f in sorted(os.listdir(LIB)):
+            name = track_name(f)
+            if name:
+                out.append({"name": name, "size": os.path.getsize(os.path.join(LIB, f))})
         return 200, "application/json", json.dumps({"library": out}).encode(), None, False
     if path.startswith("/lib/"):
         base = os.path.basename(urllib.parse.unquote(path[5:]))
@@ -644,15 +749,19 @@ def handle(path, params, hdr):
         # on-demand preview clip generation
         if (not os.path.exists(f)) and base.endswith("_preview.mp3"):
             vid = base[:-len("_preview.mp3")]
-            src = os.path.join(LIB, vid + ".mp3")
-            if os.path.exists(src) and FFMPEG:
+            src = track_path(vid)
+            if src and FFMPEG:
                 try:
                     run_proc([FFMPEG, "-y", "-i", src, "-t", "5", "-c", "copy", f],
                              timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except Exception:
                     pass
+            elif src:
+                # No ffmpeg (Android): there is no preview clip, so point the
+                # player straight at the full track instead of a 404.
+                return 302, None, b"", {"Location": "/lib/" + urllib.parse.quote(os.path.basename(src))}, False
         if os.path.exists(f):
-            ctype = "audio/mp4" if base.endswith(".m4a") else "audio/mpeg"
+            ctype = AUDIO_TYPES.get(audio_ext(base), "application/octet-stream")
             size = os.path.getsize(f)
             rng = (hdr.get("Range") or "").replace("bytes=", "")
             start, end = 0, size - 1
@@ -826,6 +935,23 @@ class H(BaseHTTPRequestHandler):
 def make_server(host="0.0.0.0", port=PORT):
     """Build (but do not start) the HTTP server. Import-safe for desktop.py."""
     return ThreadingHTTPServer((host, port), H)
+
+_local_server = None
+_local_lock = threading.Lock()
+
+def serve_local(port=PORT):
+    """Start the server on loopback in a background thread and return the port.
+
+    This is what the Android shell calls: same page, same server, no window
+    manager and no shell loop to block. Calling it twice is a no-op, so an
+    activity restart does not fight over the port.
+    """
+    global _local_server
+    with _local_lock:
+        if _local_server is None:
+            _local_server = make_server("127.0.0.1", port)
+            threading.Thread(target=_local_server.serve_forever, daemon=True).start()
+        return _local_server.server_address[1]
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Kotassium local server")

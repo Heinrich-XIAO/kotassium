@@ -18,11 +18,22 @@ the moment it is saved. Only the shells need a new tag.
   is an HMAC of the password and `webstate/auth.salt`, so changing the password
   logs everyone out. `/login`, `/api/health`, the manifest and `/sw.js` stay
   public so the PWA is installable before signing in.
-- **Android** is a WebView APK (`android/`, no Kotlin, no AndroidX). The URL is
-  baked at build time (`-PkotassiumUrl=`, CI reads the `KOTASSIUM_URL` repo
-  variable); with no URL it asks once and stores it. Release signing uses the
+- **Android** is a WebView APK (`android/`, no Kotlin, no AndroidX) with two
+  modes: a window onto a shared URL, or the same `serve_web.py` running inside
+  the app via Chaquopy. `kotassium_boot.py` only sets `KOTASSIUM_BASE` /
+  `KOTASSIUM_LIB` and calls `serve_web.serve_local()`; the Gradle build copies
+  `serve_web.py`, `spotify_get.py`, `updater.py` and `web/` from the repo root
+  into the APK, so there is still exactly one copy of the server and the page.
+  The URL is baked at build time (`-PkotassiumUrl=`, CI reads the
+  `KOTASSIUM_URL` repo variable); with no URL the first launch offers **This
+  phone** / **Shared server**. Release signing uses the
   `ANDROID_KEYSTORE_B64` / `ANDROID_KEYSTORE_PASS` / `ANDROID_KEY_ALIAS`
   secrets — losing that keystore means future APKs cannot install over old ones.
+- Android has no ffmpeg and cannot exec a `yt-dlp` binary, so downloads run
+  in-process (`KOTASSIUM_YTDLP=inproc`) and keep yt-dlp's container (usually
+  `.m4a`). Never assume `.mp3`: use `track_path()` / `AUDIO_EXTS` in
+  `serve_web.py`, and keep the `_preview.mp3` → full-track redirect for
+  builds without ffmpeg.
 - `.github/workflows/release.yml` builds both DMGs and the APK on a `v*` tag and
   publishes one release; `workflow_dispatch` only uploads artifacts.
 

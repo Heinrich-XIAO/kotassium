@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'com.chaquo.python'
 }
 
 // The server URL is baked in at build time. Leave it empty and the app asks
@@ -7,6 +8,12 @@ plugins {
 // APK usable when the tunnel hostname changes.
 def serverUrl = (findProperty("kotassiumUrl") ?: System.getenv("KOTASSIUM_URL") ?: "").toString()
 def appVersion = (findProperty("appVersion") ?: "2.1.0").toString()
+
+// The page and the server are the ones at the repo root: the build copies them
+// in, it does not keep a second copy. Same source of truth as the desktop app.
+def repoRoot = file("${rootDir}/..")
+def genPython = layout.buildDirectory.dir("generated/python").get().asFile
+def genAssets = layout.buildDirectory.dir("generated/assets").get().asFile
 
 android {
     namespace "app.kotassium.mobile"
@@ -19,6 +26,19 @@ android {
         versionCode appVersion.tokenize(".").collect { it.padLeft(3, "0") }.join("").toInteger()
         versionName appVersion
         buildConfigField "String", "KOTASSIUM_URL", "\"${serverUrl}\""
+
+        // Chaquopy ships a CPython runtime per ABI. Two is enough: phones are
+        // arm64 and the emulator is x86_64.
+        ndk {
+            abiFilters "arm64-v8a", "x86_64"
+        }
+    }
+
+    sourceSets {
+        main {
+            python.srcDirs = ["src/main/python", genPython.absolutePath]
+            assets.srcDirs = ["src/main/assets", genAssets.absolutePath]
+        }
     }
 
     buildFeatures {
@@ -50,10 +70,48 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
 
-    // No Kotlin, no AndroidX, no third-party libraries: this module is a
-    // window onto the web app and nothing else.
+python {
+    // Host Python used to fetch pure-Python packages for the APK.
+    buildPython "python3"
+    pip {
+        install "yt-dlp"
+        install "certifi"
+    }
+}
+
+// Stage the repo's server and page into the build. Keep this list in sync with
+// the modules serve_web.py imports at startup.
+def stageServer = tasks.register("stageServer", Sync) {
+    from(repoRoot) {
+        include "serve_web.py", "spotify_get.py", "updater.py"
+    }
+    into genPython
+}
+
+def stageWeb = tasks.register("stageWeb", Sync) {
+    from(new File(repoRoot, "web")) {
+        into "web"
+    }
+    into genAssets
+}
+
+// preBuild is registered by AGP after the build script runs, so match it
+// lazily instead of naming it now.
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn stageServer, stageWeb
+}
+
+// Chaquopy's packaging task reads the python source dirs, so it must not run
+// before the files are staged.
+tasks.configureEach { t ->
+    if (t.name.startsWith("generate") && t.name.contains("Python")) {
+        t.dependsOn stageServer
+    }
 }
 
 dependencies {
+    // Chaquopy is the only dependency: it supplies CPython and the packages
+    // above. There is no UI framework here on purpose.
 }
