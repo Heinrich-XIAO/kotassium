@@ -88,8 +88,8 @@ What differs from desktop, and why:
 - **Library location.** `Android/data/app.kotassium.mobile/files/Music` — the
   app's own external directory. Syncthing cannot reach it on Android 11+, so
   tracks downloaded on the phone stay on the phone.
-- **Size.** The CPython runtime makes the APK tens of megabytes instead of
-  tens of kilobytes.
+- **Size.** The CPython runtime makes the APK ~44 MB instead of tens of
+  kilobytes (arm64 and x86_64, plus yt-dlp).
 
 ## Run
 

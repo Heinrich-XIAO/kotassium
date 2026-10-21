@@ -222,8 +222,11 @@ jobs:
             ### Android
 
             `Kotassium-*.apk` — open it on the phone and allow installing from
-            this source when prompted. Or just open the library URL in Chrome
-            and choose **Add to Home Screen** (the same app, no download).
+            this source when prompted. With no server address baked in, the
+            first launch offers **This phone** (the app runs the library
+            itself; no other machine needed) or **Shared server**. Or just open
+            the library URL in Chrome and choose **Add to Home Screen** (the
+            same app, no download).
 
             ### Server
 
