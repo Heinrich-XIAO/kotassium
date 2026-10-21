@@ -20,6 +20,10 @@ Without `KOTASSIUM_PASSWORD` every route is open. With it, everything except
 `/login`, `/api/health`, the manifest and the service worker needs a session
 cookie. Five wrong passwords per IP per minute, then a one-minute lockout.
 
+If anything sits in front of the server, also set `KOTASSIUM_HOSTS` to the
+name it is reached by (see section 3); without it the host guard refuses the
+forwarded `Host` header.
+
 ## 2. Service
 
 ```sh
@@ -32,23 +36,46 @@ systemctl --user status kotassium-web.service
 It binds `0.0.0.0:8421` by default. On a trusted LAN or a Tailscale tailnet
 that is the whole story: `http://<machine>:8421` works from every device.
 
-## 3a. Public URL with Tailscale Funnel (no domain needed)
+## 3. Reaching it from outside the house
+
+Any proxy in front of the server needs its hostname in `KOTASSIUM_HOSTS`, or
+the DNS-rebinding guard answers 403:
 
 ```sh
-sudo tailscale funnel 8421
+echo 'KOTASSIUM_HOSTS=fedora-1.tail8e937f.ts.net' >> ~/.config/kotassium/server.env
+systemctl --user restart kotassium-web.service
 ```
 
-That prints `https://<machine>.<tailnet>.ts.net`. Requirements:
+### a. Tailscale Serve — tailnet only (nothing is public)
 
-- Funnel enabled for the tailnet (admin console → DNS/HTTPS certificates, and
-  the Funnel toggle under Access controls).
-- Root on the machine (the command above).
+```sh
+sudo tailscale serve --bg 8421
+```
 
-Funnel is public: anyone with the URL reaches the login page. The password is
-what keeps it private. The hostname is stable as long as the machine name and
-tailnet do.
+Gives `https://<machine>.<tailnet>.ts.net`: real HTTPS certificate, reachable
+**only** from devices in your tailnet. No port is opened and nothing is
+published to the internet. Needs HTTPS certificates enabled in the admin
+console (DNS page) — that is a certificate switch, not an exposure switch.
 
-## 3b. Public URL with Cloudflare Tunnel (needs a domain on Cloudflare)
+Family members get in either by accepting a tailnet invite, or by having this
+one node shared with them (admin console → Machines → Share), so they never
+see your other devices.
+
+Off again with `sudo tailscale serve --https=443 off`.
+
+### b. Tailscale Funnel — public URL, one port only
+
+```sh
+sudo tailscale funnel --bg 8421
+```
+
+Same hostname, published to the internet. Funnel exposes exactly one port on
+one machine — not the tailnet, not other services — and is reversible with
+`sudo tailscale funnel --https=443 off`. Requires the Funnel toggle under
+Access controls. Anyone with the URL reaches the login page; the password is
+the only gate.
+
+### c. Cloudflare Tunnel + Access — public URL behind an identity gate
 
 ```sh
 cloudflared tunnel login                 # browser, picks the zone
@@ -57,9 +84,11 @@ cloudflared tunnel route dns kotassium music.example.com
 cloudflared tunnel run --token "$(cloudflared tunnel token kotassium)"
 ```
 
-`cloudflared` runs unprivileged. Keep the token in
-`~/.config/kotassium/tunnel.env` and a user unit similar to the one above. The
-hostname is stable and does not need inbound ports.
+`cloudflared` runs unprivileged; keep the token in
+`~/.config/kotassium/tunnel.env` and a user unit like the one above. Add a
+Cloudflare Access policy (email one-time PIN, listed addresses) so the app is
+not reachable by anyone who stumbles on the hostname — then the password is a
+second lock instead of the only one.
 
 ## 4. Point the clients at it
 

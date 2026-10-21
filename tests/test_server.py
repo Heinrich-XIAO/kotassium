@@ -195,6 +195,20 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(code, 303)
         self.assertEqual(hdrs.get("Location"), "/")
 
+    def test_tunnel_hostname_is_accepted(self):
+        # A reverse proxy forwards Host: <public name>; without the allowlist
+        # every tunnel would 403 on the first request.
+        saved = serve_web.EXTRA_HOSTS
+        serve_web.EXTRA_HOSTS = ("music.example.com",)
+        try:
+            self.assertTrue(serve_web.host_allowed("music.example.com"))
+            self.assertTrue(serve_web.host_allowed("music.example.com:443"))
+            self.assertFalse(serve_web.host_allowed("evil.example"))
+            code, _, _ = self.req("GET", "/api/health", headers={"Host": "music.example.com"})
+            self.assertEqual(code, 200)
+        finally:
+            serve_web.EXTRA_HOSTS = saved
+
     def test_forged_cookie_is_rejected(self):
         code, _, _ = self.req("GET", "/", headers={"Cookie": "kot_session=deadbeef"})
         self.assertEqual(code, 303)

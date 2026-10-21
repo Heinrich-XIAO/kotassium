@@ -234,6 +234,13 @@ def get_now():
         return dict(_now)
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", ""}
+
+# Public names this server answers to when it sits behind a tunnel or
+# `tailscale serve` (comma separated, e.g. "fedora-1.tail8e937f.ts.net").
+# The guard still rejects every other hostname, so DNS rebinding stays dead.
+EXTRA_HOSTS = tuple(h.strip().lower()
+                    for h in os.environ.get("KOTASSIUM_HOSTS", "").split(",")
+                    if h.strip())
 def _hostname(host_header):
     try:
         return (urllib.parse.urlsplit("//" + (host_header or "").strip()).hostname or "").lower()
@@ -241,9 +248,10 @@ def _hostname(host_header):
         return ""
 
 def host_allowed(host_header):
-    """Allow loopback names and IP literals; reject hostnames (DNS rebinding)."""
+    """Allow loopback names, IP literals and the configured tunnel names;
+    reject every other hostname (DNS rebinding)."""
     h = _hostname(host_header)
-    if h in LOCAL_HOSTS:
+    if h in LOCAL_HOSTS or h in EXTRA_HOSTS:
         return True
     try:
         ipaddress.ip_address(h)
@@ -753,7 +761,10 @@ class H(BaseHTTPRequestHandler):
             return self._send(401, "text/html; charset=utf-8",
                               login_page("Wrong password.", nxt).encode())
         login_note(ip, True)
-        secure = (self.headers.get("X-Forwarded-Proto") or "").lower() == "https"
+        # A tunnel terminates TLS and forwards plain HTTP, so the cookie is
+        # Secure whenever a proxy is in front, whether or not it says so.
+        secure = ((self.headers.get("X-Forwarded-Proto") or "").lower() == "https"
+                  or _hostname(self.headers.get("Host")) in EXTRA_HOSTS)
         cookie = "kot_session=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000%s" % (
             SESSION, "; Secure" if secure else "")
         self._send(303, "text/plain", b"", {"Location": nxt, "Set-Cookie": cookie})
