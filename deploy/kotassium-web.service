@@ -1,0 +1,15 @@
+[Unit]
+Description=Kotassium shared library server
+After=network-online.target
+
+[Service]
+ExecStart=%h/.t3/projects/kotassium/venv/bin/python3 %h/.t3/projects/kotassium/serve_web.py
+WorkingDirectory=%h/.t3/projects/kotassium
+EnvironmentFile=%h/.config/kotassium/server.env
+Restart=always
+RestartSec=3
+StandardOutput=append:/tmp/kotassium-web.log
+StandardError=append:/tmp/kotassium-web.log
+
+[Install]
+WantedBy=default.target
