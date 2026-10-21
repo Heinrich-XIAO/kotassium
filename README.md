@@ -1,15 +1,21 @@
 # Kotassium
 
-Kotassium is a local music player: one Python server, one HTML page, and an
-optional native window. The same code runs on Linux (WebKitGTK) and macOS
-(WKWebView).
+Kotassium is a music player with one source of truth: a Python server and a
+single HTML page. The desktop window and the Android app are thin shells that
+load that page — they contain no UI of their own, so a fix in `web/index.html`
+lands on every platform at once.
 
 - `serve_web.py` — the server: Spotify link resolution, multi-source search,
   permanent MP3 downloads via `yt-dlp` (as background jobs with progress),
-  on-disk library, cover caching, now-playing state. Serves `web/index.html`.
-- `web/index.html` — the UI (single file, no build step).
-- `desktop.py` — desktop shell: runs the same server on `127.0.0.1` and shows
-  the same page in a native window.
+  on-disk library, cover caching, now-playing state, optional password gate.
+  Serves `web/index.html`, the PWA manifest and the service worker.
+- `web/index.html` — the UI (single file, no build step). The only place UI
+  lives.
+- `desktop.py` — desktop shell: either runs the same server on `127.0.0.1`
+  and shows the page, or (`--remote`) points at a shared server.
+- `updater.py` — macOS self-update from GitHub Releases.
+- `android/` — WebView APK: an icon, a persistent session and a back button
+  around the same URL. No markup, no logic.
 - `mpris_linux.py` — MPRIS v2 service (Linux): media keys, GNOME media widget,
   lock screen.
 - `notify.py` — track-change notifications (`notify-send` on Linux,
@@ -18,8 +24,9 @@ optional native window. The same code runs on Linux (WebKitGTK) and macOS
   launcher. `install-macos.sh` / `build-macos.sh` build `Kotassium.app`.
 - `spotify_get.py` / `harvest_token.py` — Spotify resolution helpers used by
   `serve_web.py`.
-- `tests/` — `unittest` coverage for request guards, dependency resolution,
-  download jobs, now-playing, and MPRIS.
+- `tests/` — `unittest` coverage for request guards, auth, dependency
+  resolution, download jobs, now-playing, MPRIS and the "wrappers stay
+  wrappers" invariant.
 - `tools/ui_check.py` — headless UI integration check (playback, swap, seek,
   pause, next) under Xvfb.
 - `tools/demo.py` — records `docs/kotassium-demo.mp4` from the real app.
@@ -30,7 +37,29 @@ There is no cloud edition anymore: the `server/` Vercel project (UI copy +
 serverless API, including the leftover APK-serving routes) was removed, and
 `serve_web.py` no longer falls back to it for Spotify resolution — the local
 `spotify_get.resolve` lane handles playlists, albums, and tracks on its own.
-Earlier APK releases live on GitHub Releases.
+
+## One server, many clients
+
+Run the server on the machine that should hold the library (the "home" box),
+put it behind a stable HTTPS hostname, and point every client at that URL:
+
+```sh
+KOTASSIUM_PASSWORD='…' venv/bin/python3 serve_web.py --host 127.0.0.1
+```
+
+With `KOTASSIUM_PASSWORD` set, everything except `/login`, `/api/health`, the
+manifest and the service worker needs a session cookie from `POST /login`
+(HMAC-signed, salt stored next to the library state, 5 tries/minute per IP).
+Leave it unset for a purely local server.
+
+- **Desktop** — `desktop-venv/bin/python desktop.py --remote https://music.example.com`
+  (or set `KOTASSIUM_URL`, or ship `Contents/Resources/default-url.txt` in the
+  bundle). `--local` forces the built-in server. In remote mode the window is
+  the only thing this process owns; MPRIS/notifications stay local-mode
+  features for now.
+- **Android** — `Kotassium-<version>.apk` from the releases, or open the URL
+  in Chrome and **Add to Home Screen** (the PWA is the same page, no build).
+- **Web** — just the URL.
 
 ## Run
 

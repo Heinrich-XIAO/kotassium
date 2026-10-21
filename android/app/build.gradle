@@ -1,0 +1,59 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The server URL is baked in at build time. Leave it empty and the app asks
+// for it once on first launch (saved in SharedPreferences), which keeps the
+// APK usable when the tunnel hostname changes.
+def serverUrl = (findProperty("kotassiumUrl") ?: System.getenv("KOTASSIUM_URL") ?: "").toString()
+def appVersion = (findProperty("appVersion") ?: "2.1.0").toString()
+
+android {
+    namespace "app.kotassium.mobile"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "app.kotassium.mobile"
+        minSdk 24
+        targetSdk 34
+        versionCode appVersion.tokenize(".").collect { it.padLeft(3, "0") }.join("").toInteger()
+        versionName appVersion
+        buildConfigField "String", "KOTASSIUM_URL", "\"${serverUrl}\""
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            def store = System.getenv("ANDROID_KEYSTORE")
+            if (store) {
+                storeFile file(store)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASS")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS") ?: "kotassium"
+                keyPassword System.getenv("ANDROID_KEY_PASS") ?: System.getenv("ANDROID_KEYSTORE_PASS")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (System.getenv("ANDROID_KEYSTORE")) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // No Kotlin, no AndroidX, no third-party libraries: this module is a
+    // window onto the web app and nothing else.
+}
+
+dependencies {
+}

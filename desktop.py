@@ -129,11 +129,30 @@ def selftest():
     print("update  %s" % ("supported (%s, can install: %s)" % (
         updater.current_version(), updater.can_install())
         if updater.SUPPORTED else "unavailable (not a macOS app bundle)"))
+    print("remote  %s" % (normalize_url(os.environ.get("KOTASSIUM_URL") or baked_url()) or "local"))
     print("RESULT  %s" % ("ok" if ok else "incomplete"))
     return 0 if ok else 1
 
 
-def run(host, port, dev=False, no_window=False, notify_tracks=True):
+def normalize_url(u):
+    u = (u or "").strip()
+    if not u:
+        return None
+    if "://" not in u:
+        u = "https://" + u
+    return u.rstrip("/") + "/"
+
+
+def baked_url():
+    """A shared-server URL shipped inside the app bundle (build-macos.sh)."""
+    try:
+        with open(os.path.join(serve_web.BASE, "default-url.txt")) as f:
+            return f.read().strip() or None
+    except Exception:
+        return None
+
+
+def run(host, port, dev=False, no_window=False, notify_tracks=True, remote=None):
     lock = acquire_lock()
     if not lock:
         if health(port):
@@ -142,7 +161,29 @@ def run(host, port, dev=False, no_window=False, notify_tracks=True):
         print("Another Kotassium instance holds %s" % LOCK_FILE)
         return 1
 
+    # The app bundle updates itself from GitHub Releases; a source checkout or
+    # the Linux build reports unsupported and the UI hides it.
+    if updater.SUPPORTED:
+        updater.check_async()
+
     try:
+        if remote:
+            # Thin-client mode: the shared server is the product, this process
+            # only owns the window (and the app's own updater).
+            print("[kotassium] remote %s" % remote, flush=True)
+            if no_window:
+                try:
+                    with urllib.request.urlopen(remote + "api/health", timeout=5) as r:
+                        print("[kotassium] health: %s" % r.read().decode("utf-8", "replace")[:200])
+                except Exception as e:
+                    print("[kotassium] unreachable: %s" % e)
+                    return 1
+                return 0
+            try:
+                return show_window(dev=dev, notify_tracks=notify_tracks, url=remote)
+            finally:
+                lock.close()
+
         try:
             srv = serve_web.make_server(host, port)
         except OSError as e:
@@ -154,11 +195,6 @@ def run(host, port, dev=False, no_window=False, notify_tracks=True):
 
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         print("[kotassium] %s:%d  lib=%s" % (host, port, serve_web.LIB), flush=True)
-
-        # The app bundle updates itself from GitHub Releases; a source
-        # checkout or the Linux build reports unsupported and the UI hides it.
-        if updater.SUPPORTED:
-            updater.check_async()
 
         try:
             if no_window:
@@ -228,7 +264,7 @@ def start_nowplaying_watch(port, mpris, notify_tracks):
     threading.Thread(target=loop, daemon=True).start()
 
 
-def show_window(port, dev, notify_tracks=True, on_start=None):
+def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=None):
     try:
         import webview
     except Exception as e:
@@ -238,11 +274,11 @@ def show_window(port, dev, notify_tracks=True, on_start=None):
 
     geom = load_geometry()
     kwargs = dict(geom) if geom else {"width": DEFAULT_SIZE[0], "height": DEFAULT_SIZE[1]}
-    url = "http://127.0.0.1:%d/" % port
+    url = normalize_url(url) if url else "http://127.0.0.1:%d/" % port
     if not dev:
         # desktop=1 stops the page from polling /api/mtime every 2s: that
         # reload-on-change behaviour is only wanted while editing the UI.
-        url += "?desktop=1"
+        url += ("&" if "?" in url else "?") + "desktop=1"
     w = webview.create_window(
         "Kotassium",
         url,
@@ -260,7 +296,7 @@ def show_window(port, dev, notify_tracks=True, on_start=None):
             pass
     updater.on_installed = quit_for_update
 
-    missing = preflight()
+    missing = preflight() if port is not None else []
 
     # Media keys arrive on the GTK main loop; evaluate_js there would deadlock,
     # so hand every command to a worker thread.
@@ -282,28 +318,30 @@ def show_window(port, dev, notify_tracks=True, on_start=None):
             except Exception:
                 pass
 
-    threading.Thread(target=control_worker, daemon=True).start()
-
     mpris = None
-    if IS_LINUX:
-        try:
-            from mpris_linux import MprisLinux
-            mpris = MprisLinux(
-                "http://127.0.0.1:%d" % port,
-                {"playpause": lambda: control("playpause"),
-                 "play": lambda: control("play"),
-                 "pause": lambda: control("pause"),
-                 "next": lambda: control("next"),
-                 "previous": lambda: control("previous"),
-                 "stop": lambda: control("stop"),
-                 "quit": lambda: control("stop")},
-            )
-            if not mpris.conn:
-                mpris = None
-        except Exception as e:
-            print("[kotassium] MPRIS unavailable: %s" % e)
+    if port is not None:
+        # Remote mode has no local server to feed MPRIS from, so media keys
+        # stay a local-mode feature for now.
+        threading.Thread(target=control_worker, daemon=True).start()
+        if IS_LINUX:
+            try:
+                from mpris_linux import MprisLinux
+                mpris = MprisLinux(
+                    "http://127.0.0.1:%d" % port,
+                    {"playpause": lambda: control("playpause"),
+                     "play": lambda: control("play"),
+                     "pause": lambda: control("pause"),
+                     "next": lambda: control("next"),
+                     "previous": lambda: control("previous"),
+                     "stop": lambda: control("stop"),
+                     "quit": lambda: control("stop")},
+                )
+                if not mpris.conn:
+                    mpris = None
+            except Exception as e:
+                print("[kotassium] MPRIS unavailable: %s" % e)
 
-    start_nowplaying_watch(port, mpris, notify_tracks)
+        start_nowplaying_watch(port, mpris, notify_tracks)
 
     def on_loaded():
         relax_autoplay()
@@ -339,12 +377,17 @@ def main(argv=None):
                     help="don't send a notification on track change")
     ap.add_argument("--selftest", action="store_true",
                     help="print what this installation can do, then exit")
+    ap.add_argument("--remote", metavar="URL",
+                    help="load a shared Kotassium server instead of starting one")
+    ap.add_argument("--local", action="store_true",
+                    help="ignore the baked-in shared URL and run locally")
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
     host = "0.0.0.0" if a.lan else "127.0.0.1"
+    remote = None if a.local else (a.remote or os.environ.get("KOTASSIUM_URL") or baked_url())
     return run(host, a.port, dev=a.dev, no_window=a.no_window,
-               notify_tracks=not a.no_notify)
+               notify_tracks=not a.no_notify, remote=normalize_url(remote))
 
 
 if __name__ == "__main__":

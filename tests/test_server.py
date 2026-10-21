@@ -1,4 +1,6 @@
 import http.client
+import shutil
+import tempfile
 import json
 import os
 import sys
@@ -92,6 +94,92 @@ class ResolverTests(unittest.TestCase):
         self.assertTrue(serve_web.origin_allowed(None, "127.0.0.1:8421"))
         self.assertTrue(serve_web.origin_allowed("http://127.0.0.1:8421", "127.0.0.1:8421"))
         self.assertFalse(serve_web.origin_allowed("https://attacker.example", "127.0.0.1:8421"))
+
+
+class AuthTests(unittest.TestCase):
+    """The password gate that makes a public URL safe."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._saved = (serve_web.PASSWORD, serve_web.AUTH, serve_web.SESSION, serve_web.STATE)
+        cls.tmp = tempfile.mkdtemp(prefix="kot-auth-")
+        serve_web.STATE = cls.tmp
+        serve_web.PASSWORD = "hunter2"
+        serve_web.AUTH = True
+        serve_web.SESSION = serve_web._session_token()
+        serve_web._fails.clear()
+        cls.srv = serve_web.make_server("127.0.0.1", 0)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+        (serve_web.PASSWORD, serve_web.AUTH, serve_web.SESSION, serve_web.STATE) = cls._saved
+
+    def req(self, method, path, body=None, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request(method, path, body=body, headers=headers or {})
+        r = c.getresponse()
+        data = r.read()
+        hdrs = dict(r.getheaders())
+        c.close()
+        return r.status, hdrs, data
+
+    def test_page_redirects_to_login(self):
+        code, hdrs, _ = self.req("GET", "/")
+        self.assertEqual(code, 303)
+        self.assertEqual(hdrs.get("Location"), "/login")
+
+    def test_api_is_closed(self):
+        code, _, body = self.req("GET", "/api/library")
+        self.assertEqual(code, 401)
+        self.assertEqual(json.loads(body)["error"], "auth")
+
+    def test_audio_is_closed(self):
+        code, _, _ = self.req("GET", "/lib/whatever.mp3")
+        self.assertEqual(code, 401)
+
+    def test_health_and_manifest_stay_public(self):
+        self.assertEqual(self.req("GET", "/api/health")[0], 200)
+        self.assertEqual(self.req("GET", "/manifest.webmanifest")[0], 200)
+        self.assertEqual(self.req("GET", "/login")[0], 200)
+
+    def test_login_rejects_wrong_password(self):
+        code, _, body = self.req("POST", "/login", body="password=nope",
+                                 headers={"Content-Type": "application/x-www-form-urlencoded",
+                                          "Origin": "http://127.0.0.1:%d" % self.port})
+        self.assertEqual(code, 401)
+        self.assertIn(b"Wrong password", body)
+
+    def test_login_grants_a_session(self):
+        origin = "http://127.0.0.1:%d" % self.port
+        code, hdrs, _ = self.req("POST", "/login", body="password=hunter2",
+                                 headers={"Content-Type": "application/x-www-form-urlencoded",
+                                          "Origin": origin})
+        self.assertEqual(code, 303)
+        cookie = hdrs.get("Set-Cookie", "")
+        self.assertIn("kot_session=", cookie)
+        self.assertIn("HttpOnly", cookie)
+        tok = cookie.split("kot_session=")[1].split(";")[0]
+        code, _, body = self.req("GET", "/", headers={"Cookie": "kot_session=" + tok})
+        self.assertEqual(code, 200)
+        self.assertIn(b"Kotassium", body)
+        code, _, _ = self.req("GET", "/api/library", headers={"Cookie": "kot_session=" + tok})
+        self.assertEqual(code, 200)
+
+    def test_forged_cookie_is_rejected(self):
+        code, _, _ = self.req("GET", "/", headers={"Cookie": "kot_session=deadbeef"})
+        self.assertEqual(code, 303)
+
+    def test_logout_clears_the_cookie(self):
+        code, hdrs, _ = self.req("POST", "/logout", body="",
+                                 headers={"Cookie": "kot_session=" + serve_web.SESSION,
+                                          "Origin": "http://127.0.0.1:%d" % self.port})
+        self.assertEqual(code, 303)
+        self.assertIn("Max-Age=0", hdrs.get("Set-Cookie", ""))
 
 
 if __name__ == "__main__":

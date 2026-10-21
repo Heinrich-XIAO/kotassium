@@ -1,14 +1,30 @@
 # Kotassium — agent conventions
 
-One server (`serve_web.py`), one UI page (`web/index.html`), and a thin desktop
-shell (`desktop.py`) that starts the same server on loopback and shows the same
-page in a native window (WebKitGTK on Linux, WKWebView on macOS). The server and
-page are the product; `desktop.py` must never grow its own copy of the UI, and
-platform code stays in small side modules (`mpris_linux.py`, `notify.py`).
+One server (`serve_web.py`), one UI page (`web/index.html`), and thin shells
+that load it: `desktop.py` (WebKitGTK on Linux, WKWebView on macOS) and
+`android/` (WebView). The server and page are the product; the shells must never
+grow their own copy of the UI, and platform code stays in small side modules
+(`mpris_linux.py`, `notify.py`, `updater.py`).
 
-**No release pipeline.** Changes to `web/index.html` or `serve_web.py` are live
-the moment the file is saved — `serve_web.py` reads files fresh on every
-request, so no server restart is needed for UI edits. Just commit.
+**UI changes need no release.** `serve_web.py` reads files fresh on every
+request, so editing `web/index.html` (or the manifest/service worker) is live
+the moment it is saved. Only the shells need a new tag.
+
+- **The page is the only UI.** `tests/test_wrappers.py` fails if `desktop.py`
+  or `MainActivity.java` contains markup, styles, or chunks of the page. If
+  something is wrong on Android, fix `web/index.html`.
+- **One shared server.** A public deployment sets `KOTASSIUM_PASSWORD`;
+  without it every route (library, audio, delete) is open. The session cookie
+  is an HMAC of the password and `webstate/auth.salt`, so changing the password
+  logs everyone out. `/login`, `/api/health`, the manifest and `/sw.js` stay
+  public so the PWA is installable before signing in.
+- **Android** is a WebView APK (`android/`, no Kotlin, no AndroidX). The URL is
+  baked at build time (`-PkotassiumUrl=`, CI reads the `KOTASSIUM_URL` repo
+  variable); with no URL it asks once and stores it. Release signing uses the
+  `ANDROID_KEYSTORE_B64` / `ANDROID_KEYSTORE_PASS` / `ANDROID_KEY_ALIAS`
+  secrets — losing that keystore means future APKs cannot install over old ones.
+- `.github/workflows/release.yml` builds both DMGs and the APK on a `v*` tag and
+  publishes one release; `workflow_dispatch` only uploads artifacts.
 
 - UI state (playlists, cached covers) lives outside the repo in
   `~/Music/Kotassium` — never commit from there. `KOTASSIUM_LIB` overrides the

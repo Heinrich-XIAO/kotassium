@@ -1,5 +1,12 @@
 <!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
-<title>Kotassium</title><style>
+<title>Kotassium</title>
+<link rel=manifest href=/manifest.webmanifest>
+<link rel=apple-touch-icon href=/icons/apple-touch-icon.png>
+<meta name=theme-color content="#121212">
+<meta name=mobile-web-app-capable content=yes>
+<meta name=apple-mobile-web-app-capable content=yes>
+<meta name=apple-mobile-web-app-status-bar-style content=black-translucent>
+<style>
 *{box-sizing:border-box}html,body{height:100%}
 body{background:#000;color:#fff;font-family:system-ui,sans-serif;margin:0;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
 button{background:none;border:0;color:#fff;cursor:pointer;font-family:inherit}
@@ -674,5 +681,8 @@ if(!/[?&]desktop=1/.test(location.search)){
 var _mt=0;fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){_mt=j.mtime||0}).catch(function(){});
 setInterval(function(){fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){if(_mt&&j.mtime&&j.mtime!==_mt)location.reload()}).catch(function(){})},2000);
 }window.addEventListener('load',function(){loadSide().then(renderHome)});
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='127.0.0.1'||location.hostname==='localhost')){
+  navigator.serviceWorker.register('/sw.js').catch(function(){});
+}
 </script>
 </body></html>

@@ -30,6 +30,12 @@ mkdir -p dist/Kotassium.app/Contents/Resources/bin
 cp vendor/yt-dlp dist/Kotassium.app/Contents/Resources/bin/yt-dlp
 chmod +x dist/Kotassium.app/Contents/Resources/bin/yt-dlp
 
+# A shared-server build opens that URL on launch (desktop.py --local overrides).
+if [ -n "${KOTASSIUM_URL:-}" ]; then
+    printf '%s\n' "$KOTASSIUM_URL" > dist/Kotassium.app/Contents/Resources/default-url.txt
+    echo "baked remote URL: $KOTASSIUM_URL"
+fi
+
 # Ad-hoc signature: enough for local use, not notarized (see README).
 codesign --force --deep --sign - dist/Kotassium.app
 

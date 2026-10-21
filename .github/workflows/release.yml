@@ -1,14 +1,14 @@
-name: macOS DMG
+name: Release
 
-# Builds Kotassium.app with py2app on GitHub's macOS runners and wraps it in a
-# DMG. Tag pushes (v*) publish the DMG to a GitHub Release; manual runs only
-# upload workflow artifacts, which is the safe way to test a change.
+# One tag, one release: the macOS DMG (both architectures) and the Android APK
+# are built from the same commit. Manual runs only upload workflow artifacts,
+# which is the safe way to test packaging changes.
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version stamped into the app bundle
+        description: Version stamped into the app bundles
         required: false
         default: "2.1.0"
   push:
@@ -19,8 +19,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: build (${{ matrix.arch }})
+  macos:
+    name: macOS (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -52,6 +52,7 @@ jobs:
       - name: Build the app bundle
         env:
           KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
+          KOTASSIUM_URL: ${{ vars.KOTASSIUM_URL }}
         run: ./build-macos.sh
 
       - name: Smoke test the bundle
@@ -96,9 +97,71 @@ jobs:
           path: Kotassium-*.dmg
           if-no-files-found: error
 
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.9"
+
+      - name: Version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Signing key
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::error::ANDROID_KEYSTORE_B64 is not set; refusing to ship an unsigned APK"
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/kotassium.keystore"
+          echo "ANDROID_KEYSTORE=$RUNNER_TEMP/kotassium.keystore" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          KOTASSIUM_URL: ${{ vars.KOTASSIUM_URL }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          cd android
+          gradle assembleRelease --no-daemon \
+            -PkotassiumUrl="$KOTASSIUM_URL" \
+            -PappVersion="${{ steps.ver.outputs.version }}"
+
+      - name: Verify and rename
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK"
+          cp "$APK" "Kotassium-${{ steps.ver.outputs.version }}.apk"
+          ls -l Kotassium-*.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kotassium-apk
+          path: Kotassium-*.apk
+          if-no-files-found: error
+
   release:
     name: publish release
-    needs: build
+    needs: [macos, android]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -108,17 +171,23 @@ jobs:
           merge-multiple: true
 
       - name: Checksums
-        # The app verifies its download against this file before installing.
-        run: cd artifacts && sha256sum *.dmg | tee SHA256SUMS
+        # The desktop app verifies its DMG against this file before installing.
+        run: cd artifacts && sha256sum *.dmg *.apk | tee SHA256SUMS
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/*.dmg
+            artifacts/*.apk
             artifacts/SHA256SUMS
           generate_release_notes: true
           body: |
-            ## Kotassium for macOS
+            ## Kotassium
+
+            One library, served from one place. Every client is a window onto
+            the same web app, so a fix lands everywhere at once.
+
+            ### macOS
 
             Download the DMG for your Mac and drag **Kotassium** into
             **Applications**:
@@ -134,15 +203,18 @@ jobs:
             xattr -dr com.apple.quarantine /Applications/Kotassium.app
             ```
 
-            Downloads need `ffmpeg` on the PATH:
+            Once installed it checks this page on launch and updates itself:
+            a **Restart & Update** pill appears when a newer DMG is available,
+            verified against `SHA256SUMS`.
 
-            ```sh
-            brew install ffmpeg
-            ```
+            ### Android
 
+            `Kotassium-*.apk` — open it on the phone and allow installing from
+            this source when prompted. Or just open the library URL in Chrome
+            and choose **Add to Home Screen** (the same app, no download).
+
+            ### Server
+
+            macOS downloads need `ffmpeg` on the PATH (`brew install ffmpeg`);
             `yt-dlp` is bundled inside the app. Library and state live in
-            `~/Music/Kotassium`.
-
-            Once installed, the app checks this page on launch and updates
-            itself: a **Restart & Update** pill appears when a newer DMG is
-            available. The download is verified against `SHA256SUMS`.
+            `~/Music/Kotassium` on the machine running the server.

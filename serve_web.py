@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """serve_web.py - Kotassium as a plain website for fast iteration."""
-import argparse, ipaddress, json, os, re, shutil, signal, subprocess, sys, threading, time, urllib.parse, urllib.request, hashlib, base64
+import argparse, base64, hashlib, hmac, http.cookies, ipaddress, json, os, re, shutil, signal, subprocess, sys, threading, time, urllib.parse, urllib.request
 
 import updater
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,6 +29,55 @@ os.makedirs(COVER_DIR, exist_ok=True)
 COVERS_JSON = os.path.join(STATE, "covers.json")
 PORT = 8421
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
+
+# ------------------------------------------------------------------ auth
+# Off by default (the desktop app is loopback-only). Set KOTASSIUM_PASSWORD
+# when the server is exposed through a tunnel: the public URL then needs a
+# cookie from /login, and every API/audio route is closed without one.
+PASSWORD = os.environ.get("KOTASSIUM_PASSWORD", "")
+AUTH = bool(PASSWORD)
+PUBLIC_PATHS = ("/login", "/api/health", "/manifest.webmanifest", "/sw.js",
+                "/icons/")
+
+def _session_token():
+    """HMAC of the password and a salt kept next to the library state, so
+    sessions survive restarts but die when the password changes."""
+    if not AUTH:
+        return ""
+    salt_file = os.path.join(STATE, "auth.salt")
+    try:
+        with open(salt_file, "rb") as f:
+            salt = f.read()
+    except Exception:
+        salt = os.urandom(16)
+        fd = os.open(salt_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(salt)
+    key = hashlib.sha256(b"kotassium:" + PASSWORD.encode() + b":" + salt).digest()
+    return hmac.new(key, b"session-v1", hashlib.sha256).hexdigest()
+
+SESSION = _session_token()
+
+_fails = {}
+_fail_lock = threading.Lock()
+
+def login_blocked(ip):
+    now = time.time()
+    with _fail_lock:
+        n, until = _fails.get(ip, (0, 0))
+    return n >= 5 and now < until
+
+def login_note(ip, ok):
+    with _fail_lock:
+        if ok:
+            _fails.pop(ip, None)
+            return
+        n, until = _fails.get(ip, (0, 0))
+        now = time.time()
+        if now >= until:
+            n = 0
+        _fails[ip] = (n + 1, now + 60)
+
 
 EXTRA_BIN = ["/opt/homebrew/bin", "/usr/local/bin", os.path.expanduser("~/.local/bin")]
 
@@ -465,6 +514,18 @@ def handle(path, params, hdr):
                      "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/jpeg")
             return 200, ctype, open(f, "rb").read(), None, False
         return 404, "text/plain", b"nope", None, False
+    if path == "/login":
+        return 200, "text/html; charset=utf-8", login_page().encode(), None, False
+    if path == "/manifest.webmanifest":
+        return 200, "application/manifest+json", open(os.path.join(BASE, "web", "manifest.webmanifest"), "rb").read(), None, False
+    if path == "/sw.js":
+        return 200, "application/javascript", open(os.path.join(BASE, "web", "sw.js"), "rb").read(), {"Cache-Control": "no-cache"}, False
+    if path.startswith("/icons/"):
+        name = os.path.basename(path)
+        f = os.path.join(BASE, "web", "icons", name)
+        if os.path.isfile(f) and name.lower().endswith(".png"):
+            return 200, "image/png", open(f, "rb").read(), {"Cache-Control": "max-age=86400"}, False
+        return 404, "text/plain", b"nope", None, False
     if path in ("/", "/index.html"):
         html = open(os.path.join(BASE, "web", "index.html"), "rb").read().decode("utf-8", "replace")
         return 200, "text/html; charset=utf-8", html.encode(), None, False
@@ -609,6 +670,28 @@ def handle(path, params, hdr):
             return 200, "application/json", b'{"mtime":0}', None, False
     return 404, "text/plain", b"nope", None, False
 
+def login_page(error=""):
+    msg = ('<p class=err>%s</p>' % error) if error else ""
+    return ("""<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Kotassium</title><style>
+*{box-sizing:border-box}body{margin:0;height:100vh;display:grid;place-items:center;
+background:#121212;color:#fff;font:14px system-ui,sans-serif}
+form{background:#181818;border:1px solid #ffffff1f;border-radius:12px;padding:28px;
+width:min(360px,90vw);display:flex;flex-direction:column;gap:12px}
+h1{font-size:18px;margin:0 0 4px}p{margin:0;color:#b3b3b3;font-size:13px}
+input{background:#242424;border:1px solid #ffffff26;color:#fff;border-radius:8px;
+padding:10px 12px;font:inherit}
+button{background:#1ed760;color:#000;border:0;border-radius:999px;padding:10px;
+font:inherit;font-weight:700;cursor:pointer}
+.err{color:#ff6b6b}</style></head><body>
+<form method=post action=/login>
+<h1>Kotassium</h1><p>This library is private. Enter the family password.</p>%s
+<input type=password name=password placeholder=Password autofocus autocomplete=current-password>
+<button type=submit>Open library</button>
+</form></body></html>""" % msg)
+
+
 class H(BaseHTTPRequestHandler):
     def _send(self, code, ctype, body, extra=None):
         self._code = code
@@ -621,17 +704,55 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _authed(self):
+        if not AUTH:
+            return True
+        try:
+            jar = http.cookies.SimpleCookie(self.headers.get("Cookie") or "")
+            morsel = jar.get("kot_session")
+            return bool(morsel) and hmac.compare_digest(morsel.value, SESSION)
+        except Exception:
+            return False
+
     def _guard(self, mutating):
-        """Reject DNS-rebinding hosts and cross-origin writes."""
+        """Reject DNS-rebinding hosts, cross-origin writes and, when a
+        password is configured, requests without a session cookie."""
         if not host_allowed(self.headers.get("Host")):
             return "forbidden host"
         if mutating and not origin_allowed(self.headers.get("Origin"), self.headers.get("Host")):
             return "forbidden origin"
+        if not self._authed():
+            path = urllib.parse.urlsplit(self.path).path
+            if not any(path == p or (p.endswith("/") and path.startswith(p))
+                       for p in PUBLIC_PATHS):
+                return "auth"
         return None
+
+    def _handle_login(self, raw):
+        ip = self.client_address[0]
+        if login_blocked(ip):
+            return self._send(429, "text/html; charset=utf-8",
+                              login_page("Too many attempts - wait a minute.").encode())
+        form = urllib.parse.parse_qs(raw.decode("utf-8", "replace"), keep_blank_values=True)
+        given = (form.get("password") or [""])[0]
+        if not hmac.compare_digest(given.encode(), PASSWORD.encode()):
+            login_note(ip, False)
+            return self._send(401, "text/html; charset=utf-8",
+                              login_page("Wrong password.").encode())
+        login_note(ip, True)
+        secure = (self.headers.get("X-Forwarded-Proto") or "").lower() == "https"
+        cookie = "kot_session=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000%s" % (
+            SESSION, "; Secure" if secure else "")
+        self._send(303, "text/plain", b"", {"Location": "/", "Set-Cookie": cookie})
 
     def do_GET(self):
         try:
             bad = self._guard(False)
+            if bad == "auth":
+                path = urllib.parse.urlsplit(self.path).path
+                if path.startswith(("/api/", "/lib/", "/cover/")):
+                    return self._send(401, "application/json", b'{"error":"auth"}')
+                return self._send(303, "text/plain", b"", {"Location": "/login"})
             if bad:
                 return self._send(403, "text/plain", bad.encode())
             parts = urllib.parse.urlsplit(self.path)
@@ -646,11 +767,20 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             bad = self._guard(True)
+            if bad == "auth":
+                return self._send(401, "application/json", b'{"error":"auth"}')
             if bad:
                 return self._send(403, "text/plain", bad.encode())
             parts = urllib.parse.urlsplit(self.path)
             n = int(self.headers.get("Content-Length", "0") or 0)
             raw = self.rfile.read(n) if n else b""
+            if parts.path == "/login":
+                return self._handle_login(raw)
+            if parts.path == "/logout":
+                self._send(303, "text/plain", b"", {
+                    "Location": "/login",
+                    "Set-Cookie": "kot_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"})
+                return
             code, ctype, body, extra, _ = handle_post(parts.path, parts.query, raw, self.headers)
             self._send(code, ctype, body, extra)
         except Exception:
