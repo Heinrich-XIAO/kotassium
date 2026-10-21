@@ -46,8 +46,6 @@ public class MainActivity extends Activity {
     private static final String MODE_REMOTE = "remote";
     private static final int PORT = 8421;
 
-    private static boolean pythonStarted = false;
-
     private WebView web;
 
     @Override
@@ -150,9 +148,8 @@ public class MainActivity extends Activity {
             }
             lib = new File(lib, "Music");
 
-            if (!pythonStarted) {
+            if (!Python.isStarted()) {
                 Python.start(new AndroidPlatform(this));
-                pythonStarted = true;
             }
             PyObject mod = Python.getInstance().getModule("kotassium_boot");
             int port = mod.callAttr("start", base.getAbsolutePath(),

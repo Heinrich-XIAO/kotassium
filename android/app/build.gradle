@@ -36,7 +36,8 @@ android {
 
     sourceSets {
         main {
-            python.srcDirs = ["src/main/python", genPython.absolutePath]
+            // Python sources are configured on the chaquopy block below: the
+            // old android.sourceSets.python DSL no longer exists in v17.
             assets.srcDirs = ["src/main/assets", genAssets.absolutePath]
         }
     }
@@ -72,12 +73,23 @@ android {
     }
 }
 
-python {
-    // Host Python used to fetch pure-Python packages for the APK.
-    buildPython "python3"
-    pip {
-        install "yt-dlp"
-        install "certifi"
+chaquopy {
+    defaultConfig {
+        // Chaquopy's runtime Python must match the build machine's Python
+        // major.minor (CI installs 3.12).
+        version = "3.12"
+        buildPython "python3"
+        pip {
+            install "yt-dlp"
+            install "certifi"
+        }
+    }
+    sourceSets {
+        main {
+            // Staged from the repo root by stageServer; src/main/python holds
+            // only the boot glue.
+            srcDir genPython.absolutePath
+        }
     }
 }
 
@@ -103,11 +115,15 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn stageServer, stageWeb
 }
 
-// Chaquopy's packaging task reads the python source dirs, so it must not run
-// before the files are staged.
+// Chaquopy's own tasks read the python source dirs (merge<Variant>PythonSources
+// is the one that actually consumes them), and AGP's asset merge reads the
+// staged page. Both must run after the staging copy.
 tasks.configureEach { t ->
-    if (t.name.startsWith("generate") && t.name.contains("Python")) {
+    if (t.name.contains("Python")) {
         t.dependsOn stageServer
+    }
+    if (t.name.startsWith("merge") && t.name.endsWith("Assets")) {
+        t.dependsOn stageWeb
     }
 }
 
