@@ -228,6 +228,11 @@ jobs:
             the library URL in Chrome and choose **Add to Home Screen** (the
             same app, no download).
 
+            Android never updates an app installed from a file, so use
+            [Obtainium](https://github.com/ImranR98/Obtainium) to be told about
+            each release:
+            [add this repo](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/Heinrich-XIAO/kotassium).
+
             ### Server
 
             macOS downloads need `ffmpeg` on the PATH (`brew install ffmpeg`);

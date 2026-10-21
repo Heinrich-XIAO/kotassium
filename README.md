@@ -91,6 +91,31 @@ What differs from desktop, and why:
 - **Size.** The CPython runtime makes the APK ~44 MB instead of tens of
   kilobytes (arm64 and x86_64, plus yt-dlp).
 
+## Updating the Android app
+
+The APK has no updater, and Android never updates an app that was installed
+from a file — that is a Play Store behaviour, and this app is not in a store.
+The page is a different story: in **Shared server** mode it comes from the
+server and updates on the next load, with no release. Only the shell needs a
+new APK, and now that **This phone** mode ships the page *inside* the APK, so
+does the page.
+
+Point [Obtainium](https://github.com/ImranR98/Obtainium) at this repo and it
+watches the releases for you:
+
+[**Add Kotassium to Obtainium**](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/Heinrich-XIAO/kotassium)
+
+or, inside Obtainium: **Add App** → paste
+`https://github.com/Heinrich-XIAO/kotassium` → **Add**.
+
+- It reads the release tag as the version and picks the `.apk` asset, so each
+  tagged release is offered as an update.
+- The signing key never changes, so the update installs over your existing
+  copy rather than asking you to uninstall first.
+- Android still shows the installer: silent replacement is impossible outside
+  a store. Obtainium adds the file and the notification; you tap **Update**.
+- Set **Auto check for updates** (default on) to be told on its own schedule.
+
 ## Run
 
 Web (LAN / phone):
