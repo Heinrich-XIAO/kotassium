@@ -153,7 +153,7 @@ public class MainActivity extends Activity {
             }
             PyObject mod = Python.getInstance().getModule("kotassium_boot");
             int port = mod.callAttr("start", base.getAbsolutePath(),
-                    lib.getAbsolutePath(), PORT).asInt();
+                    lib.getAbsolutePath(), PORT).toJava(Integer.class);
             load("http://127.0.0.1:" + port + "/");
         } catch (Throwable t) {
             showError(t);
