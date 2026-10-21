@@ -45,3 +45,10 @@ request, so no server restart is needed for UI edits. Just commit.
 - Tests: `venv/bin/python -m unittest discover -s tests`, plus
   `dbus-run-session -- desktop-venv/bin/python -m unittest tests.test_mpris`
   and `xvfb-run -a desktop-venv/bin/python tools/ui_check.py`.
+- Updates are self-replacing (`updater.py`): the public repo's latest release
+  is checked at launch, the DMG is verified against `SHA256SUMS`, staged, and
+  a detached `swap.sh` replaces `/Applications/Kotassium.app` after exit and
+  reopens it. `desktop.py` sets `updater.on_installed` so the window closes —
+  never swap while the app is alive. `python updater.py --selftest <dmg>`
+  (run in CI) exercises mount + swap against a throwaway target. Only frozen
+  macOS builds report `supported`; the page hides the pill everywhere else.

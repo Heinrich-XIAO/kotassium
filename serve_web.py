@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """serve_web.py - Kotassium as a plain website for fast iteration."""
 import argparse, ipaddress, json, os, re, shutil, signal, subprocess, sys, threading, time, urllib.parse, urllib.request, hashlib, base64
+
+import updater
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 def _base_dir():
@@ -410,6 +412,12 @@ def handle_post(path, params, raw, hdr):
         except Exception:
             pass
         return 200, "application/json", b'{"ok":true}', None, False
+    if path == "/api/update":
+        try:
+            st = updater.start_install()
+        except Exception as e:
+            st = dict(updater.status(), error=str(e)[:200])
+        return 200, "application/json", json.dumps(st).encode(), None, False
     if path == "/api/cover/cache":
         try:
             j = json.loads(raw.decode("utf-8", "replace"))
@@ -546,6 +554,8 @@ def handle(path, params, hdr):
         return 200, "application/json", json.dumps(j).encode(), None, False
     if path == "/api/nowplaying":
         return 200, "application/json", json.dumps(get_now()).encode(), None, False
+    if path == "/api/update":
+        return 200, "application/json", json.dumps(updater.status()).encode(), None, False
     if path == "/api/manifest":
         try:
             return 200, "application/json", open(os.path.join(STATE, "manifest.json"), "rb").read(), None, False

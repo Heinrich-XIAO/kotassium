@@ -8,7 +8,7 @@ import os
 
 from setuptools import setup
 
-VERSION = os.environ.get("KOTASSIUM_VERSION", "2.0.0").lstrip("v")
+VERSION = os.environ.get("KOTASSIUM_VERSION", "2.1.0").lstrip("v")
 
 APP = ["desktop.py"]
 DATA_FILES = [
@@ -18,7 +18,7 @@ DATA_FILES = [
 OPTIONS = {
     "argv_emulation": False,
     "packages": ["webview"],
-    "includes": ["serve_web", "spotify_get", "notify"],
+    "includes": ["serve_web", "spotify_get", "notify", "updater"],
     # Linux-only modules: don't try to bundle PyGObject / MPRIS on macOS.
     "excludes": ["gi", "mpris_linux"],
     "plist": {

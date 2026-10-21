@@ -22,6 +22,7 @@ if BASE not in sys.path:
 
 import serve_web
 import notify as notify_mod
+import updater
 
 STATE = serve_web.STATE
 WIN_FILE = os.path.join(STATE, "window.json")
@@ -125,6 +126,9 @@ def selftest():
             print("webkit  MISSING (%s)" % e)
     print("yt-dlp  %s" % (serve_web.YTDLP or "MISSING"))
     print("ffmpeg  %s" % (serve_web.FFMPEG or "MISSING"))
+    print("update  %s" % ("supported (%s, can install: %s)" % (
+        updater.current_version(), updater.can_install())
+        if updater.SUPPORTED else "unavailable (not a macOS app bundle)"))
     print("RESULT  %s" % ("ok" if ok else "incomplete"))
     return 0 if ok else 1
 
@@ -150,6 +154,11 @@ def run(host, port, dev=False, no_window=False, notify_tracks=True):
 
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         print("[kotassium] %s:%d  lib=%s" % (host, port, serve_web.LIB), flush=True)
+
+        # The app bundle updates itself from GitHub Releases; a source
+        # checkout or the Linux build reports unsupported and the UI hides it.
+        if updater.SUPPORTED:
+            updater.check_async()
 
         try:
             if no_window:
@@ -241,6 +250,15 @@ def show_window(port, dev, notify_tracks=True, on_start=None):
         background_color="#000000",
         **kwargs
     )
+
+    # updater.py runs the swap script once this process is gone; closing the
+    # window is what ends it.
+    def quit_for_update():
+        try:
+            w.destroy()
+        except Exception:
+            pass
+    updater.on_installed = quit_for_update
 
     missing = preflight()
 

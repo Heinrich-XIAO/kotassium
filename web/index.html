@@ -131,6 +131,11 @@ svg{display:block}
 #dlbar{flex:1;height:4px;background:#ffffff26;border-radius:2px;overflow:hidden;min-width:80px}
 #dlfill{display:block;height:100%;width:0;background:#1ed760;transition:width .2s}
 #dlpct{color:#b3b3b3;font-variant-numeric:tabular-nums;min-width:32px;text-align:right}
+#upd{position:fixed;top:64px;right:20px;background:#181818;border:1px solid #ffffff1f;color:#fff;padding:7px 8px 7px 14px;border-radius:8px;font-size:12px;display:none;align-items:center;gap:10px;z-index:100;box-shadow:0 6px 20px #0008;max-width:420px}
+#upd.on{display:flex}
+#updtext{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#updbtn{background:#1ed760;color:#000;border:0;border-radius:999px;padding:5px 12px;font:inherit;font-weight:700;cursor:pointer;flex:none}
+#updbtn:disabled{opacity:.6;cursor:default}
 #empty{color:#b3b3b3;padding:24px 8px;font-size:14px}
 #empty h3{color:#fff;margin:0 0 6px}
 #bigplayBtns{display:flex}
@@ -204,6 +209,7 @@ body{-webkit-tap-highlight-color:transparent}
 <div id=toast></div>
 <div id=upnext></div>
 <div id=dl><span id=dllabel>fetching</span><div id=dlbar><i id=dlfill></i></div><span id=dlpct>0%</span></div>
+<div id=upd><span id=updtext></span><button id=updbtn onclick=startUpdate()>Restart &amp; Update</button></div>
 <audio id=au preload=auto></audio>
 <script>
 var AU=document.getElementById('au');
@@ -630,10 +636,43 @@ if('mediaSession' in navigator){try{
 try{var _v=parseFloat(localStorage.getItem('kot_vol'));if(!isNaN(_v)){AU.volume=_v*_v;document.getElementById('volf').style.width=(_v*100)+'%';updateVolIcon()}}catch(e){}
 try{if(localStorage.getItem('kot_shuf')==='1'){SHUF=true;document.querySelectorAll('.aicon#shufb,.aicon#shuf2').forEach(function(b){b.classList.add('on')})}}catch(e){}
 try{var _r=parseInt(localStorage.getItem('kot_repeat'));if(!isNaN(_r)){REPEAT=_r;updateRepeatUI()}}catch(e){}
+/* ---------------- updates (macOS app bundle) ---------------- */
+function renderUpdate(st){
+  var d=document.getElementById('upd'),t=document.getElementById('updtext'),b=document.getElementById('updbtn');
+  if(!st||!st.supported){d.classList.remove('on');return}
+  if(st.state==='downloading'||st.state==='installing'||st.state==='ready'){
+    d.classList.add('on');b.style.display='none';
+    t.textContent=st.state==='downloading'?'downloading update '+Math.round(st.pct||0)+'%':(st.state==='ready'?'restarting...':'installing update...');
+    return;
+  }
+  if(st.state==='error'){d.classList.add('on');b.style.display='';b.disabled=false;b.textContent='Retry';t.textContent=st.error||'update failed';return}
+  if(st.available){
+    d.classList.add('on');
+    if(st.can_install===false){
+      b.style.display='none';
+      t.textContent='Kotassium '+(st.latest||'')+' is available — move it to Applications to update';
+    } else {
+      b.style.display='';b.disabled=false;b.textContent='Restart & Update';
+      t.textContent='Kotassium '+(st.latest||'')+' is available';
+    }
+  } else d.classList.remove('on');
+}
+function pollUpdate(){
+  fetch('/api/update').then(function(r){return r.json()}).then(function(st){
+    renderUpdate(st);
+    if(st.state==='downloading'||st.state==='installing')setTimeout(pollUpdate,700);
+  }).catch(function(){});
+}
+function startUpdate(){
+  var b=document.getElementById('updbtn');
+  if(b){b.disabled=true;b.textContent='Starting...'}
+  postJSON('/api/update',{}).then(function(st){renderUpdate(st);setTimeout(pollUpdate,500)})
+    .catch(function(){toast('could not start the update')});
+}
+if(/[?&]desktop=1/.test(location.search))setTimeout(pollUpdate,1500);
 if(!/[?&]desktop=1/.test(location.search)){
 var _mt=0;fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){_mt=j.mtime||0}).catch(function(){});
 setInterval(function(){fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){if(_mt&&j.mtime&&j.mtime!==_mt)location.reload()}).catch(function(){})},2000);
-}
-window.addEventListener('load',function(){loadSide().then(renderHome)});
+}window.addEventListener('load',function(){loadSide().then(renderHome)});
 </script>
 </body></html>

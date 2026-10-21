@@ -8,7 +8,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
     exit 1
 fi
 
-VERSION="${KOTASSIUM_VERSION:-2.0.0}"
+VERSION="${KOTASSIUM_VERSION:-2.1.0}"
 YTDLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
 
 ./setup.sh

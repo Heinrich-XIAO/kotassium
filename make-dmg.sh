@@ -9,7 +9,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
     exit 1
 fi
 
-VERSION="${KOTASSIUM_VERSION:-2.0.0}"
+VERSION="${KOTASSIUM_VERSION:-2.1.0}"
 OUT="${1:-Kotassium-$VERSION.dmg}"
 
 if [ ! -d dist/Kotassium.app ]; then

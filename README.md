@@ -92,6 +92,13 @@ Downloads and state live outside the repo in `~/Music/Kotassium`
   (macOS) when the track changes while playing.
 - **No dev polling in the app.** The page only polls `/api/mtime` for
   reload-on-change when it is *not* opened with `?desktop=1`.
+- **Self-update (macOS).** At launch the app asks the public repo for the
+  latest release and shows a *Restart & Update* pill when a newer DMG exists.
+  It downloads the build for its architecture, checks it against the release's
+  `SHA256SUMS`, mounts the DMG, then a detached `swap.sh` replaces
+  `/Applications/Kotassium.app` once the app has quit and reopens it, putting
+  the old bundle back if the copy fails. Only the frozen macOS app reports
+  `supported: true`; the web and Linux builds hide the pill.
 - **Persistent storage.** The window uses `private_mode=False`, so the
   YouTube-id cache, volume, shuffle and repeat survive restarts (pywebview's
   default private mode makes `localStorage` null).

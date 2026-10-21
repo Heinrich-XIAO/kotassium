@@ -10,7 +10,7 @@ on:
       version:
         description: Version stamped into the app bundle
         required: false
-        default: "2.0.0"
+        default: "2.1.0"
   push:
     tags:
       - "v*"
@@ -84,6 +84,12 @@ jobs:
           test -x /Volumes/Kotassium/Kotassium.app/Contents/Resources/bin/yt-dlp
           hdiutil detach /Volumes/Kotassium
 
+      - name: Updater selftest
+        # Mounts the DMG, stages the app, runs the swap script against a
+        # throwaway target and checks the result — the risky half of
+        # self-update, without needing a real newer release.
+        run: python3 updater.py --selftest Kotassium-*.dmg
+
       - uses: actions/upload-artifact@v4
         with:
           name: Kotassium-${{ matrix.arch }}
@@ -101,9 +107,15 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Checksums
+        # The app verifies its download against this file before installing.
+        run: cd artifacts && sha256sum *.dmg | tee SHA256SUMS
+
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*.dmg
+          files: |
+            artifacts/*.dmg
+            artifacts/SHA256SUMS
           generate_release_notes: true
           body: |
             ## Kotassium for macOS
@@ -130,3 +142,7 @@ jobs:
 
             `yt-dlp` is bundled inside the app. Library and state live in
             `~/Music/Kotassium`.
+
+            Once installed, the app checks this page on launch and updates
+            itself: a **Restart & Update** pill appears when a newer DMG is
+            available. The download is verified against `SHA256SUMS`.

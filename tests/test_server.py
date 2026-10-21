@@ -36,6 +36,19 @@ class ServerSecurityTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(body)["app"], "kotassium")
 
+    def test_update_status(self):
+        code, body = self.req("GET", "/api/update")
+        self.assertEqual(code, 200)
+        st = json.loads(body)
+        self.assertIn("state", st)
+        self.assertIn("version", st)
+        self.assertFalse(st["supported"])  # only the frozen macOS app updates
+
+    def test_update_post_is_origin_guarded(self):
+        code, _ = self.req("POST", "/api/update",
+                           headers={"Origin": "https://evil.example"})
+        self.assertEqual(code, 403)
+
     def test_dns_rebinding_host_rejected(self):
         code, _ = self.req("GET", "/api/health", headers={"Host": "evil.example"})
         self.assertEqual(code, 403)
