@@ -24,6 +24,11 @@ cp -R dist/Kotassium.app "$STAGE/Kotassium.app"
 ln -s /Applications "$STAGE/Applications"
 
 rm -f "$OUT"
-hdiutil create -quiet -volname Kotassium -srcfolder "$STAGE" -ov -format UDZO "$OUT"
+df -h / | tail -1
+# No -quiet: if hdiutil fails, its reason is the only useful output there is.
+if ! hdiutil create -volname Kotassium -srcfolder "$STAGE" -ov -format UDZO "$OUT"; then
+    echo "hdiutil failed (stage=$STAGE, out=$OUT)" >&2
+    exit 1
+fi
 
 echo "built: $(pwd)/$OUT"
