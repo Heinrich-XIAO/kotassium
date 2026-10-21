@@ -51,6 +51,19 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("serve_web.serve_local", boot)
         self.assertIn("inproc", boot)
 
+    def test_android_dialogs_can_be_dismissed(self):
+        # Every dialog is a dead end if it only has one button: the address
+        # prompt used to save "remote" before a URL existed, so backing out
+        # left the app asking for an address it could never get past.
+        src = read(self.WRAPPERS[1])
+        dialogs = src.count("new AlertDialog.Builder")
+        self.assertGreaterEqual(src.count(".setNegativeButton("), dialogs,
+                                "every dialog needs a way back")
+        self.assertNotIn("setCancelable(false)", src)
+        choose = src.split("private void chooseMode()")[1].split("private void dismissChooser")[0]
+        self.assertNotIn("MODE_REMOTE", choose,
+                         "the mode must not be saved before an address is entered")
+
     def test_android_holds_no_copy_of_the_server_or_page(self):
         for dirpath, _, files in os.walk(os.path.join(ROOT, "android")):
             for name in ("serve_web.py", "index.html", "spotify_get.py", "updater.py"):

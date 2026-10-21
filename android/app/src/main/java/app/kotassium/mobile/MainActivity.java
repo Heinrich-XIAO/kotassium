@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -45,8 +46,10 @@ public class MainActivity extends Activity {
     private static final String MODE_LOCAL = "local";
     private static final String MODE_REMOTE = "remote";
     private static final int PORT = 8421;
+    private static final String CHOOSE_ACTION = "app.kotassium.mobile.CHOOSE";
 
     private WebView web;
+    private boolean loadFailed = false;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -76,10 +79,35 @@ public class MainActivity extends Activity {
                 startActivity(new Intent(Intent.ACTION_VIEW, url)); // everything else: browser
                 return true;
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                loadFailed = false;
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
+                // Only the page itself matters; a failed cover or icon is not
+                // worth a dialog, and neither is a second report for one load.
+                if (req != null && !req.isForMainFrame()) {
+                    return;
+                }
+                if (loadFailed) {
+                    return;
+                }
+                loadFailed = true;
+                showLoadError(req == null || req.getUrl() == null ? "" : String.valueOf(req.getUrl()));
+            }
         });
 
         setContentView(web, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Launcher shortcut: go straight to the choice, even with a mode saved.
+        if (CHOOSE_ACTION.equals(getIntent().getAction())) {
+            chooseMode();
+            return;
+        }
 
         String mode = prefs().getString("mode", "");
         if (mode.isEmpty()) {
@@ -202,16 +230,25 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle("Kotassium")
                 .setMessage("Play from this phone's own library, or connect to a shared one?")
-                .setCancelable(false)
                 .setPositiveButton("This phone", (d, w) -> {
                     prefs().edit().putString("mode", MODE_LOCAL).apply();
                     startLocal();
                 })
-                .setNeutralButton("Shared server", (d, w) -> {
-                    prefs().edit().putString("mode", MODE_REMOTE).apply();
-                    askForServer();
-                })
+                // Do not record the mode yet: until an address is entered there
+                // is nothing to connect to, and backing out must stay possible.
+                .setNeutralButton("Shared server", (d, w) -> askForServer())
+                .setNegativeButton("Cancel", (d, w) -> dismissChooser())
+                .setOnCancelListener(d -> dismissChooser())
                 .show();
+    }
+
+    /** Cancel from the choice: close the app only if there is nothing behind
+     *  it. Opened from the launcher shortcut, the page must survive. */
+    private void dismissChooser() {
+        String url = web == null ? null : web.getUrl();
+        if (url == null || url.isEmpty()) {
+            finish();
+        }
     }
 
     private void showError(Throwable t) {
@@ -219,10 +256,25 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle("Could not start the server")
                 .setMessage(msg)
-                .setCancelable(false)
-                .setPositiveButton("Use a server", (d, w) -> {
-                    prefs().edit().putString("mode", MODE_REMOTE).apply();
-                    askForServer();
+                .setPositiveButton("Try again", (d, w) -> startLocal())
+                .setNeutralButton("Use a server", (d, w) -> askForServer())
+                .setNegativeButton("Cancel", (d, w) -> chooseMode())
+                .setOnCancelListener(d -> chooseMode())
+                .show();
+    }
+
+    private void showLoadError(String url) {
+        new AlertDialog.Builder(this)
+                .setTitle("Cannot reach the library")
+                .setMessage(url)
+                .setPositiveButton("Retry", (d, w) -> {
+                    loadFailed = false;
+                    web.reload();
+                })
+                .setNeutralButton("Change address", (d, w) -> askForServer())
+                .setNegativeButton("This phone", (d, w) -> {
+                    prefs().edit().putString("mode", MODE_LOCAL).apply();
+                    startLocal();
                 })
                 .show();
     }
@@ -231,17 +283,25 @@ public class MainActivity extends Activity {
         EditText input = new EditText(this);
         input.setHint("https://music.example.com");
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        String saved = prefs().getString("url", "");
+        if (saved != null && !saved.isEmpty()) {
+            input.setText(saved);
+        }
         new AlertDialog.Builder(this)
                 .setTitle("Kotassium server")
                 .setMessage("Paste the address of your shared library.")
                 .setView(input)
-                .setCancelable(false)
+                // Back returns to the choice instead of leaving the app stuck
+                // on an address prompt it cannot get past.
+                .setNegativeButton("Back", (d, w) -> chooseMode())
+                .setOnCancelListener(d -> chooseMode())
                 .setPositiveButton("Connect", (d, w) -> {
                     String v = input.getText().toString().trim();
                     if (v.isEmpty()) {
                         askForServer();
                         return;
                     }
+                    // Only now is there something to remember.
                     prefs().edit().putString("url", v).putString("mode", MODE_REMOTE).apply();
                     load(remoteUrl());
                 })
@@ -252,6 +312,15 @@ public class MainActivity extends Activity {
         // desktop=1 stops the page's 2s reload-on-change poll: a phone should
         // not reload the UI mid-track just because the server was redeployed.
         web.loadUrl(base + "?desktop=1");
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (CHOOSE_ACTION.equals(intent.getAction())) {
+            chooseMode();
+        }
     }
 
     @Override

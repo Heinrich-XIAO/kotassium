@@ -29,6 +29,11 @@ the moment it is saved. Only the shells need a new tag.
   phone** / **Shared server**. Release signing uses the
   `ANDROID_KEYSTORE_B64` / `ANDROID_KEYSTORE_PASS` / `ANDROID_KEY_ALIAS`
   secrets — losing that keystore means future APKs cannot install over old ones.
+- Every Android dialog needs a way out, and `mode=remote` is saved only after
+  an address is entered (saving it earlier traps the user in a prompt they
+  cannot leave — `tests/test_wrappers.py` enforces both). With a page loaded,
+  the launcher shortcut `CHOOSE` (`res/xml/shortcuts.xml`) reopens the choice;
+  a failed main-frame load offers Retry / Change address / This phone.
 - Android has no ffmpeg and cannot exec a `yt-dlp` binary, so downloads run
   in-process (`KOTASSIUM_YTDLP=inproc`) and keep yt-dlp's container (usually
   `.m4a`). Never assume `.mp3`: use `track_path()` / `AUDIO_EXTS` in

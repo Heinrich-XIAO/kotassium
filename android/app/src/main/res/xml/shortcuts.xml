@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the launcher icon to get back to the "This phone / Shared
+     server" choice. The shell has no menu bar, and clearing app data should
+     not be the only way to change where the library comes from. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="choose"
+        android:enabled="true"
+        android:shortcutShortLabel="@string/choose_library">
+        <intent
+            android:action="app.kotassium.mobile.CHOOSE"
+            android:targetPackage="app.kotassium.mobile"
+            android:targetClass="app.kotassium.mobile.MainActivity" />
+    </shortcut>
+</shortcuts>
