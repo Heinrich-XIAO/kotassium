@@ -1,0 +1,159 @@
+name: build artifacts
+
+# The build half of a release, shared by the two ways a release is made:
+#   - release.yml      a v* tag you push yourself (a cut you name)
+#   - auto-release.yml every push to main (a rolling patch bump)
+#
+# Both hand it a version and get the same DMGs and APK back, so a build
+# cannot drift between the two paths.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version stamped into the app bundles
+        required: true
+        type: string
+    secrets:
+      ANDROID_KEYSTORE_B64:
+        required: false
+      ANDROID_KEYSTORE_PASS:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14        # Apple Silicon
+            arch: arm64
+          - runner: macos-15-intel  # Intel (best effort)
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    # Keep a missing/retired Intel runner from failing the whole release.
+    continue-on-error: ${{ matrix.arch == 'x86_64' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version
+        id: ver
+        run: echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the app bundle
+        env:
+          KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
+          KOTASSIUM_URL: ${{ vars.KOTASSIUM_URL }}
+        run: ./build-macos.sh
+
+      - name: Smoke test the bundle
+        run: |
+          APP=dist/Kotassium.app/Contents/MacOS/Kotassium
+          codesign --verify --deep --strict dist/Kotassium.app
+          "$APP" --selftest | tee selftest.txt
+          grep -q "RESULT  ok" selftest.txt
+          grep -q "Resources/bin/yt-dlp" selftest.txt
+          KOTASSIUM_LIB="$RUNNER_TEMP/lib" "$APP" --no-window --port 8421 &
+          PID=$!
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8421/api/health && break || sleep 1
+          done
+          curl -fsS http://127.0.0.1:8421/ | grep -qi "<title>Kotassium"
+          kill "$PID"
+
+      - name: Make the DMG
+        env:
+          KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
+        run: ./make-dmg.sh "Kotassium-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.dmg"
+
+      - name: Verify the DMG
+        run: |
+          hdiutil attach -nobrowse -readonly Kotassium-*.dmg | tail -1
+          test -d /Volumes/Kotassium/Kotassium.app
+          test -L /Volumes/Kotassium/Applications
+          test -x /Volumes/Kotassium/Kotassium.app/Contents/MacOS/Kotassium
+          test -f /Volumes/Kotassium/Kotassium.app/Contents/Resources/web/index.html
+          test -x /Volumes/Kotassium/Kotassium.app/Contents/Resources/bin/yt-dlp
+          hdiutil detach /Volumes/Kotassium
+
+      - name: Updater selftest
+        # Mounts the DMG, stages the app, runs the swap script against a
+        # throwaway target and checks the result — the risky half of
+        # self-update, without needing a real newer release.
+        run: python3 updater.py --selftest Kotassium-*.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kotassium-${{ matrix.arch }}
+          path: Kotassium-*.dmg
+          if-no-files-found: error
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.9"
+
+      - name: Version
+        id: ver
+        run: echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+
+      - name: Signing key
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::error::ANDROID_KEYSTORE_B64 is not set; refusing to ship an unsigned APK"
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/kotassium.keystore"
+          echo "ANDROID_KEYSTORE=$RUNNER_TEMP/kotassium.keystore" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          KOTASSIUM_URL: ${{ vars.KOTASSIUM_URL }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          cd android
+          gradle assembleRelease --no-daemon \
+            -PkotassiumUrl="$KOTASSIUM_URL" \
+            -PappVersion="${{ steps.ver.outputs.version }}"
+
+      - name: Verify and rename
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK"
+          cp "$APK" "Kotassium-${{ steps.ver.outputs.version }}.apk"
+          ls -l Kotassium-*.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kotassium-apk
+          path: Kotassium-*.apk
+          if-no-files-found: error

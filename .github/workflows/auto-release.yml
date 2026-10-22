@@ -1,0 +1,98 @@
+name: Auto release
+
+# Every push to main ships a release: the version is the patch bump of the
+# newest published tag, the DMGs and the APK are built from that exact
+# commit, and the release is published under a new vX.Y.Z tag.
+#
+# That keeps the desktop app's self-updater working: it compares the tag
+# against the version baked into the running bundle, so the numbers have to
+# keep climbing - a rolling "latest" tag would never look newer.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish (blank = bump the patch of the newest tag)
+        required: false
+        default: ""
+
+# One release at a time, and never cancel one that is already building:
+# the version below is read from the tags, so a cancelled run would leave
+# the next one bumping the same number twice.
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The bump reads the tags, so it needs all of them.
+          fetch-depth: 0
+
+      - name: Next version
+        id: ver
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=$(python3 .github/next_version.py)
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "publishing $VERSION"
+
+  build:
+    name: build
+    needs: version
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+    secrets: inherit
+
+  release:
+    name: publish release
+    needs: [version, build]
+    # !cancelled() so the best-effort Intel job cannot block the release: the
+    # step below is what decides whether there is enough to publish.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Require the Apple Silicon DMG and the APK
+        run: |
+          ls -l artifacts
+          test -f artifacts/Kotassium-*-arm64.dmg
+          test -f artifacts/Kotassium-*.apk
+
+      - name: Checksums
+        # The desktop app verifies its DMG against this file before installing.
+        run: cd artifacts && sha256sum *.dmg *.apk | tee SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          # The tag is created at this commit, so the release and the build
+          # are the same tree.
+          tag_name: v${{ needs.version.outputs.version }}
+          name: v${{ needs.version.outputs.version }}
+          files: |
+            artifacts/*.dmg
+            artifacts/*.apk
+            artifacts/SHA256SUMS
+          generate_release_notes: true
+          body_path: .github/release-body.md
