@@ -7,6 +7,11 @@ name: Auto release
 # That keeps the desktop app's self-updater working: it compares the tag
 # against the version baked into the running bundle, so the numbers have to
 # keep climbing - a rolling "latest" tag would never look newer.
+#
+# The release page does not wait for the Intel DMG. It is best effort on the
+# slow macos-15-intel runner and the updater only needs the Apple Silicon
+# DMG to offer an update, so the Intel job runs beside the publish and
+# attaches its DMG (and its checksum line) to the finished release.
 
 on:
   push:
@@ -35,10 +40,8 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
+      # Just enough tree for next_version.py; the tags come from ls-remote.
       - uses: actions/checkout@v4
-        with:
-          # The bump reads the tags, so it needs all of them.
-          fetch-depth: 0
 
       - name: Next version
         id: ver
@@ -46,7 +49,12 @@ jobs:
           if [ -n "${{ inputs.version }}" ]; then
             VERSION="${{ inputs.version }}"
           else
-            VERSION=$(python3 .github/next_version.py)
+            # Tags straight from the remote: the bump only needs the tag
+            # names, and a full-history clone (the old fetch-depth: 0) costs
+            # seconds before any build can start.
+            TAGS=$(git ls-remote --tags --refs origin 'v*' | awk -F/ '{print $NF}')
+            test -n "$TAGS" || { echo "no tags found on origin" >&2; exit 1; }
+            VERSION=$(python3 .github/next_version.py $TAGS)
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "publishing $VERSION"
@@ -57,13 +65,14 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       version: ${{ needs.version.outputs.version }}
+      # Only what the release itself requires; the Intel DMG is built below
+      # and attached afterwards.
+      macos: '[{"runner":"macos-14","arch":"arm64"}]'
     secrets: inherit
 
   release:
     name: publish release
     needs: [version, build]
-    # !cancelled() so the best-effort Intel job cannot block the release: the
-    # step below is what decides whether there is enough to publish.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
@@ -96,3 +105,52 @@ jobs:
             artifacts/SHA256SUMS
           generate_release_notes: true
           body_path: .github/release-body.md
+
+  intel:
+    name: build (Intel)
+    needs: version
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      macos: '[{"runner":"macos-15-intel","arch":"x86_64"}]'
+      android: false
+    secrets: inherit
+
+  attach-intel:
+    name: attach Intel DMG
+    # Only when both the release exists and the Intel build produced
+    # something; an Intel failure leaves the release as it was before -
+    # best effort, exactly like waiting on it was.
+    needs: [version, release, intel]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        id: dl
+        # No artifact means the best-effort Intel build failed; that must not
+        # fail the run (the old workflow never did), so only the attach step
+        # below is conditional.
+        continue-on-error: true
+        with:
+          name: Kotassium-x86_64
+
+      - name: Attach the Intel DMG to the release
+        if: ${{ steps.dl.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          ls -l
+          test -f Kotassium-*-x86_64.dmg
+          # Checksums before the DMG: the updater verifies its download
+          # against SHA256SUMS, so a sums file that already lists the DMG
+          # fails safe (no update offered yet) where a DMG missing from it
+          # would install without verification.
+          gh release download "v$VERSION" -p SHA256SUMS -D sums
+          if ! grep -q 'x86_64.dmg' sums/SHA256SUMS; then
+            sha256sum Kotassium-*-x86_64.dmg >> sums/SHA256SUMS
+          fi
+          gh release upload "v$VERSION" sums/SHA256SUMS --clobber
+          gh release upload "v$VERSION" Kotassium-*-x86_64.dmg --clobber
