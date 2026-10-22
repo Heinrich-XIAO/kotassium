@@ -10,6 +10,15 @@ grow their own copy of the UI, and platform code stays in small side modules
 request, so editing `web/index.html` (or the manifest/service worker) is live
 the moment it is saved. Only the shells need a new tag.
 
+**Ship, then report.** When a task changes files, finish by committing and
+pushing (to `main`; a push there intentionally publishes a release). Skip the
+push only when the user says not to. And end **every** reply with exactly one
+of these lines as the message's last line:
+
+- `NO CHANGES` — the reply made no file changes
+- `COMMITTED AND PUSHED` — changes were committed and pushed to GitHub
+- `UNCOMMITTED` — changes exist locally but were not committed/pushed
+
 - **The page is the only UI.** `tests/test_wrappers.py` fails if `desktop.py`
   or `MainActivity.java` contains markup, styles, or chunks of the page. If
   something is wrong on Android, fix `web/index.html`.
