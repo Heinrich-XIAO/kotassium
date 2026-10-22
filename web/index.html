@@ -604,23 +604,6 @@ function playTrack(tr){
   localResolve(tr,true);
 }
 function stopSrc(){try{AU.pause()}catch(e){}try{AU.removeAttribute('src');AU.load()}catch(e){}}
-/* Switch from the 5s preview to the full file. Setting src + currentTime +
-   play() in one go can leave WebKit paused (the clock freezes at the swap
-   point), so wait for metadata, then seek and play. */
-function swapTo(src,at){
-  var done=false;
-  function go(){
-    if(done)return;done=true;
-    AU.removeEventListener('loadedmetadata',go);
-    try{if(at>0)AU.currentTime=at}catch(e){}
-    AU.play().catch(function(){setTimeout(function(){AU.play().catch(function(){})},300)});
-    schedulePrefetch();
-  }
-  AU.addEventListener('loadedmetadata',go);
-  AU.src=src;
-  if(AU.readyState>=1)go();
-  setTimeout(go,1500);
-}
 /* the current track is fully up and running now - fetch the next one soon */
 function schedulePrefetch(){
   if(_pfTimer)clearTimeout(_pfTimer);
@@ -639,14 +622,11 @@ function localResolve(tr,fresh){
       if(d.file&&!d.error){
         var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
         if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
-        var fullF=d.file, prevF=cached+'_preview.mp3';
-        var swapped=false;
-        function doSwap2(){if(swapped)return; if(AU.currentTime<4) return; swapped=true;
-          AU.removeEventListener('timeupdate',doSwap2);
-          swapTo('/lib/'+encodeURIComponent(fullF),AU.currentTime);}
-        AU.src='/lib/'+encodeURIComponent(prevF);
-        AU.play().catch(function(){swapTo('/lib/'+encodeURIComponent(fullF),0)});
-        AU.addEventListener('timeupdate',doSwap2);
+        /* dlJob only resolves once the full file is on disk, so play it
+           directly - the old 5s-preview -> full swap cut the audio for a
+           blink right around 4-5s into every track */
+        AU.src='/lib/'+encodeURIComponent(d.file);
+        AU.play().catch(function(){setTimeout(function(){AU.play().catch(function(){})},300)});
       }else{delete _cache[key];localResolveFresh(tr)}
     },function(){delete _cache[key];localResolveFresh(tr)});
     return
@@ -670,14 +650,9 @@ function tryCands(cands,k,tr){
       var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
       if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
       _cache[tr.t+'|'+tr.a]=c.id;try{localStorage.setItem('kot_ytcache',JSON.stringify(_cache))}catch(e){}
-      var fullF=d.file, prevF=c.id+'_preview.mp3';
-      var swapped=false;
-      function doSwap(){if(swapped)return; if(AU.currentTime<4) return; swapped=true;
-        AU.removeEventListener('timeupdate',doSwap);
-        swapTo('/lib/'+encodeURIComponent(fullF),AU.currentTime);}
-      AU.src='/lib/'+encodeURIComponent(prevF);
-      AU.play().catch(function(){swapTo('/lib/'+encodeURIComponent(fullF),0)});
-      AU.addEventListener('timeupdate',doSwap);
+      /* full file ready (see localResolve): play it straight, no preview */
+      AU.src='/lib/'+encodeURIComponent(d.file);
+      AU.play().catch(function(){setTimeout(function(){AU.play().catch(function(){})},300)});
     }else{tryCands(cands,k+1,tr)}
   },function(){tryCands(cands,k+1,tr)});
 }
