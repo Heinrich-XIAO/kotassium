@@ -715,10 +715,45 @@ document.getElementById('prog').addEventListener('click',function(e){
 function muteVol(){AU.muted=!AU.muted;setVolFill(AU.muted?0:Math.sqrt(AU.volume)*100);updateVolIcon()}
 function setVolFill(pct){document.querySelectorAll('#volf,#fsVolFill').forEach(function(el){el.style.width=pct+'%'})}
 /* ---------------- fullscreen player (mobile) ---------------- */
+var FS_EASE='cubic-bezier(.2,.8,.2,1)',_fsHideT=0;
 function openFs(){
   if(!window.matchMedia('(max-width:820px)').matches)return;
-  syncFs();document.getElementById('fs').classList.add('on')}
-function closeFs(){var fs=document.getElementById('fs');fs.classList.remove('on');fs.style.transform=''}
+  var fs=document.getElementById('fs');
+  if(_fsHideT){ /* caught it mid-close: slide it back open */
+    clearTimeout(_fsHideT);_fsHideT=0;
+    fs.style.transition='transform .3s '+FS_EASE;
+    fs.style.transform='translateY(0)';
+    return}
+  if(fs.classList.contains('on'))return;
+  syncFs();
+  /* start off-screen, then animate up on the next frame */
+  fs.style.transition='none';
+  fs.style.transform='translateY(100%)';
+  fs.classList.add('on');
+  void fs.offsetHeight;
+  fs.style.transition='transform .3s '+FS_EASE;
+  fs.style.transform='translateY(0)'}
+function closeFs(){
+  var fs=document.getElementById('fs');
+  if(!fs.classList.contains('on'))return;
+  fs.style.transition='transform .25s '+FS_EASE;
+  fs.style.transform='translateY(100%)'; /* slides down from wherever it is */
+  if(_fsHideT)clearTimeout(_fsHideT);
+  _fsHideT=setTimeout(hideFs,300)}
+function hideFs(){
+  var fs=document.getElementById('fs');
+  if(_fsHideT){clearTimeout(_fsHideT);_fsHideT=0}
+  if(!fs.classList.contains('on'))return;
+  fs.classList.remove('on');
+  fs.style.transition='none';
+  fs.style.transform=''}
+/* where the sheet visually is right now, even mid-transition */
+function fsOffset(fs){
+  var t=(window.getComputedStyle(fs).transform||'');
+  var m=t.match(/matrix\(([^)]+)\)/);
+  if(!m)return 0;
+  var p=m[1].split(',');
+  return p.length===6?(parseFloat(p[5])||0):0}
 function syncFs(){
   var tr=Q[QI];
   var ft=document.getElementById('fsTitle'),fa=document.getElementById('fsArtist'),fc=document.getElementById('fsArt');
@@ -756,19 +791,29 @@ fsSlider(document.getElementById('fsVolBar'),function(v){AU.volume=v*v;AU.muted=
     var dy=e.touches[0].clientY-sy,dx=e.touches[0].clientX-sx;
     if(dy<-48&&Math.abs(dx)<Math.abs(dy)){armed=false;openFs()}},{passive:true});
   bar.addEventListener('touchend',function(){armed=false},{passive:true});
-  var fs=document.getElementById('fs');var fy=0,fgo=false,fdy=0;
+  bar.addEventListener('touchcancel',function(){armed=false},{passive:true});
+  var fs=document.getElementById('fs');var fy=0,fgo=false,fdy=0,fbase=0;
   fs.addEventListener('touchstart',function(e){
     if(e.target.closest&&e.target.closest('#fsProg,#fsVolBar,#fsClose'))return;
-    fy=e.touches[0].clientY;fgo=true;fdy=0;fs.style.transition='none'},{passive:true});
+    /* grab the sheet exactly where it visually is - it may be animating
+       (springing back or mid-close), so pin that position before following,
+       otherwise killing the transition teleports it to the inline value */
+    fbase=fsOffset(fs);
+    fs.style.transition='none';
+    fs.style.transform='translateY('+fbase+'px)';
+    if(_fsHideT){clearTimeout(_fsHideT);_fsHideT=0}
+    fy=e.touches[0].clientY;fgo=true;fdy=fbase},{passive:true});
   fs.addEventListener('touchmove',function(e){
     if(!fgo)return;
-    var dy=e.touches[0].clientY-fy;
-    if(dy<=0){fdy=0;fs.style.transform='';return}
-    fdy=dy;fs.style.transform='translateY('+dy+'px)'},{passive:true});
-  fs.addEventListener('touchend',function(){
-    if(!fgo)return;fgo=false;fs.style.transition='transform .25s';
-    if(fdy>90)closeFs();else fs.style.transform='';
-    fdy=0},{passive:true});
+    var y=fbase+(e.touches[0].clientY-fy);
+    if(y<0)y=0; /* clamped at rest: no snap when the finger wiggles up */
+    fdy=y;fs.style.transform='translateY('+y+'px)'},{passive:true});
+  function release(){
+    if(!fgo)return;fgo=false;
+    if(fdy>90)closeFs(); /* continues from the current position, then hides */
+    else{fs.style.transition='transform .25s '+FS_EASE;fs.style.transform='translateY(0)'}}
+  fs.addEventListener('touchend',release,{passive:true});
+  fs.addEventListener('touchcancel',release,{passive:true});
 })();
 document.addEventListener('keydown',function(e){
   if(e.code==='Space'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();toggle()}});
