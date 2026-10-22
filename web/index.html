@@ -131,8 +131,11 @@ svg{display:block}
 #volf{position:absolute;left:0;top:6px;bottom:6px;background:#fff;border-radius:2px}
 #vol.dragging #volf{background:#1ed760}
 #fs{display:none}
-#toast{position:fixed;bottom:88px;right:20px;background:#1db954;color:#000;font-weight:600;padding:10px 16px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:99}
-#upnext{position:fixed;top:88px;right:20px;background:#181818;color:#fff;padding:10px 14px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:99;max-width:260px}
+/* toasts: one card style for every notification (modelled on "up next"),
+   each dismissible by swiping it to the right */
+.tcard{position:fixed;right:20px;background:#181818;color:#fff;padding:10px 14px;border-radius:6px;font-size:13px;box-shadow:0 8px 24px #0009;border:1px solid #ffffff1f;opacity:0;pointer-events:none;transition:opacity .3s;z-index:99;max-width:280px;touch-action:none;user-select:none;-webkit-user-select:none}
+#toast{bottom:88px;font-weight:600}
+#upnext{top:88px}
 #dl{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:#181818;border:1px solid #ffffff1f;color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;display:none;align-items:center;gap:10px;z-index:99;min-width:280px;max-width:420px}
 #dl.on{display:flex}
 #dllabel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
@@ -180,7 +183,7 @@ body{-webkit-tap-highlight-color:transparent}
 #toast{bottom:96px}
 /* fullscreen player: tap the thumbnail or swipe the bar up */
 #nowc{cursor:pointer}
-#fs.on{display:flex;position:fixed;left:0;top:0;right:0;bottom:0;z-index:80;background:linear-gradient(180deg,#232323,#0b0b0b 50%);flex-direction:column;gap:12px;padding:8px 20px calc(22px + env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
+#fs.on{display:flex;position:fixed;left:0;top:0;right:0;bottom:0;z-index:80;background:linear-gradient(180deg,#232323,#0b0b0b 50%);flex-direction:column;gap:12px;padding:8px 20px calc(14px + env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
 #fsGrip{width:44px;height:5px;border-radius:3px;background:#ffffff40;margin:2px auto 0;flex:none}
 #fsHead{display:flex;align-items:center;gap:10px;flex:none}
 #fsClose{width:40px;height:40px;border-radius:50%;background:#ffffff1f;color:#fff;display:grid;place-items:center;flex:none}
@@ -205,7 +208,23 @@ body{-webkit-tap-highlight-color:transparent}
 #fsVolBar{flex:1;height:28px;position:relative;cursor:pointer;touch-action:none}
 #fsVolBar::before{content:'';position:absolute;left:0;right:0;top:calc(50% - 3px);height:6px;background:#ffffff33;border-radius:3px}
 #fsVolFill{position:absolute;left:0;top:calc(50% - 3px);height:6px;background:#fff;border-radius:3px;width:0}
-#fsVolBar:active #fsVolFill{background:#1ed760}}
+#fsVolBar:active #fsVolFill{background:#1ed760}
+/* variant F: scrollable up-next queue above a docked glass control island */
+#fsQueue{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin-top:2px}
+#fsQhead{display:flex;align-items:baseline;justify-content:space-between;padding:6px 4px}
+#fsQhead b{font-size:15px;font-weight:800}
+#fsQhead span{font-size:12px;color:#8a8a8a}
+.fsQrow{display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:10px;cursor:pointer}
+.fsQrow.cur{background:#ffffff0d}
+.fsQrow:active{background:#ffffff14}
+.fsQn{width:18px;font-size:13px;color:#6f6f6f;text-align:center;flex:none}
+.fsQcov{width:40px;height:40px;border-radius:6px;flex:none;background:#282828;background-size:cover;background-position:center}
+.fsQt{min-width:0;flex:1}
+.fsQt b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fsQt small{display:block;font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fsQtime{font-size:12px;color:#6f6f6f;flex:none;font-variant-numeric:tabular-nums}
+#fsIsland{flex:none;margin-top:auto;background:#1c1c1cf2;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid #ffffff1f;border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:16px;box-shadow:0 18px 44px #0009}
+#fsProgf::after{content:'';position:absolute;right:-7px;top:50%;width:14px;height:14px;border-radius:50%;background:#fff;transform:translateY(-50%);box-shadow:0 2px 6px #0007}}
 </style></head><body>
 <div id=top>
 <button id=libBtn onclick="var s=document.getElementById('side');s.classList.toggle('open')" title="Your Library"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M3 3h2.5v18H3zM7 3h2.5v18H7zM11 3.6L21.6 5v14L11 20.4z"/></svg></button>
@@ -247,6 +266,8 @@ body{-webkit-tap-highlight-color:transparent}
 <div id=fsHead><button id=fsClose onclick=closeFs() title="Collapse player"><svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6l5 5 5-5H3z"/></svg></button><span id=fsPl></span><span id=fsHeadpad></span></div>
 <div id=fsArt></div>
 <div id=fsTxt><b id=fsTitle>Choose a playlist to listen</b><small id=fsArtist>nothing playing</small></div>
+<div id=fsQueue><div id=fsQhead><b>Up next</b><span id=fsQcount></span></div><div id=fsQrows></div></div>
+<div id=fsIsland>
 <div id=fsSeek><span class=ptime id=fsCur>0:00</span><div id=fsProg><div id=fsProgf></div></div><span class=ptime id=fsTot>0:00</span></div>
 <div id=fsBtns>
 <button class=aicon id=fsShuf onclick=toggleShuffle() title="Shuffle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>
@@ -257,8 +278,9 @@ body{-webkit-tap-highlight-color:transparent}
 </div>
 <div id=fsVol><button class=aicon title="Volume" onclick=muteVol()><svg id=volIcon2 width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button><div id=fsVolBar><div id=fsVolFill></div></div></div>
 </div>
-<div id=toast></div>
-<div id=upnext></div>
+</div>
+<div id=toast class=tcard></div>
+<div id=upnext class=tcard></div>
 <div id=dl><span id=dllabel>fetching</span><div id=dlbar><i id=dlfill></i></div><span id=dlpct>0%</span></div>
 <div id=upd><span id=updtext></span><button id=updbtn onclick=startUpdate()>Restart &amp; Update</button></div>
 <audio id=au preload=auto></audio>
@@ -271,7 +293,54 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&').replace(/</g,'<')}
 function fmt(ms){ms=Number(ms)||0;var s=Math.round(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 function secs(s){s=Number(s)||0;return Math.floor(s/60)+':'+String(Math.round(s)%60).padStart(2,'0')}
 var toast=(function(){var t=document.getElementById('toast'),h=0;
-  return function(m){t.textContent=m;t.style.opacity=1;clearTimeout(h);h=setTimeout(function(){t.style.opacity=0},3000)}})();
+  function hide(){clearTimeout(h);h=0;t.style.opacity=0;t.style.pointerEvents='none'}
+  function show(m){t.textContent=m;t.style.opacity=1;t.style.pointerEvents='auto';clearTimeout(h);h=setTimeout(hide,3000)}
+  /* swipe-dismiss hooks: pause the auto-hide while a drag is on, resume if it springs back */
+  t._pause=function(){if(h){clearTimeout(h);h=0}};
+  t._resume=function(){clearTimeout(h);h=setTimeout(hide,3000)};
+  swipeDismiss(t,hide);
+  return show})();
+/* toast cards follow the finger to the right and slide off past 70px;
+   pointer events cover touch and mouse in one path */
+function swipeDismiss(el,done){
+  var sx=0,sy=0,dx=0,go=false,dir=null,pre='';
+  el.addEventListener('pointerdown',function(e){
+    if(e.pointerType==='mouse'&&(e.button||0)!==0)return;
+    go=true;dir=null;dx=0;sx=e.clientX;sy=e.clientY;
+    el._drag=true;pre=el.style.opacity||'';
+    el.style.transition='none';
+    if(el._pause)el._pause();
+    try{el.setPointerCapture(e.pointerId)}catch(_){}
+  });
+  el.addEventListener('pointermove',function(e){
+    if(!go)return;
+    var mx=e.clientX-sx,my=e.clientY-sy;
+    if(dir===null){
+      if(Math.abs(mx)<5&&Math.abs(my)<5)return;
+      /* only a rightward gesture owns the drag; left/up lets the page behave */
+      if(mx<=0||Math.abs(mx)<=Math.abs(my)){go=false;el._drag=false;if(el._resume)el._resume();return}
+      dir=1}
+    dx=mx;
+    el.style.transform='translateX('+dx+'px)';
+    el.style.opacity=String(Math.max(0,1-dx/140));
+  });
+  function end(){
+    if(!go)return;go=false;
+    el.style.transition='transform .25s cubic-bezier(.2,.8,.2,1),opacity .25s';
+    if(dx>70){ /* far enough: slide off the right edge, then finish */
+      el.style.transform='translateX(150%)';el.style.opacity='0';
+      setTimeout(function(){el.style.transition='';el.style.transform='';el._drag=false;done()},250);
+    }else{ /* not far enough: spring back to where it was */
+      el.style.transform='';el.style.opacity=pre;
+      el._drag=false;
+      if(el._resume)el._resume();
+    }
+  }
+  el.addEventListener('pointerup',end);
+  el.addEventListener('pointercancel',end);
+}
+function upnextVis(on){var un=document.getElementById('upnext');if(un._drag)return;if(on&&un._gone)return;un.style.opacity=on?1:0;un.style.pointerEvents=on?'auto':'none'}
+(function(){var un=document.getElementById('upnext');swipeDismiss(un,function(){un._gone=true;upnextVis(false)})})();
 function hue(name){var h=0;name=String(name||'?');for(var i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))>>>0;return h%360}
 function gcss(name){if(!name)return 'linear-gradient(135deg,#333,#555)';
   var h=hue(name);return 'linear-gradient(135deg,hsl('+h+',70%,38%),hsl('+((h+40)%360)+',60%,20%))'}
@@ -515,11 +584,12 @@ function showNow(tr){
   if(tr.cover){c.style.background=coverBg(tr.cover);c.setAttribute('data-cover-url',tr.cover)}
   else{c.style.background=gcss(tr.t);c.removeAttribute('data-cover-url')}
   reportNow('playing',tr);
+  document.getElementById('upnext')._gone=false; /* a swipe-dismiss lasts one track */
   syncFs();
 }
 function meta(t){if('mediaSession' in navigator)try{navigator.mediaSession.metadata=new MediaMetadata({title:t.t||'?',artist:t.a||'',album:t.album||''})}catch(e){}}
 function setPausedIcon(p){
-  var h=p?'<path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(0.6 0)"/>':'<path d="M5.7 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z"/>';
+  var h=p?'<path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(0.6 0)"/>':'<path d="M4.8 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z"/>';
   document.getElementById('pbIcon').innerHTML=h;
   var f=document.getElementById('fsPlayIcon');if(f)f.innerHTML=h}
 function playTrack(tr){
@@ -691,9 +761,9 @@ AU.addEventListener('timeupdate',function(){
       var t=Q[ni];
       var cov=t.cover?('/cover/'+(window._coverCache&&window._coverCache[t.cover]||'')||t.cover):'';
       un.innerHTML='<span style="color:#b3b3b3;font-size:11px;margin-right:8px">Up next</span><div style="display:flex;align-items:center;gap:8px"><div style="width:36px;height:36px;border-radius:4px;background:#282828;flex:none;background-size:cover;background-position:center;'+(t.cover?'background-image:url(\''+t.cover.replace(/'/g,'')+'\')':'')+'"></div><div style="min-width:0"><b style="display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.t||'')+'</b><small style="display:block;font-size:11px;color:#b3b3b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.a||'')+'</small></div></div>';
-      un.style.opacity=1;
-    } else un.style.opacity=0;
-  }else un.style.opacity=0;
+      if(!un._gone)upnextVis(true);
+    } else {un._gone=false;upnextVis(false)}
+  }else{un._gone=false;upnextVis(false)}
   reportNow();});
 document.getElementById('prog').addEventListener('click',function(e){
   if(!AU.duration)return;var r=this.getBoundingClientRect();
@@ -726,6 +796,7 @@ function openFs(){
     return}
   if(fs.classList.contains('on'))return;
   syncFs();
+  var _c=document.querySelector('#fsQrow.cur');if(_c&&_c.scrollIntoView)_c.scrollIntoView({block:'nearest'});
   /* start off-screen, then animate up on the next frame */
   fs.style.transition='none';
   fs.style.transform='translateY(100%)';
@@ -769,7 +840,8 @@ function syncFs(){
   document.getElementById('fsTot').textContent=secs(dur);
   document.getElementById('fsProgf').style.width=(dur?Math.min(100,pos/dur*100):0)+'%';
   setPausedIcon(!!AU.paused);
-  setVolFill(AU.muted?0:Math.sqrt(AU.volume)*100)}
+  setVolFill(AU.muted?0:Math.sqrt(AU.volume)*100);
+  renderFsQueue()}
 /* fullscreen sliders: pointer events cover touch and mouse in one path */
 function fsSlider(el,fn){
   function at(e){var r=el.getBoundingClientRect();fn(Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)))}
@@ -782,6 +854,29 @@ function fsSlider(el,fn){
     el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up)})}
 fsSlider(document.getElementById('fsProg'),function(v){if(AU.duration)AU.currentTime=v*AU.duration});
 fsSlider(document.getElementById('fsVolBar'),function(v){AU.volume=v*v;AU.muted=false;setVolFill(v*100);try{localStorage.setItem('kot_vol',v)}catch(e){};updateVolIcon()});
+/* the fullscreen queue is built from Q; tap a row to jump to it */
+function renderFsQueue(){
+  var box=document.getElementById('fsQrows'),cnt=document.getElementById('fsQcount'),wrap=document.getElementById('fsQueue');
+  if(!box||!wrap)return;
+  wrap.style.display=Q.length?'':'none';
+  cnt.textContent=Q.length+(Q.length===1?' track':' tracks');
+  var h='';
+  for(var i=0;i<Q.length;i++){
+    var t=Q[i]||{};
+    var bg=String(coverBg(t.cover)).replace(/"/g,"'");
+    h+='<div class="fsQrow'+(i===QI?' cur':'')+'" data-i="'+i+'">'+
+       '<span class=fsQn>'+(i+1)+'</span>'+
+       '<span class=fsQcov style="background:'+bg+'"></span>'+
+       '<span class=fsQt><b>'+esc(t.t||'')+'</b><small>'+esc(t.a||'')+'</small></span>'+
+       '<span class=fsQtime>'+fmt(t.ms||0)+'</span></div>';
+  }
+  box.innerHTML=h;
+}
+document.getElementById('fsQrows').addEventListener('click',function(e){
+  var r=e.target.closest?e.target.closest('.fsQrow'):null;
+  if(!r)return;
+  var i=parseInt(r.getAttribute('data-i'),10);
+  if(!isNaN(i))playIdx(i)});
 /* gestures: swipe the bar up to expand, drag the overlay down to collapse */
 (function(){
   var bar=document.getElementById('bar');var sy=0,sx=0,armed=false;
@@ -794,7 +889,7 @@ fsSlider(document.getElementById('fsVolBar'),function(v){AU.volume=v*v;AU.muted=
   bar.addEventListener('touchcancel',function(){armed=false},{passive:true});
   var fs=document.getElementById('fs');var fy=0,fgo=false,fdy=0,fbase=0;
   fs.addEventListener('touchstart',function(e){
-    if(e.target.closest&&e.target.closest('#fsProg,#fsVolBar,#fsClose'))return;
+    if(e.target.closest&&e.target.closest('#fsProg,#fsVolBar,#fsClose,#fsQueue'))return;
     /* grab the sheet exactly where it visually is - it may be animating
        (springing back or mid-close), so pin that position before following,
        otherwise killing the transition teleports it to the inline value */

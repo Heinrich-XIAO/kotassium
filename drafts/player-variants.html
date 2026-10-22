@@ -1,0 +1,314 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Kotassium fullscreen player — 5 UI drafts</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0b0b0b;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;gap:36px;padding:32px 16px}
+  .shot{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+  .shot h2{font-size:15px;font-weight:700;letter-spacing:.02em}
+  .shot h2 span{color:#1ed760}
+  .phone{width:390px;height:844px;border-radius:24px;overflow:hidden;position:relative;box-shadow:0 24px 60px #000c;outline:1px solid #ffffff14}
+  .row{display:flex;align-items:center}
+  .gap{gap:12px}
+  .ttl{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sub{color:#b3b3b3}
+  .grip{width:44px;height:5px;border-radius:3px;background:#ffffff40}
+  svg{display:block}
+  .icn{fill:currentColor}
+
+  /* ============ A — Glass panel ============ */
+  .va{background:linear-gradient(160deg,#6d28d9 0%,#be185d 46%,#0f0524 100%);display:flex;flex-direction:column;padding:14px 20px calc(26px + env(safe-area-inset-bottom))}
+  .va .head{display:flex;align-items:center;gap:10px;height:44px;flex:none}
+  .va .chev{width:40px;height:40px;border-radius:50%;background:#ffffff26;display:grid;place-items:center;color:#fff}
+  .va .pl{flex:1;text-align:center;font-size:12px;font-weight:700;color:#ffffffcc;letter-spacing:.08em;text-transform:uppercase}
+  .va .pad{width:40px}
+  .va .art{width:300px;aspect-ratio:1;border-radius:20px;margin:14px auto 0;background:linear-gradient(135deg,#f472b6,#7c3aed);box-shadow:0 30px 70px #00000070;flex:none}
+  .va .meta{margin-top:22px;color:#fff}
+  .va .meta b{display:block;font-size:26px;font-weight:800}
+  .va .meta small{display:block;margin-top:4px;font-size:16px;color:#ffffffb3}
+  .va .panel{margin-top:auto;background:#ffffff1f;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid #ffffff2e;border-radius:22px;padding:22px 20px;display:flex;flex-direction:column;gap:20px}
+  .va .seek{display:flex;align-items:center;gap:12px}
+  .va .t{font-size:13px;color:#ffffffd9;font-variant-numeric:tabular-nums}
+  .va .bar{flex:1;height:8px;border-radius:99px;background:#ffffff33;position:relative}
+  .va .fill{position:absolute;left:0;top:0;bottom:0;width:44%;border-radius:99px;background:#fff}
+  .va .thumb{position:absolute;left:44%;top:50%;width:16px;height:16px;border-radius:50%;background:#fff;transform:translate(-50%,-50%);box-shadow:0 2px 8px #0006}
+  .va .ctrl{display:flex;align-items:center;justify-content:space-between;padding:0 6px;color:#fff}
+  .va .play{width:74px;height:74px;border-radius:50%;background:#fff;color:#4c1d95;display:grid;place-items:center;box-shadow:0 12px 34px #00000059}
+  .va .vol{display:flex;align-items:center;gap:12px;color:#ffffffe6}
+  .va .vbar{flex:1;height:6px;border-radius:99px;background:#ffffff33;position:relative}
+  .va .vfill{position:absolute;left:0;top:0;bottom:0;width:70%;border-radius:99px;background:#fff}
+
+  /* ============ B — Spotify-style dark ============ */
+  .vb{background:#121212;display:flex;flex-direction:column;padding:14px 20px calc(24px + env(safe-area-inset-bottom))}
+  .vb .head{display:flex;align-items:center;height:40px;flex:none}
+  .vb .chev{width:36px;height:36px;color:#b3b3b3;display:grid;place-items:center}
+  .vb .pl{flex:1;text-align:center;font-size:12px;font-weight:700;color:#b3b3b3;letter-spacing:.1em;text-transform:uppercase}
+  .vb .pad{width:36px}
+  .vb .art{width:326px;aspect-ratio:1;border-radius:6px;margin:26px auto 0;background:linear-gradient(135deg,#1db954,#0b6b2f);box-shadow:0 24px 60px #000000a6;flex:none}
+  .vb .meta{margin-top:34px}
+  .vb .meta b{display:block;font-size:24px;font-weight:800}
+  .vb .meta small{display:block;margin-top:6px;font-size:15px;color:#b3b3b3}
+  .vb .seek{margin-top:30px;display:flex;flex-direction:column;gap:8px}
+  .vb .bar{height:4px;border-radius:99px;background:#4d4d4d;position:relative}
+  .vb .fill{position:absolute;left:0;top:0;bottom:0;width:44%;border-radius:99px;background:#fff}
+  .vb .thumb{position:absolute;left:44%;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;transform:translate(-50%,-50%)}
+  .vb .times{display:flex;justify-content:space-between;font-size:12px;color:#b3b3b3;font-variant-numeric:tabular-nums}
+  .vb .ctrl{margin-top:26px;display:flex;align-items:center;justify-content:space-evenly;color:#b3b3b3}
+  .vb .play{width:64px;height:64px;border-radius:50%;background:#fff;color:#121212;display:grid;place-items:center}
+  .vb .vol{margin-top:34px;display:flex;align-items:center;gap:14px;color:#b3b3b3}
+  .vb .vbar{flex:1;height:4px;border-radius:99px;background:#4d4d4d;position:relative}
+  .vb .vfill{position:absolute;left:0;top:0;bottom:0;width:70%;border-radius:99px;background:#fff}
+
+  /* ============ C — Editorial / typographic ============ */
+  .vc{background:#17140f;display:flex;flex-direction:column;padding:16px 22px calc(26px + env(safe-area-inset-bottom));font-family:Georgia,"Times New Roman",serif}
+  .vc .head{display:flex;align-items:center;height:40px;flex:none}
+  .vc .chev{width:36px;height:36px;border:1px solid #f59e0b66;border-radius:50%;display:grid;place-items:center;color:#f59e0b}
+  .vc .pl{flex:1;text-align:center;font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:.32em;text-transform:uppercase;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .vc .pad{width:36px}
+  .vc .kicker{margin-top:26px;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#8a8175;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .vc .art{margin-top:14px;width:346px;height:250px;border-radius:4px;background:linear-gradient(135deg,#f59e0b,#7c2d12);flex:none}
+  .vc .meta{margin-top:24px}
+  .vc .meta b{display:block;font-size:44px;line-height:1.02;font-weight:700;text-transform:uppercase;letter-spacing:-.01em}
+  .vc .meta small{display:block;margin-top:10px;font-size:14px;color:#b3a899;letter-spacing:.06em;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .vc .rule{margin-top:26px;height:1px;background:#ffffff1f}
+  .vc .seek{margin-top:18px;display:flex;align-items:center;gap:14px;font-family:"SF Mono",Menlo,Consolas,monospace}
+  .vc .t{font-size:13px;color:#f59e0b;font-variant-numeric:tabular-nums}
+  .vc .bar{flex:1;height:2px;background:#ffffff2e;position:relative}
+  .vc .fill{position:absolute;left:0;top:0;bottom:0;width:44%;background:#f59e0b}
+  .vc .ctrl{margin-top:26px;display:flex;align-items:center;justify-content:space-between;color:#e9e2d8}
+  .vc .circ{width:52px;height:52px;border:1px solid #ffffff38;border-radius:50%;display:grid;place-items:center}
+  .vc .play{width:64px;height:64px;border-radius:50%;background:#f59e0b;color:#17140f;display:grid;place-items:center;border:0}
+  .vc .vol{margin-top:28px;display:flex;align-items:center;gap:14px;color:#b3a899;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .vc .vbar{flex:1;height:2px;background:#ffffff2e;position:relative}
+  .vc .vfill{position:absolute;left:0;top:0;bottom:0;width:70%;background:#e9e2d8}
+
+  /* ============ D — Immersive wash + up-next peek ============ */
+  .vd{background:radial-gradient(120% 90% at 50% 0%,#2dd4bf33 0%,transparent 55%),radial-gradient(140% 100% at 50% 100%,#a21caf66 0%,transparent 60%),#050505;display:flex;flex-direction:column;padding:14px 20px calc(20px + env(safe-area-inset-bottom))}
+  .vd .head{display:flex;align-items:center;height:42px;flex:none}
+  .vd .chev{width:38px;height:38px;border-radius:50%;background:#ffffff1a;display:grid;place-items:center}
+  .vd .pl{flex:1;text-align:center;font-size:12px;font-weight:700;color:#fff;letter-spacing:.06em}
+  .vd .pad{width:38px}
+  .vd .art{width:290px;aspect-ratio:1;border-radius:16px;margin:16px auto 0;background:linear-gradient(135deg,#14b8a6,#7c3aed 55%,#d946ef);box-shadow:0 0 0 2px #1ed760,0 0 60px #1ed76059,0 26px 60px #000a;flex:none}
+  .vd .meta{margin-top:24px;text-align:center}
+  .vd .meta b{display:block;font-size:25px;font-weight:800}
+  .vd .meta small{display:block;margin-top:5px;font-size:15px;color:#b3b3b3}
+  .vd .seek{margin-top:24px;display:flex;align-items:center;gap:12px}
+  .vd .t{font-size:13px;color:#b3b3b3;font-variant-numeric:tabular-nums}
+  .vd .bar{flex:1;height:10px;border-radius:99px;background:#ffffff1f;position:relative;box-shadow:inset 0 1px 3px #0008}
+  .vd .fill{position:absolute;left:0;top:0;bottom:0;width:44%;border-radius:99px;background:linear-gradient(90deg,#1ed760,#4ade80);box-shadow:0 0 12px #1ed76080}
+  .vd .ctrl{margin-top:22px;display:flex;align-items:center;justify-content:center;gap:26px;color:#fff}
+  .vd .play{width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg,#1ed760,#0d9443);color:#04140a;display:grid;place-items:center;box-shadow:0 10px 30px #1ed76066}
+  .vd .vol{margin-top:22px;display:flex;align-items:center;gap:12px;color:#fff}
+  .vd .vbar{flex:1;height:8px;border-radius:99px;background:#ffffff1f;position:relative}
+  .vd .vfill{position:absolute;left:0;top:0;bottom:0;width:70%;border-radius:99px;background:#fff}
+  .vd .upnext{margin-top:auto;background:#0d0d0dcc;backdrop-filter:blur(10px);border:1px solid #ffffff1f;border-radius:16px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+  .vd .upnext .lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#1ed760;font-weight:700;writing-mode:vertical-rl;transform:rotate(180deg)}
+  .vd .upnext .cov{width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,#f97316,#be123c);flex:none}
+  .vd .upnext .txt{min-width:0;flex:1}
+  .vd .upnext .txt b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vd .upnext .txt small{display:block;font-size:12px;color:#b3b3b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vd .upnext .q{font-size:11px;color:#b3b3b3;flex:none;text-align:right}
+  .vd .upnext .q b{display:block;color:#fff;font-size:13px}
+
+  /* ============ E — Queue-first split ============ */
+  .ve{background:#0e0e0e;display:flex;flex-direction:column}
+  .ve .top{padding:14px 20px 18px;background:linear-gradient(180deg,#1b2f2a,#0e0e0e 78%)}
+  .ve .head{display:flex;align-items:center;height:40px}
+  .ve .chev{width:36px;height:36px;border-radius:50%;background:#ffffff14;display:grid;place-items:center}
+  .ve .pl{flex:1;text-align:center;font-size:12px;font-weight:700;color:#b3b3b3;letter-spacing:.1em;text-transform:uppercase}
+  .ve .pad{width:36px}
+  .ve .art{width:196px;aspect-ratio:1;border-radius:14px;margin:14px auto 0;background:linear-gradient(135deg,#34d399,#0f766e);box-shadow:0 20px 50px #000a;flex:none}
+  .ve .meta{margin-top:18px;text-align:center}
+  .ve .meta b{display:block;font-size:21px;font-weight:800}
+  .ve .meta small{display:block;margin-top:4px;font-size:14px;color:#b3b3b3}
+  .ve .seek{margin-top:18px;display:flex;align-items:center;gap:10px}
+  .ve .t{font-size:12px;color:#b3b3b3;font-variant-numeric:tabular-nums}
+  .ve .bar{flex:1;height:6px;border-radius:99px;background:#ffffff26;position:relative}
+  .ve .fill{position:absolute;left:0;top:0;bottom:0;width:44%;border-radius:99px;background:#1ed760}
+  .ve .queue{flex:1;background:#161616;border-radius:22px 22px 0 0;margin-top:16px;display:flex;flex-direction:column;min-height:0;box-shadow:0 -14px 40px #0009}
+  .ve .qhead{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 10px;flex:none}
+  .ve .qhandle{position:absolute;left:50%;top:8px;width:40px;height:4px;border-radius:2px;background:#ffffff33;transform:translateX(-50%)}
+  .ve .qhead b{font-size:16px;font-weight:800}
+  .ve .qhead span{font-size:12px;color:#1ed760;font-weight:700}
+  .ve .qrow{display:flex;align-items:center;gap:12px;padding:9px 20px}
+  .ve .qrow.cur{background:#ffffff0d}
+  .ve .qnum{width:18px;font-size:13px;color:#8a8a8a;text-align:center;flex:none}
+  .ve .qcov{width:40px;height:40px;border-radius:6px;flex:none}
+  .ve .qtxt{min-width:0;flex:1}
+  .ve .qtxt b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ve .qtxt small{display:block;font-size:12px;color:#b3b3b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ve .qtime{font-size:12px;color:#8a8a8a;font-variant-numeric:tabular-nums;flex:none}
+  .ve .ctrl{position:absolute;left:50%;bottom:36px;transform:translateX(-50%);display:flex;align-items:center;gap:20px;background:#242424f2;border:1px solid #ffffff1f;padding:10px 18px;border-radius:999px;color:#fff;box-shadow:0 16px 40px #000c}
+  .ve .play{width:56px;height:56px;border-radius:50%;background:#fff;color:#000;display:grid;place-items:center}
+  .ve .volrow{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;color:#b3b3b3}
+  .ve .vbar{width:150px;height:4px;border-radius:99px;background:#ffffff26;position:relative}
+  .ve .vfill{position:absolute;left:0;top:0;bottom:0;width:70%;border-radius:99px;background:#fff}
+
+  /* ============ F — Glass island + queue (app palette only) ============ */
+  .vf{background:#0d0d0d;display:flex;flex-direction:column;padding:14px 20px 0}
+  .vf .head{display:flex;align-items:center;height:42px;flex:none}
+  .vf .chev{width:38px;height:38px;border-radius:50%;background:#ffffff14;display:grid;place-items:center;color:#e5e5e5}
+  .vf .pl{flex:1;text-align:center;font-size:12px;font-weight:700;color:#8a8a8a;letter-spacing:.1em;text-transform:uppercase}
+  .vf .pad{width:38px}
+  .vf .art{width:278px;aspect-ratio:1;border-radius:14px;margin:12px auto 0;background:linear-gradient(135deg,#3a3a3a,#1e1e1e);box-shadow:0 22px 55px #000a;flex:none}
+  .vf .meta{margin-top:18px;text-align:center;flex:none}
+  .vf .meta b{display:block;font-size:22px;font-weight:800}
+  .vf .meta small{display:block;margin-top:4px;font-size:14px;color:#8a8a8a}
+  .vf .island{order:9;margin-top:16px;margin-bottom:calc(14px + env(safe-area-inset-bottom));background:#1c1c1cf2;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid #ffffff1f;border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:16px;flex:none;box-shadow:0 18px 44px #0009}
+  .vf .seek{display:flex;align-items:center;gap:12px}
+  .vf .t{font-size:12px;color:#8a8a8a;font-variant-numeric:tabular-nums}
+  .vf .bar{flex:1;height:6px;border-radius:99px;background:#ffffff1f;position:relative}
+  .vf .fill{position:absolute;left:0;top:0;bottom:0;width:44%;border-radius:99px;background:#fff}
+  .vf .thumb{position:absolute;left:44%;top:50%;width:14px;height:14px;border-radius:50%;background:#fff;transform:translate(-50%,-50%);box-shadow:0 2px 6px #0007}
+  .vf .ctrl{display:flex;align-items:center;justify-content:space-between;padding:0 4px;color:#e5e5e5}
+  .vf .play{width:62px;height:62px;border-radius:50%;background:#fff;color:#000;display:grid;place-items:center}
+  .vf .vol{display:flex;align-items:center;gap:12px;color:#8a8a8a}
+  .vf .vbar{flex:1;height:6px;border-radius:99px;background:#ffffff1f;position:relative}
+  .vf .vfill{position:absolute;left:0;top:0;bottom:0;width:70%;border-radius:99px;background:#fff}
+  .vf .queue{margin:18px -20px 0;padding:0 20px;flex:1;min-height:0;overflow:hidden}
+  .vf .qhead{display:flex;align-items:baseline;justify-content:space-between;padding:2px 0 10px}
+  .vf .qhead b{font-size:15px;font-weight:800}
+  .vf .qhead span{font-size:12px;color:#8a8a8a}
+  .vf .qrow{display:flex;align-items:center;gap:12px;padding:8px 0}
+  .vf .qrow.cur{background:#ffffff0d;border-radius:10px;padding-left:8px;padding-right:8px;margin:0 -8px}
+  .vf .qnum{width:18px;font-size:13px;color:#6f6f6f;text-align:center;flex:none}
+  .vf .qcov{width:40px;height:40px;border-radius:6px;flex:none}
+  .vf .qtxt{min-width:0;flex:1}
+  .vf .qtxt b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vf .qtxt small{display:block;font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vf .qtime{font-size:12px;color:#6f6f6f;font-variant-numeric:tabular-nums;flex:none}
+</style>
+
+<section class="shot">
+  <h2><span>Variant A</span> — Glass panel</h2>
+  <div class="phone va">
+    <div class="head"><div class="chev"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6l5 5 5-5H3z"/></svg></div><div class="pl">Night Drive</div><div class="pad"></div></div>
+    <div class="art"></div>
+    <div class="meta"><b>Midnight Circuit</b><small>Aurora Wave</small></div>
+    <div class="panel">
+      <div class="seek"><span class="t">1:42</span><div class="bar"><div class="fill"></div><div class="thumb"></div></div><span class="t">3:58</span></div>
+      <div class="ctrl">
+        <svg width="24" height="24" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+        <svg width="30" height="30" viewBox="0 0 16 16" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg>
+        <div class="play"><svg width="30" height="30" viewBox="0 0 16 16" fill="currentColor"><path d="M5.7 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg></div>
+        <svg width="30" height="30" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg>
+        <svg width="24" height="24" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+      </div>
+      <div class="vol"><svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><div class="vbar"><div class="vfill"></div></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="shot">
+  <h2><span>Variant B</span> — Spotify-style dark</h2>
+  <div class="phone vb">
+    <div class="head"><div class="chev"><svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6l5 5 5-5H3z"/></svg></div><div class="pl">Night Drive</div><div class="pad"></div></div>
+    <div class="art"></div>
+    <div class="meta"><b>Midnight Circuit</b><small>Aurora Wave</small></div>
+    <div class="seek"><div class="bar"><div class="fill"></div><div class="thumb"></div></div><div class="times"><span>1:42</span><span>-2:16</span></div></div>
+    <div class="ctrl">
+      <svg width="26" height="26" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+      <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg>
+      <div class="play"><svg width="28" height="28" viewBox="0 0 16 16" fill="currentColor"><path d="M5.7 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg></div>
+      <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg>
+      <svg width="26" height="26" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+    </div>
+    <div class="vol"><svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><div class="vbar"><div class="vfill"></div></div></div>
+  </div>
+</section>
+
+<section class="shot">
+  <h2><span>Variant C</span> — Editorial typography</h2>
+  <div class="phone vc">
+    <div class="head"><div class="chev"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6l5 5 5-5H3z"/></svg></div><div class="pl">Night Drive</div><div class="pad"></div></div>
+    <div class="kicker">Now playing · track 07</div>
+    <div class="art"></div>
+    <div class="meta"><b>Midnight<br>Circuit</b><small>AURORA WAVE — NEON HORIZON (2026)</small></div>
+    <div class="rule"></div>
+    <div class="seek"><span class="t">1:42</span><div class="bar"><div class="fill"></div></div><span class="t">3:58</span></div>
+    <div class="ctrl">
+      <div class="circ"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></div>
+      <div class="circ"><svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg></div>
+      <div class="play"><svg width="26" height="26" viewBox="0 0 16 16" fill="currentColor"><path d="M5.7 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg></div>
+      <div class="circ"><svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg></div>
+      <div class="circ"><svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></div>
+    </div>
+    <div class="rule"></div>
+    <div class="vol"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><div class="vbar"><div class="vfill"></div></div></div>
+  </div>
+</section>
+
+<section class="shot">
+  <h2><span>Variant D</span> — Immersive glow + up-next peek</h2>
+  <div class="phone vd">
+    <div class="head"><div class="chev"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6l5 5 5-5H3z"/></svg></div><div class="pl">Night Drive</div><div class="pad"></div></div>
+    <div class="art"></div>
+    <div class="meta"><b>Midnight Circuit</b><small>Aurora Wave</small></div>
+    <div class="seek"><span class="t">1:42</span><div class="bar"><div class="fill"></div></div><span class="t">3:58</span></div>
+    <div class="ctrl">
+      <svg width="24" height="24" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+      <svg width="30" height="30" viewBox="0 0 16 16" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg>
+      <div class="play"><svg width="30" height="30" viewBox="0 0 16 16" fill="currentColor"><path d="M5.7 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg></div>
+      <svg width="30" height="30" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg>
+      <svg width="24" height="24" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+    </div>
+    <div class="vol"><svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><div class="vbar"><div class="vfill"></div></div></div>
+    <div class="upnext"><div class="lbl">Next</div><div class="cov"></div><div class="txt"><b>Signal Drift</b><small>Aurora Wave</small></div><div class="q"><b>#2</b>of 14</div></div>
+  </div>
+</section>
+
+<section class="shot">
+  <h2><span>Variant E</span> — Queue-first split</h2>
+  <div class="phone ve">
+    <div class="top">
+      <div class="head"><div class="chev"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6l5 5 5-5H3z"/></svg></div><div class="pl">Night Drive</div><div class="pad"></div></div>
+      <div class="art"></div>
+      <div class="meta"><b>Midnight Circuit</b><small>Aurora Wave</small></div>
+      <div class="seek"><span class="t">1:42</span><div class="bar"><div class="fill"></div></div><span class="t">3:58</span></div>
+      <div class="ctrl">
+        <svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+        <svg width="26" height="26" viewBox="0 0 16 16" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg>
+        <div class="play"><svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor"><path d="M5.7 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg></div>
+        <svg width="26" height="26" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+      </div>
+    </div>
+    <div class="queue">
+      <div class="qhead"><b>Up next</b><span>14 tracks</span></div>
+      <div class="qrow cur"><div class="qnum">1</div><div class="qcov" style="background:linear-gradient(135deg,#f472b6,#7c3aed)"></div><div class="qtxt"><b>Midnight Circuit</b><small>Aurora Wave</small></div><div class="qtime">3:58</div></div>
+      <div class="qrow"><div class="qnum">2</div><div class="qcov" style="background:linear-gradient(135deg,#f97316,#be123c)"></div><div class="qtxt"><b>Signal Drift</b><small>Aurora Wave</small></div><div class="qtime">4:12</div></div>
+      <div class="qrow"><div class="qnum">3</div><div class="qcov" style="background:linear-gradient(135deg,#38bdf8,#1d4ed8)"></div><div class="qtxt"><b>Polaris</b><small>Aurora Wave</small></div><div class="qtime">3:21</div></div>
+      <div class="qrow"><div class="qnum">4</div><div class="qcov" style="background:linear-gradient(135deg,#a78bfa,#6d28d9)"></div><div class="qtxt"><b>Glass Harbor</b><small>Aurora Wave</small></div><div class="qtime">5:04</div></div>
+      <div class="qrow"><div class="qnum">5</div><div class="qcov" style="background:linear-gradient(135deg,#34d399,#065f46)"></div><div class="qtxt"><b>Undertow</b><small>Aurora Wave</small></div><div class="qtime">3:47</div></div>
+      <div class="volrow"><svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><div class="vbar"><div class="vfill"></div></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="shot">
+  <h2><span>Variant F</span> — Control island + queue (app palette)</h2>
+  <div class="phone vf">
+    <div class="head"><div class="chev"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6l5 5 5-5H3z"/></svg></div><div class="pl">Night Drive</div><div class="pad"></div></div>
+    <div class="art"></div>
+    <div class="meta"><b>Midnight Circuit</b><small>Aurora Wave</small></div>
+    <div class="island">
+      <div class="seek"><span class="t">1:42</span><div class="bar"><div class="fill"></div><div class="thumb"></div></div><span class="t">3:58</span></div>
+      <div class="ctrl">
+        <svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+        <svg width="28" height="28" viewBox="0 0 16 16" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg>
+        <div class="play"><svg width="26" height="26" viewBox="0 0 16 16" fill="currentColor"><path d="M4.8 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg></div>
+        <svg width="28" height="28" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+      </div>
+      <div class="vol"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><div class="vbar"><div class="vfill"></div></div></div>
+    </div>
+    <div class="queue">
+      <div class="qhead"><b>Up next</b><span>14 tracks</span></div>
+      <div class="qrow cur"><div class="qnum">1</div><div class="qcov" style="background:linear-gradient(135deg,#3d3d3d,#242424)"></div><div class="qtxt"><b>Midnight Circuit</b><small>Aurora Wave</small></div><div class="qtime">3:58</div></div>
+      <div class="qrow"><div class="qnum">2</div><div class="qcov" style="background:linear-gradient(135deg,#333,#1d1d1d)"></div><div class="qtxt"><b>Signal Drift</b><small>Aurora Wave</small></div><div class="qtime">4:12</div></div>
+      <div class="qrow"><div class="qnum">3</div><div class="qcov" style="background:linear-gradient(135deg,#383838,#212121)"></div><div class="qtxt"><b>Polaris</b><small>Aurora Wave</small></div><div class="qtime">3:21</div></div>
+      <div class="qrow"><div class="qnum">4</div><div class="qcov" style="background:linear-gradient(135deg,#2f2f2f,#1a1a1a)"></div><div class="qtxt"><b>Glass Harbor</b><small>Aurora Wave</small></div><div class="qtime">5:04</div></div>
+      <div class="qrow"><div class="qnum">5</div><div class="qcov" style="background:linear-gradient(135deg,#363636,#1f1f1f)"></div><div class="qtxt"><b>Undertow</b><small>Aurora Wave</small></div><div class="qtime">3:47</div></div>
+    </div>
+  </div>
+</section>
