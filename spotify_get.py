@@ -100,6 +100,13 @@ def _cache_save(tok):
     except Exception:
         pass
 
+# The anonymous web-player token mint goes stale whenever Spotify rotates its
+# TOTP secret (it currently answers 400 totpVerExpired). Remember that for a
+# while instead of re-running the mint + headless-browser harvest on every
+# single call - that used to burn ~15s per pathfinder retry and turned a
+# fast failure into a ~70s request the UI sat on without an answer.
+_anon_dead_until = 0.0
+
 class TokenProvider:
     def __init__(self, manual=None):
         self.manual = manual
@@ -116,35 +123,39 @@ class TokenProvider:
             self._anon = cached
             log("anonymous token from disk cache")
             return self._anon
-        if not getattr(self, "_scraped", False):
-            self._scraped = True
-            _scrape_current_totp_secret()
-        try:
-            self._anon = get_anon_token()
-            _cache_save(self._anon)
-            log("anonymous token minted (pathfinder lane)")
-            return self._anon
-        except Exception as e:
-            log(f"anon mint failed: {e}")
-        self._scrape_attempted = getattr(self, "_scrape_attempted", False)
-        if not self._scrape_attempted:
-            _scrape_current_totp_secret()
-            self._scrape_attempted = True
-            return self.bearer()
-        # last auto lane: headless-Firefox harvest (works even when the mint endpoint blocks us)
-        try:
-            harv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "harvest_token.py")
-            if os.path.exists(harv) or True:
-                r = subprocess.run([sys.executable, harv], capture_output=True, text=True, timeout=90)
-                tok = (r.stdout or "").strip().splitlines()[-1] if r.stdout else ""
-                if tok.startswith("BQ") and len(tok) > 100:
-                    self._anon = tok
-                    _cache_save(tok)
-                    log("anonymous token harvested via headless browser")
-                    return self._anon
-                log(f"harvest failed: {(r.stderr or '')[-120:]}")
-        except Exception as e:
-            log(f"harvest lane failed: {e}")
+        global _anon_dead_until
+        if time.time() >= _anon_dead_until:
+            if not getattr(self, "_scraped", False):
+                self._scraped = True
+                _scrape_current_totp_secret()
+            try:
+                self._anon = get_anon_token()
+                _cache_save(self._anon)
+                log("anonymous token minted (pathfinder lane)")
+                return self._anon
+            except Exception as e:
+                log(f"anon mint failed: {e}")
+            self._scrape_attempted = getattr(self, "_scrape_attempted", False)
+            if not self._scrape_attempted:
+                _scrape_current_totp_secret()
+                self._scrape_attempted = True
+                return self.bearer()   # one retry in case the scrape found a new secret
+            # last auto lane: headless-Firefox harvest (works even when the mint endpoint blocks us)
+            try:
+                harv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "harvest_token.py")
+                if os.path.exists(harv) or True:
+                    r = subprocess.run([sys.executable, harv], capture_output=True, text=True, timeout=90)
+                    tok = (r.stdout or "").strip().splitlines()[-1] if r.stdout else ""
+                    if tok.startswith("BQ") and len(tok) > 100:
+                        self._anon = tok
+                        _cache_save(tok)
+                        log("anonymous token harvested via headless browser")
+                        return self._anon
+                    log(f"harvest failed: {(r.stderr or '')[-120:]}")
+            except Exception as e:
+                log(f"harvest lane failed: {e}")
+            _anon_dead_until = time.time() + 1800
+            log("anon lane dead - using client_credentials for the rest of this session")
         try:
             if not self._cc:
                 self._cc = get_token()
@@ -176,6 +187,15 @@ def pathfinder_query(provider, operation, vhash, variables, tries=4):
             return d
         except urlreq.HTTPError as e:
             last = e
+            if e.code == 403:
+                # A rejected bearer (client_credentials is not a web-player
+                # token) will be rejected on every retry - fail now so the
+                # caller can fall back to the api.spotify.com lane instead of
+                # sleeping through the retry ladder.
+                if provider.manual:
+                    raise RuntimeError("bearer token rejected (403): expired or revoked - "
+                                       "grab a fresh one from any logged-out player page or rerun --mint-token")
+                raise
             if e.code == 401:
                 if provider.manual:
                     raise RuntimeError("bearer token rejected (401): expired or revoked - "
@@ -400,8 +420,11 @@ def resolve(url):
         return name, tracks
     except Exception as e:
         log(f"pathfinder resolve failed: {e}")
-        if any(s in str(e) for s in ("401", "403", "re-mint failed", "rejected")):
-            raise   # auth-class failure: the cc lane cannot rescue pathfinder auth - fail now
+        if _token_override and any(s in str(e) for s in ("401", "403", "re-mint failed", "rejected")):
+            raise   # a user-supplied bearer was rejected - nothing else can fix that
+        # Without a manual token the api.spotify.com lane below still resolves
+        # public tracks/albums/playlists on client_credentials, so a dead
+        # pathfinder (expired anon token) must not abort the whole resolve.
         log("trying api.spotify.com lane")
     token = get_token()
     global _api_get_tries

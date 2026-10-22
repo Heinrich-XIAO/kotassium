@@ -344,15 +344,20 @@ function abox(){var b=document.getElementById('addBox');
   if(b.style.display==='block')document.getElementById('plink').focus()}
 function addLink(){
   var u=document.getElementById('plink').value.trim();if(!u)return;
+  /* resolving a big playlist can take a while - keep the hint on screen and
+     never leave the promise uncaught, otherwise a failure is silent. */
+  var hold=setInterval(function(){toast('resolving link...')},2500);
   toast('resolving link...');
+  function stop(){clearInterval(hold)}
   API('/api/spot/resolve?url='+encodeURIComponent(u)).then(function(j){
-    if(j.error){toast('could not open: '+(j.error_description||j.error));return}
+    stop();
+    if(!j||j.error){toast('could not open: '+((j&&(j.error_description||j.error))||'no answer from the server'));return}
     document.getElementById('plink').value='';
     return loadSide().then(function(){
       var i=LINKS.reduce(function(a,p,ix){return p.url===u||p.name===j.name?ix:a},-1);
       toast('saved: '+(j.name||'link')+' - '+((j.tracks||[]).length)+' tracks');
-      if(i>=0)openPlaylist(i)})});
-}
+      if(i>=0)openPlaylist(i)})}).catch(function(e){
+        stop();toast('could not open: '+((e&&(e.message||e))||'network error'))})}
 /* ---------------- home ---------------- */
 function goHome(){document.getElementById('q').value='';renderHome()}
 function renderHome(){PLAYING_PL=null;

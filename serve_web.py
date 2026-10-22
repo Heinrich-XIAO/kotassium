@@ -683,14 +683,21 @@ def handle(path, params, hdr):
         try:
             if not re.match(r"(?i)https?://\S+", link or "") or len(link) > 2000:
                 raise RuntimeError("need an http(s) link")
-            m = re.search(r"(?:open\.)?spotify\.com/(?:intl-[a-z]{2}/)?(playlist|album|track)/([A-Za-z0-9]+)", link)
-            if not m:
+            # Only spotify hosts get this far: resolve() follows short links
+            # (spotify.link/...) by fetching them, so a bare URL must not turn
+            # the server into a fetch-any-URL proxy.
+            if not re.search(r"(?i)spotify\.com/|spotify\.link/", link):
                 raise RuntimeError("need a spotify playlist, album, or track link")
             import spotify_get
+            m = re.search(r"(?:open\.)?spotify\.com/(?:intl-[a-z]{2}/)?(playlist|album|track)/([A-Za-z0-9]+)", link)
             name, tracks = spotify_get.resolve(link)
             fmt = [{"t": t["title"], "a": t["artist"], "ms": int(round(t.get("dur", 0) * 1000)),
                     "album": t.get("album") or "", "cover": cover_local(t.get("cover") or "")} for t in tracks]
-            jr = {"type": m.group(1), "name": name, "tracks": fmt, "count": len(fmt),
+            # Short links (spotify.link/...) never match the regex above, so
+            # fall back to a guess from the track count rather than crashing
+            # on a resolve that actually succeeded.
+            kind = m.group(1) if m else ("track" if len(fmt) == 1 else "playlist")
+            jr = {"type": kind, "name": name, "tracks": fmt, "count": len(fmt),
                   "total": len(fmt), "truncated": False, "partial": False}
             save_link(link, jr)
             return 200, "application/json", json.dumps(jr).encode(), None, False
