@@ -74,7 +74,22 @@ jobs:
       - name: Make the DMG
         env:
           KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
-        run: ./make-dmg.sh "Kotassium-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.dmg"
+        run: |
+          # hdiutil on the macOS runners sometimes fails with "Resource busy"
+          # when a diskimages-helper from an earlier job is still around. It
+          # is a flake, not a broken build, so retry instead of failing the
+          # whole release over it.
+          hdiutil detach /Volumes/Kotassium 2>/dev/null || true
+          for i in 1 2 3; do
+            if ./make-dmg.sh "Kotassium-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.dmg"; then
+              exit 0
+            fi
+            echo "make-dmg.sh failed (attempt $i) - retrying in 20s"
+            hdiutil detach /Volumes/Kotassium 2>/dev/null || true
+            sleep 20
+          done
+          echo "make-dmg.sh failed three times" >&2
+          exit 1
 
       - name: Verify the DMG
         run: |
