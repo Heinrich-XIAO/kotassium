@@ -84,8 +84,10 @@ What differs from desktop, and why:
   itself, with no password and nothing exposed to the network it happens to be
   on. Sharing the phone's library to other devices needs a password and a bind
   address, which is a deliberate follow-up rather than a default.
-- **Serves while the app is open.** There is no foreground service yet, so
-  Android may stop the process once the app is backgrounded.
+- **Survives the screen turning off.** Local mode runs the server under a
+  foreground service (with a notification — Android's price for a process
+  that outlives the screen), and a wake lock is held only while a download
+  runs, so downloads finish with the phone asleep.
 - **Library location.** `Android/data/app.kotassium.mobile/files/Music` — the
   app's own external directory. Syncthing cannot reach it on Android 11+, so
   tracks downloaded on the phone stay on the phone.

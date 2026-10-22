@@ -209,6 +209,28 @@ _jobs = {}
 _jobs_lock = threading.Lock()
 _job_seq = 0
 
+# Optional hook, called with True when a download job starts and with False
+# once none are left running. The Android shell holds a wake lock across a
+# download through it; on every other platform it stays None.
+JOB_HOOK = None
+
+def jobs_active():
+    """True while any download job is queued or running.
+
+    The Android shell polls this to hold a wake lock: the downloads run in
+    the same process, so Android freezes them with the screen off unless
+    something keeps the CPU awake.
+    """
+    with _jobs_lock:
+        return any(j["status"] in ("queued", "running") for j in _jobs.values())
+
+def _job_hook_fire():
+    if JOB_HOOK:
+        try:
+            JOB_HOOK(jobs_active())
+        except Exception:
+            pass
+
 def job_new(label):
     global _job_seq
     now = time.time()
@@ -248,6 +270,7 @@ def job_start_ytdl(vid):
     if existing:
         return existing
     jid = job_new(vid)
+    _job_hook_fire()
 
     def work():
         try:
@@ -256,6 +279,8 @@ def job_start_ytdl(vid):
             job_update(jid, status="done", pct=100.0, file=f)
         except Exception as e:
             job_update(jid, status="error", error=str(e)[:200])
+        finally:
+            _job_hook_fire()
 
     threading.Thread(target=work, daemon=True).start()
     return jid

@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.ViewGroup;
@@ -182,6 +183,10 @@ public class MainActivity extends Activity {
             PyObject mod = Python.getInstance().getModule("kotassium_boot");
             int port = mod.callAttr("start", base.getAbsolutePath(),
                     lib.getAbsolutePath(), PORT).toJava(Integer.class);
+            // The server lives in this process: without the service Android
+            // freezes it the moment the screen turns off, and the music and
+            // the downloads stop with it.
+            startServing();
             load("http://127.0.0.1:" + port + "/");
         } catch (Throwable t) {
             showError(t);
@@ -225,6 +230,24 @@ public class MainActivity extends Activity {
     }
 
     // ------------------------------------------------------------------- mode
+
+    /**
+     * Local mode only: the foreground service (and its notification) is what
+     * Android charges for a process that outlives the screen. Remote mode
+     * serves from somewhere else, so it must not keep this phone awake.
+     */
+    private void startServing() {
+        Intent i = new Intent(this, ServeService.class);
+        if (Build.VERSION.SDK_INT >= 26) {
+            startForegroundService(i);
+        } else {
+            startService(i);
+        }
+    }
+
+    private void stopServing() {
+        stopService(new Intent(this, ServeService.class));
+    }
 
     private void chooseMode() {
         new AlertDialog.Builder(this)
@@ -303,6 +326,7 @@ public class MainActivity extends Activity {
                     }
                     // Only now is there something to remember.
                     prefs().edit().putString("url", v).putString("mode", MODE_REMOTE).apply();
+                    stopServing();
                     load(remoteUrl());
                 })
                 .show();
@@ -334,6 +358,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        // Nothing left to serve: without the activity the local library is
+        // unreachable, and a lingering service would only burn battery behind
+        // a notification nobody can act on.
+        stopServing();
         if (web != null) {
             web.destroy();
             web = null;

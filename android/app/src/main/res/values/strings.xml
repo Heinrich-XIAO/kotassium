@@ -2,4 +2,9 @@
 <resources>
     <string name="app_name">Kotassium</string>
     <string name="choose_library">Choose library</string>
+    <!-- Foreground service notification: local mode keeps the server (and the
+         music) running while the screen is off. -->
+    <string name="serve_channel">Playback</string>
+    <string name="serve_text">Serving your library</string>
+    <string name="serve_busy">Downloading\u2026</string>
 </resources>

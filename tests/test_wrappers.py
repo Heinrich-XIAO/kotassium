@@ -14,7 +14,11 @@ class WrapperTests(unittest.TestCase):
     """The web page is the only UI. The shells must stay shells, or a bug
     fixed in web/index.html would not be fixed everywhere."""
 
-    WRAPPERS = ("desktop.py", "android/app/src/main/java/app/kotassium/mobile/MainActivity.java")
+    WRAPPERS = (
+        "desktop.py",
+        "android/app/src/main/java/app/kotassium/mobile/MainActivity.java",
+        "android/app/src/main/java/app/kotassium/mobile/ServeService.java",
+    )
 
     def test_wrappers_contain_no_markup(self):
         for rel in self.WRAPPERS:
@@ -63,6 +67,35 @@ class WrapperTests(unittest.TestCase):
         choose = src.split("private void chooseMode()")[1].split("private void dismissChooser")[0]
         self.assertNotIn("MODE_REMOTE", choose,
                          "the mode must not be saved before an address is entered")
+
+    def test_android_survives_the_screen_turning_off(self):
+        # The server runs inside the app process, so without a foreground
+        # service Android freezes it the moment the screen turns off: the
+        # music stops and downloads stall mid-transfer. The notification is
+        # the price Android charges for a process that outlives the screen.
+        manifest = read("android/app/src/main/AndroidManifest.xml")
+        self.assertIn("android.permission.FOREGROUND_SERVICE", manifest)
+        self.assertIn("android:foregroundServiceType=", manifest)
+        src = read(self.WRAPPERS[1])
+        self.assertIn("startForegroundService", src)
+        self.assertIn("stopService", src)
+        service = read(self.WRAPPERS[2])
+        self.assertIn("startForeground(", service)
+        self.assertIn("PARTIAL_WAKE_LOCK", service)
+        # The wake lock is held only while a download runs, not forever.
+        boot = read("android/app/src/main/python/kotassium_boot.py")
+        self.assertIn("JOB_HOOK", boot)
+
+    def test_remote_mode_does_not_keep_the_phone_awake(self):
+        # Remote mode serves from another machine: a persistent "serving"
+        # notification here would be a lie and a battery cost.
+        src = read(self.WRAPPERS[1])
+        connecting = src.split("private void askForServer()")[1].split("private void load(")[0]
+        self.assertIn("stopServing()", connecting,
+                      "connecting to a shared server must stop the local service")
+        local = src.split("private void startLocal()")[1].split("private void unpackWebAssets(")[0]
+        self.assertNotIn("stopServing", local)
+        self.assertIn("startServing", local)
 
     def test_android_holds_no_copy_of_the_server_or_page(self):
         for dirpath, _, files in os.walk(os.path.join(ROOT, "android")):

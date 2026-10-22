@@ -15,4 +15,9 @@ def start(base, lib, port):
     # runs in-process and keeps yt-dlp's own container (usually m4a).
     os.environ["KOTASSIUM_YTDLP"] = "inproc"
     import serve_web
+    # Downloads run in this process, so Android freezes them with the screen
+    # off. ServeService holds a wake lock while one runs; this hook is the
+    # on/off switch. It is a no-op until the service is up (it never fails).
+    from app.kotassium.mobile import ServeService
+    serve_web.JOB_HOOK = ServeService.setBusy
     return serve_web.serve_local(int(port))

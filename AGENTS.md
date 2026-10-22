@@ -30,7 +30,13 @@ of these lines as the message's last line:
 - **Android** is a WebView APK (`android/`, no Kotlin, no AndroidX) with two
   modes: a window onto a shared URL, or the same `serve_web.py` running inside
   the app via Chaquopy. `kotassium_boot.py` only sets `KOTASSIUM_BASE` /
-  `KOTASSIUM_LIB` and calls `serve_web.serve_local()`; the Gradle build copies
+  `KOTASSIUM_LIB`, points `serve_web.JOB_HOOK` at the shell's
+  `ServeService.setBusy()` and calls `serve_web.serve_local()`.
+  `ServeService` is a foreground service (`mediaPlayback` type, notification
+  included): the server lives in this process, so without it Android freezes
+  the app — music and downloads — the moment the screen turns off. The wake
+  and Wi-Fi locks are held *only* while a download runs (the `JOB_HOOK`), never
+  while idle; local mode starts the service, remote mode must stop it. The Gradle build copies
   `serve_web.py`, `spotify_get.py`, `updater.py` and `web/` from the repo root
   into the APK, so there is still exactly one copy of the server and the page.
   The URL is baked at build time (`-PkotassiumUrl=`, CI reads the

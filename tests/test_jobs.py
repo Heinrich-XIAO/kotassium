@@ -102,6 +102,60 @@ class JobTests(unittest.TestCase):
         _, j = self.req("GET", "/api/job?id=999999")
         self.assertEqual(j.get("error"), "not_found")
 
+    def test_job_hook_reports_busy_then_idle(self):
+        # The Android shell holds a wake lock while this fires True and
+        # releases it on False; a finishing download must not release it
+        # while another is still running.
+        seen = []
+        first, second = threading.Event(), threading.Event()
+        orig_hook = serve_web.JOB_HOOK
+        orig_ytdl = serve_web.ytdl
+
+        def gated(vid, progress=None):
+            (first if vid == "one" else second).wait(3)
+            return vid + ".mp3"
+
+        serve_web.ytdl = gated
+        serve_web.JOB_HOOK = seen.append
+        try:
+            _, a = self.req("GET", "/api/ytdl?id=one")
+            _, b = self.req("GET", "/api/ytdl?id=two")
+            first.set()
+            self.wait_job(a["job"])
+            # one finished, two still running: still busy, so still True
+            end = time.time() + 2
+            while len(seen) < 3 and time.time() < end:
+                time.sleep(0.01)
+            self.assertEqual(seen, [True, True, True])
+            second.set()
+            self.wait_job(b["job"])
+            end = time.time() + 2
+            while len(seen) < 4 and time.time() < end:
+                time.sleep(0.01)
+        finally:
+            serve_web.JOB_HOOK = orig_hook
+            serve_web.ytdl = orig_ytdl
+            first.set()
+            second.set()
+        self.assertEqual(seen, [True, True, True, False])
+        self.assertFalse(serve_web.jobs_active())
+
+    def test_job_hook_failure_does_not_break_downloads(self):
+        # The hook calls into Java; a bad hook must never fail a download.
+        orig_hook = serve_web.JOB_HOOK
+        orig_ytdl = serve_web.ytdl
+
+        serve_web.JOB_HOOK = lambda busy: (_ for _ in ()).throw(RuntimeError("nope"))
+        serve_web.ytdl = lambda vid, progress=None: vid + ".mp3"
+        try:
+            _, j = self.req("GET", "/api/ytdl?id=hookfail")
+            done = self.wait_job(j["job"])
+        finally:
+            serve_web.JOB_HOOK = orig_hook
+            serve_web.ytdl = orig_ytdl
+        self.assertEqual(done["status"], "done")
+        self.assertEqual(done["file"], "hookfail.mp3")
+
     def test_nowplaying_roundtrip(self):
         payload = {"t": "Song", "a": "Artist", "ms": 1000, "pos": 250,
                    "state": "playing", "cover": "/cover/x"}
