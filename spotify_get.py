@@ -14,7 +14,7 @@ import argparse, base64, hashlib
 import threading, hmac, json, os, re, struct, subprocess, sys, time, unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib import request as urlreq
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 SPOTDL_CLIENT_ID = "5f573c9620494bae87890c0f08a60293"
 SPOTDL_CLIENT_SECRET = "212476d9b0f3472eaa762d90b19b0ba8"
@@ -41,71 +41,146 @@ def http_post_form(url, body, headers=None, timeout=30):
 
 
 # ---------------- Anonymous token + pathfinder (Spotify-side search/recs) ----------------
+#
+# The web player mints an anonymous access token with a TOTP. It takes four
+# plain HTTP requests - no browser, no Selenium, no cookies required:
+#
+#   1. GET https://open.spotify.com/                 -> the player bundle URL
+#   2. GET <that bundle>                             -> {secret, version}
+#   3. GET https://open.spotify.com/api/server-time  -> Spotify's own clock
+#   4. GET https://open.spotify.com/api/token?...     -> accessToken
+#
+# The HMAC key is the bundle secret, XOR-obfuscated: every character's code is
+# XORed with (index % 33 + 9), and the *decimal strings* of those numbers are
+# concatenated - that string's utf8 bytes are the key. Using the raw secret
+# bytes (or the char codes) instead produces a TOTP the server rejects with
+# "400 totpVerExpired", which is what used to make this lane look dead.
 
-_TOTP_SECRET = "{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH"   # version 59; auto-refreshed below
-_TOTP_VERSION = "59"
-_token_override = None
+_TOTP_SECRET_RE = re.compile(r"\{\s*secret:\s*(['\"])((?:\\.|(?!\1).)*)\1\s*,\s*version:\s*(\d+)\s*\}")
+# A hand-pasted bearer (devtools on any logged-out player page) wins over the
+# anonymous mint - it is the escape hatch when Spotify blocks the mint.
+_token_override = os.environ.get("KOTASSIUM_SPOTIFY_TOKEN") or None
 _api_get_tries = 12
 
-def _totp(secret: bytes, ts_ms: int) -> str:
+_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+_SPOTIFY_HEADERS = {"User-Agent": _UA, "Referer": "https://open.spotify.com/", "Accept": "*/*"}
+
+def _fetch(url, headers=None, timeout=20):
+    req = urlreq.Request(url, headers=headers or _SPOTIFY_HEADERS)
+    with urlreq.urlopen(req, timeout=timeout) as r:
+        return r.read().decode("utf-8", "replace")
+
+def _totp_key(secret: str) -> bytes:
+    """Un-obfuscate the bundle secret into the HMAC key (see the note above)."""
+    return "".join(str(ord(c) ^ (i % 33 + 9)) for i, c in enumerate(secret)).encode("utf-8")
+
+def _totp(key: bytes, ts_ms: int) -> str:
     counter = int(ts_ms // 1000 // 30)
-    h = hmac.new(secret, struct.pack(">Q", counter), hashlib.sha1).digest()
+    h = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
     o = h[-1] & 15
-    return str(((h[o] & 127) << 24 | (h[o + 1] & 255) << 16 | (h[o + 2] & 255) << 8 | (h[o + 3] & 255)) % 1000000).zfill(6)
+    return str(((h[o] & 127) << 24 | (h[o + 1] & 255) << 16 | (h[o + 2] & 255) << 8 | h[o + 3]) % 1000000).zfill(6)
 
-def _scrape_current_totp_secret():
-    """Try to pull the CURRENT totp secret+version from the live desktop bundle."""
-    global _TOTP_SECRET, _TOTP_VERSION
+def _server_time_ms() -> int:
+    """Spotify's clock, so a skewed local clock cannot break the TOTP."""
     try:
-        html = urlreq.urlopen(urlreq.Request("https://open.spotify.com/",
-            headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"}), timeout=20).read().decode()
-        m = re.search(r'https://open\.spotifycdn\.com/cdn/build/web-player/web-player\.[a-f0-9]+\.js', html)
-        if not m:
-            return
-        js = urlreq.urlopen(m.group(0), timeout=20).read().decode()
-        hit = re.search(r'\{secret:"([^"]+)",version:(\d+)\}', js)
-        if hit and hit.group(2) != _TOTP_VERSION:
-            _TOTP_SECRET, _TOTP_VERSION = hit.group(1), hit.group(2)
-            log(f"refreshed totp secret -> version {_TOTP_VERSION}")
-    except Exception as e:
-        log(f"totp secret scrape failed: {e}")
+        d = json.loads(_fetch("https://open.spotify.com/api/server-time"))
+        return int(float(d["serverTime"]) * 1000)
+    except Exception:
+        return int(time.time() * 1000)
 
-def get_anon_token():
-    """Mint an anonymous web-player token (no account needed)."""
-    now = int(time.time() * 1000)
-    params = (f"reason=init&productType=mobile-web-player&totp={_totp(_TOTP_SECRET.encode(), now)}"
-              f"&totpServer={_totp(_TOTP_SECRET.encode(), now)}&totpVer={_TOTP_VERSION}")
-    req = urlreq.Request(f"https://open.spotify.com/api/token?{params}",
-                         headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"})
-    d = json.loads(urlreq.urlopen(req, timeout=20).read())
+def _player_secret(force=False):
+    """The {secret, version} pair from the live web-player bundle."""
+    if not force:
+        try:
+            d = json.load(open(SECRET_CACHE))
+            if d.get("secret") and d.get("version"):
+                return d["secret"], int(d["version"])
+        except Exception:
+            pass
+    html = _fetch("https://open.spotify.com/")
+    m = re.search(r'https://open\.spotifycdn\.com/cdn/build/web-player/web-player\.[a-f0-9]+\.js', html)
+    if not m:
+        raise RuntimeError("could not find the web-player bundle")
+    js = _fetch(m.group(0))
+    hit = _TOTP_SECRET_RE.search(js)
+    if not hit:
+        raise RuntimeError("no totp secret in the web-player bundle")
+    secret = hit.group(2).replace("\\'", "'").replace('\\"', '"')
+    version = int(hit.group(3))
+    try:
+        os.makedirs(os.path.dirname(SECRET_CACHE), exist_ok=True)
+        json.dump({"secret": secret, "version": version}, open(SECRET_CACHE, "w"))
+    except Exception:
+        pass
+    return secret, version
+
+def get_anon_token(force_secret=False):
+    """Mint an anonymous web-player token (no account, no browser).
+    Returns (accessToken, expiration_ms)."""
+    secret, version = _player_secret(force=force_secret)
+    key = _totp_key(secret)
+    now = _server_time_ms()
+    params = {"reason": "init", "productType": "web-player",
+              "totp": _totp(key, now), "totpServer": _totp(key, now),
+              "totpVer": str(version)}
+    url = "https://open.spotify.com/api/token?" + urlencode(params)
+    try:
+        d = json.loads(_fetch(url))
+    except urlreq.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        if e.code in (400, 401, 403) and not force_secret:
+            # Spotify rotated the secret (or rejected our clock): scrape the
+            # bundle again and retry exactly once.
+            log(f"anon mint rejected ({e.code}) - rescraping the totp secret")
+            return get_anon_token(force_secret=True)
+        raise RuntimeError(f"anon mint rejected ({e.code}): {body[:120]}")
     if not d.get("accessToken"):
         raise RuntimeError(f"anon mint rejected: {json.dumps(d)[:120]}")
-    return d["accessToken"]
+    return d["accessToken"], d.get("accessTokenExpirationTimestampMs") or 0
 
 TOKEN_CACHE = os.path.join(os.path.expanduser("~"), ".cache", "spotify_get_token.json")
+SECRET_CACHE = os.path.join(os.path.expanduser("~"), ".cache", "spotify_get_secret.json")
 
 def _cache_load():
     try:
         d = json.load(open(TOKEN_CACHE))
-        if time.time() - d["t"] < 3300 and d.get("tok"):
-            return d["tok"]
+        tok = d.get("tok")
+        if not tok:
+            return None
+        exp = d.get("exp")
+        if exp:
+            # keep a minute of slack so a token never dies mid-request
+            return tok if exp > time.time() * 1000 + 60_000 else None
+        return tok if time.time() - d.get("t", 0) < 3300 else None
     except Exception:
-        pass
-    return None
+        return None
 
-def _cache_save(tok):
+def _cache_save(tok, exp_ms=0):
     try:
         os.makedirs(os.path.dirname(TOKEN_CACHE), exist_ok=True)
-        json.dump({"t": time.time(), "tok": tok}, open(TOKEN_CACHE, "w"))
+        json.dump({"t": time.time(), "tok": tok, "exp": exp_ms}, open(TOKEN_CACHE, "w"))
     except Exception:
         pass
 
-# The anonymous web-player token mint goes stale whenever Spotify rotates its
-# TOTP secret (it currently answers 400 totpVerExpired). Remember that for a
-# while instead of re-running the mint + headless-browser harvest on every
-# single call - that used to burn ~15s per pathfinder retry and turned a
-# fast failure into a ~70s request the UI sat on without an answer.
+def _cache_clear():
+    try:
+        os.remove(TOKEN_CACHE)
+    except OSError:
+        pass
+
+# If the anonymous mint keeps failing, remember that for a while instead of
+# retrying it on every single call - the client-credentials lane below still
+# resolves public tracks/albums/playlists, and a dead pathfinder must not
+# abort the whole resolve.
 _anon_dead_until = 0.0
+
+def anon_dead():
+    """True when the anonymous web-player token lane is known to be dead, so
+    pathfinder cannot authenticate. A client-credentials token is not a
+    web-player token, so it answers 403 (or a bare KeyError off a partial
+    payload) rather than anything meaningful."""
+    return time.time() < _anon_dead_until
 
 class TokenProvider:
     def __init__(self, manual=None):
@@ -125,35 +200,14 @@ class TokenProvider:
             return self._anon
         global _anon_dead_until
         if time.time() >= _anon_dead_until:
-            if not getattr(self, "_scraped", False):
-                self._scraped = True
-                _scrape_current_totp_secret()
             try:
-                self._anon = get_anon_token()
-                _cache_save(self._anon)
+                tok, exp = get_anon_token()
+                self._anon = tok
+                _cache_save(tok, exp)
                 log("anonymous token minted (pathfinder lane)")
                 return self._anon
             except Exception as e:
                 log(f"anon mint failed: {e}")
-            self._scrape_attempted = getattr(self, "_scrape_attempted", False)
-            if not self._scrape_attempted:
-                _scrape_current_totp_secret()
-                self._scrape_attempted = True
-                return self.bearer()   # one retry in case the scrape found a new secret
-            # last auto lane: headless-Firefox harvest (works even when the mint endpoint blocks us)
-            try:
-                harv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "harvest_token.py")
-                if os.path.exists(harv) or True:
-                    r = subprocess.run([sys.executable, harv], capture_output=True, text=True, timeout=90)
-                    tok = (r.stdout or "").strip().splitlines()[-1] if r.stdout else ""
-                    if tok.startswith("BQ") and len(tok) > 100:
-                        self._anon = tok
-                        _cache_save(tok)
-                        log("anonymous token harvested via headless browser")
-                        return self._anon
-                    log(f"harvest failed: {(r.stderr or '')[-120:]}")
-            except Exception as e:
-                log(f"harvest lane failed: {e}")
             _anon_dead_until = time.time() + 1800
             log("anon lane dead - using client_credentials for the rest of this session")
         try:
@@ -201,6 +255,8 @@ def pathfinder_query(provider, operation, vhash, variables, tries=4):
                     raise RuntimeError("bearer token rejected (401): expired or revoked - "
                                        "grab a fresh one from any logged-out player page or rerun --mint-token")
                 provider._anon = None   # token died - re-mint
+                _cache_clear()          # ...and drop the dead one on disk,
+                                       # or the re-mint just reads it back
                 try:
                     provider.bearer()   # one immediate re-mint attempt
                     continue
@@ -300,17 +356,21 @@ def spotify_recommend(provider, track_uri, n):
 
 # ---------------- Spotify resolution ----------------
 
-def get_token():
+def get_token(tries=8):
+    """Client-credentials token. `tries` bounds the retry ladder: the CLI
+    default stays patient (360s of backoff), but a served request must fail in
+    seconds rather than leaving the page spinning on a silent sleep loop."""
     body = f"grant_type=client_credentials&client_id={SPOTDL_CLIENT_ID}&client_secret={SPOTDL_CLIENT_SECRET}"
-    for attempt in range(8):
+    for attempt in range(tries):
         try:
             j = http_post_form("https://accounts.spotify.com/api/token", body)
             if j.get("access_token"):
                 return j["access_token"]
         except Exception as e:
             log(f"token attempt {attempt}: {e}")
-        time.sleep(10 + attempt * 10)
-    raise RuntimeError("could not mint Spotify token")
+        if attempt < tries - 1:
+            time.sleep(min(10 + attempt * 10, 20))
+    raise RuntimeError("could not mint Spotify token (accounts.spotify.com unreachable?)")
 
 def api_get(url, token, tries=12):
     for attempt in range(tries):
@@ -324,8 +384,9 @@ def api_get(url, token, tries=12):
                 raise
             wait = min(30 + attempt * 30, 120)
             if attempt >= _api_get_tries - 1:
-                raise RuntimeError(f"api.spotify.com still throttled - "
-                                   f"use --token (grab from any logged-out player page) or retry later")
+                raise RuntimeError("Spotify is rate-limiting this network (HTTP 429) - "
+                                   "not your link. Try again in a minute, or on "
+                                   "wi-fi instead of mobile data.")
             log(f"api throttled ({e.code}), waiting {wait}s: {url.split('?')[0].split('/')[-1]}")
             time.sleep(wait)
     raise RuntimeError(f"api still throttled after retries: {url}")
@@ -358,18 +419,33 @@ def resolve_pathfinder(kind, sid, provider):
         t = d["data"]["trackUnion"]
         return t.get("name") or "track", [_pf_track_obj(t)]
     if kind == "album":
-        d = pathfinder_query(provider, "getAlbumNameAndTracks",
-            "8628ad33de3267d7bef516c76a746979a5f98891a2c9eaff3dfec828abdcd983",
+        # getAlbumNameAndTracks answers with track nodes that carry no name
+        # and no duration; getAlbum is the op that fills them in (and brings
+        # the album cover art).
+        d = pathfinder_query(provider, "getAlbum",
+            "0b6ce3511e1b02e4a40fa95440f992acbe85080eb308af9194322d708fc1914f",
             {"uri": f"spotify:album:{sid}", "offset": 0, "limit": 50})
         alb = d["data"]["albumUnion"]
+        if "tracksV2" not in alb or not alb.get("name"):
+            # Spotify answers an op it does not understand with a stub node
+            # holding only __typename. Treating that as an empty album would
+            # save a silently wrong library, so fail loudly and let the
+            # caller fall through to api.spotify.com.
+            raise RuntimeError("pathfinder returned a stub album "
+                               "(no albumUnion data)")
         name = alb.get("name") or "album"
+        cover = None
+        try:
+            cover = (((alb.get("coverArt") or {}).get("sources")) or [{}])[0].get("url")
+        except Exception:
+            pass
         tracks = []
         for it in alb["tracksV2"]["items"]:
             t = it.get("track") or {}
             if t.get("name"):
                 o = _pf_track_obj(t, album_fallback=name)
                 if not o["cover"]:
-                    o["cover"] = None
+                    o["cover"] = cover
                 tracks.append(o)
         return name, tracks
     # playlist
@@ -411,7 +487,16 @@ def resolve(url):
     if not m:
         raise ValueError(f"unrecognized spotify url: {url}")
     kind, sid = m.group(1), m.group(2)
+    # When the anon lane is already known dead, pathfinder can only answer 403
+    # (a client-credentials token is not a web-player token), so skip straight
+    # to the lane that works instead of paying for a doomed round-trip.
+    skip_pathfinder = anon_dead() and not _token_override
+    if skip_pathfinder:
+        log("skipping pathfinder (anon token lane known dead) - "
+            "going straight to api.spotify.com")
     try:
+        if skip_pathfinder:
+            raise RuntimeError("pathfinder skipped")
         name, tracks = resolve_pathfinder(kind, sid, TokenProvider(_token_override))
         bad = [t for t in tracks if not t["title"] or not t["artist"]]
         if bad:
@@ -426,9 +511,13 @@ def resolve(url):
         # public tracks/albums/playlists on client_credentials, so a dead
         # pathfinder (expired anon token) must not abort the whole resolve.
         log("trying api.spotify.com lane")
-    token = get_token()
+    # Served from the page, so keep the whole ladder short: a couple of token
+    # attempts and a single 429 wait. A throttled shared IP is common on phone
+    # hotspots, and making the user sit through 90s of backoff just to hear
+    # "throttled" is the hang we are fixing - one wait, then a clear answer.
+    token = get_token(tries=3)
     global _api_get_tries
-    _api_get_tries = 3
+    _api_get_tries = 2
     if kind == "track":
         t = api_get(f"https://api.spotify.com/v1/tracks/{sid}", token)
         return t["name"] or "spotify", [track_obj(t)]
@@ -700,8 +789,8 @@ def main():
     args = ap.parse_args()
 
     global _token_override
-    _token_override = args.token
-    provider = TokenProvider(args.token)
+    _token_override = args.token or _token_override
+    provider = TokenProvider(_token_override)
     if args.mint_token:
         cached = _cache_load()
         if cached:
@@ -709,24 +798,15 @@ def main():
             print("full:", cached)
             sys.exit(0)
         try:
-            tok = get_anon_token()
-            _cache_save(tok)
+            tok, exp = get_anon_token()
+            _cache_save(tok, exp)
             print("minted + cached:", tok)
             sys.exit(0)
         except Exception as e:
-            print(f"direct mint failed: {e}")
-            _scrape_current_totp_secret()
-            print(f"totp secret version now: {_TOTP_VERSION}")
-            try:
-                tok = get_anon_token()
-                _cache_save(tok)
-                print("minted after scrape:", tok)
-                sys.exit(0)
-            except Exception as e2:
-                print(f"scrape-retry mint failed: {e2}")
-                print("manual fallback: open any spotify track page logged-out, devtools > network,")
-                print("copy the Authorization header of a pathfinder/api request -> pass via --token")
-                sys.exit(2)
+            print(f"mint failed: {e}")
+            print("manual fallback: open any spotify track page logged-out, devtools > network,")
+            print("copy the Authorization header of a pathfinder/api request -> pass via --token")
+            sys.exit(2)
     mode_search = "open.spotify.com" not in args.url and not args.url.startswith("spotify:")
     if args.truth_file:
         raw = json.load(open(args.truth_file))

@@ -23,8 +23,9 @@ lands on every platform at once.
   `osascript` on macOS).
 - `setup.sh` / `install.sh` — venv setup (Linux + macOS) and the Linux app-grid
   launcher. `install-macos.sh` / `build-macos.sh` build `Kotassium.app`.
-- `spotify_get.py` / `harvest_token.py` — Spotify resolution helpers used by
-  `serve_web.py`.
+- `spotify_get.py` — Spotify resolution helper used by `serve_web.py`: mints an
+  anonymous web-player token with four plain HTTP requests (no browser), then
+  resolves tracks/albums/playlists through Spotify's Pathfinder API.
 - `tests/` — `unittest` coverage for request guards, auth, dependency
   resolution, download jobs, now-playing, MPRIS and the "wrappers stay
   wrappers" invariant.
