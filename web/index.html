@@ -13,14 +13,20 @@ button{background:none;border:0;color:#fff;cursor:pointer;font-family:inherit}
 input{background:none;border:0;color:#fff;font-family:inherit}
 input:focus{outline:none}
 svg{display:block}
-#top{height:56px;flex:none;display:flex;align-items:center;gap:8px;padding:8px;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);position:relative;z-index:5}
-#homeBtn{width:40px;height:40px;border-radius:50%;background:#1f1f1f;display:grid;place-items:center;transition:transform .1s}
+#top{height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:8px 16px;background:#000;position:relative;z-index:5}
+#homeBtn{width:48px;height:48px;border-radius:50%;background:#1f1f1f;display:grid;place-items:center;transition:transform .1s;flex:none}
 #homeBtn:hover{transform:scale(1.06);background:#2a2a2a}
-#searchwrap{background:#242424;border-radius:500px;height:44px;flex:0 1 440px;display:flex;align-items:center;padding:0 12px;border:1px solid transparent}
+#searchwrap{background:#1f1f1f;border-radius:500px;height:48px;flex:1 1 480px;max-width:600px;display:flex;align-items:center;padding:0 14px;border:1px solid transparent}
 #searchwrap:hover{background:#2a2a2a}
-#searchwrap:focus-within{border-color:#ffffff60;background:#1f1f1f}
-#q{width:100%;font-size:15px;margin-left:8px}
+#searchwrap:focus-within{border-color:#ffffff4d;background:#242424}
+#q{width:100%;min-width:0;font-size:15px;margin-left:8px}
 #q::placeholder{color:#b3b3b3}
+#qClear{display:none;width:24px;height:24px;border-radius:50%;background:#ffffff26;color:#fff;place-items:center;flex:none}
+#qClear:hover{background:#ffffff40}
+#searchwrap.filled #qClear{display:grid}
+#qDiv{width:1px;height:24px;background:#ffffff26;flex:none;margin:0 4px 0 6px}
+#qBrowse{width:32px;height:32px;border-radius:6px;color:#b3b3b3;display:grid;place-items:center;flex:none}
+#qBrowse:hover{color:#fff;background:#ffffff14}
 #mid{flex:1;display:flex;min-height:0;background:#121212;padding:8px;gap:8px}
 #side{flex:0 0 262px;background:#121212;border-radius:8px;display:flex;flex-direction:column;min-height:0;transition:flex-basis .2s}
 #main{flex:1;background:#121212;border-radius:8px;overflow-y:auto;position:relative}
@@ -142,7 +148,7 @@ svg{display:block}
 #dlbar{flex:1;height:4px;background:#ffffff26;border-radius:2px;overflow:hidden;min-width:80px}
 #dlfill{display:block;height:100%;width:0;background:#1ed760;transition:width .2s}
 #dlpct{color:#b3b3b3;font-variant-numeric:tabular-nums;min-width:32px;text-align:right}
-#upd{position:fixed;top:64px;right:20px;background:#181818;border:1px solid #ffffff1f;color:#fff;padding:7px 8px 7px 14px;border-radius:8px;font-size:12px;display:none;align-items:center;gap:10px;z-index:100;box-shadow:0 6px 20px #0008;max-width:420px}
+#upd{position:fixed;top:72px;right:20px;background:#181818;border:1px solid #ffffff1f;color:#fff;padding:7px 8px 7px 14px;border-radius:8px;font-size:12px;display:none;align-items:center;gap:10px;z-index:100;box-shadow:0 6px 20px #0008;max-width:420px}
 #upd.on{display:flex}
 #updtext{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #updbtn{background:#1ed760;color:#000;border:0;border-radius:999px;padding:5px 12px;font:inherit;font-weight:700;cursor:pointer;flex:none}
@@ -181,13 +187,14 @@ body.dfs.dfsidle #dfsInfo{opacity:1}
 .dfsQt small{display:block;font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #dfsQrows{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-bottom:96px}
 /* mobile */
-#libBtn{display:none;width:40px;height:40px;border-radius:50%;background:#1f1f1f;flex:none;place-items:center}
+#libBtn{display:none;width:48px;height:48px;border-radius:50%;background:#1f1f1f;flex:none;place-items:center}
 @media(max-width:820px){
 body{-webkit-tap-highlight-color:transparent}
 #libBtn{display:grid}
 #dfsBtn{display:none}
 #collSide{display:none}
 #searchwrap{flex:1 1 auto;min-width:0}
+#qDiv,#qBrowse{display:none}
 #mid{position:relative;padding:4px}
 #side{position:absolute;z-index:30;left:4px;top:4px;bottom:4px;width:280px;display:none;background:#181818;border-radius:8px;box-shadow:0 12px 32px #000d;flex:none}
 #side.open{display:flex}
@@ -260,7 +267,7 @@ body{-webkit-tap-highlight-color:transparent}
 <div id=top>
 <button id=libBtn onclick="var s=document.getElementById('side');s.classList.toggle('open')" title="Your Library"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M3 3h2.5v18H3zM7 3h2.5v18H7zM11 3.6L21.6 5v14L11 20.4z"/></svg></button>
 <button id=homeBtn onclick=goHome() title="Home"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 3l9 8h-2.5v9h-5v-6h-3v6h-5v-9H3z"/></svg></button>
-<div id=searchwrap><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b3b3b3" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id=q placeholder="What do you want to play?" onkeydown="if(event.key==='Enter')doSearch()"></div>
+<div id=searchwrap><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b3b3b3" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id=q placeholder="What do you want to play?" oninput="document.getElementById('searchwrap').classList.toggle('filled',!!this.value)" onkeydown="if(event.key==='Enter')doSearch()"><button id=qClear onclick="var i=document.getElementById('q');i.value='';document.getElementById('searchwrap').classList.remove('filled');i.focus()" title="Clear search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button><span id=qDiv></span><button id=qBrowse onclick=goHome() title="Browse your playlists"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4.5h13v2H3zM3 8.25h13v2H3zM3 12h18v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z"/></svg></button></div>
 </div>
 <div id=mid>
 <aside id=side>
@@ -512,7 +519,7 @@ function addLink(){
       if(i>=0)openPlaylist(i)})}).catch(function(e){
         stop();toast('could not open: '+((e&&(e.message||e))||'network error'))})}
 /* ---------------- home ---------------- */
-function goHome(){document.getElementById('q').value='';renderHome()}
+function goHome(){var qi=document.getElementById('q');qi.value='';document.getElementById('searchwrap').classList.remove('filled');renderHome()}
 function renderHome(){PLAYING_PL=null;
   var m=document.getElementById('main');
   m.innerHTML='<div id=homeView><h2>Your playlists</h2><div class=cardgrid></div></div>';
