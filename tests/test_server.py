@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import threading
+import time
 import unittest
 import urllib.parse
 
@@ -51,6 +52,52 @@ class ServerSecurityTests(unittest.TestCase):
         code, _ = self.req("POST", "/api/update",
                            headers={"Origin": "https://evil.example"})
         self.assertEqual(code, 403)
+
+    def test_update_check_is_origin_guarded(self):
+        code, _ = self.req("POST", "/api/update/check",
+                           headers={"Origin": "https://evil.example"})
+        self.assertEqual(code, 403)
+
+    def test_update_check_is_post_only(self):
+        code, _ = self.req("GET", "/api/update/check")
+        self.assertEqual(code, 404)
+
+    def test_update_check_answers_immediately(self):
+        real = serve_web.updater.latest_release
+        with serve_web.updater._lock:
+            saved = dict(serve_web.updater._state)
+            serve_web.updater._state.update(state="idle", available=False, error=None)
+        release = threading.Event()
+
+        def slow():
+            release.wait(3)
+            return {"tag_name": "v9.9.9", "assets": []}
+
+        serve_web.updater.latest_release = slow
+        try:
+            code, body = self.req("POST", "/api/update/check", body=b"{}",
+                                  headers={"Origin": "http://127.0.0.1:%d" % self.port,
+                                           "Content-Type": "application/json"})
+            self.assertEqual(code, 200)
+            st = json.loads(body)
+            self.assertIn(st["state"], ("checking", "idle"))
+            release.set()
+            # the background worker settles back to idle on its own
+            for _ in range(200):
+                st = json.loads(self.req("GET", "/api/update")[1])
+                if st["state"] != "checking":
+                    break
+                time.sleep(0.02)
+            self.assertEqual(st["state"], "idle")
+        finally:
+            release.set()
+            end = time.time() + 3
+            while serve_web.updater.status()["state"] == "checking" and time.time() < end:
+                time.sleep(0.02)
+            with serve_web.updater._lock:
+                serve_web.updater._state.clear()
+                serve_web.updater._state.update(saved)
+            serve_web.updater.latest_release = real
 
     def test_dns_rebinding_host_rejected(self):
         code, _ = self.req("GET", "/api/health", headers={"Host": "evil.example"})

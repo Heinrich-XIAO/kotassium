@@ -604,6 +604,11 @@ def handle_post(path, params, raw, hdr):
         except Exception as e:
             st = dict(updater.status(), error=str(e)[:200])
         return 200, "application/json", json.dumps(st).encode(), None, False
+    if path == "/api/update/check":
+        # Manual "check for updates": re-queries GitHub now instead of at the
+        # next launch. Returns immediately with state=checking; the page polls
+        # /api/update until it settles.
+        return 200, "application/json", json.dumps(updater.check_async()).encode(), None, False
     if path == "/api/cover/cache":
         try:
             j = json.loads(raw.decode("utf-8", "replace"))

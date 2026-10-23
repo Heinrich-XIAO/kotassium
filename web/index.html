@@ -151,8 +151,14 @@ svg{display:block}
 #upd{position:fixed;top:72px;right:20px;background:#181818;border:1px solid #ffffff1f;color:#fff;padding:7px 8px 7px 14px;border-radius:8px;font-size:12px;display:none;align-items:center;gap:10px;z-index:100;box-shadow:0 6px 20px #0008;max-width:420px}
 #upd.on{display:flex}
 #updtext{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#updbtn{background:#1ed760;color:#000;border:0;border-radius:999px;padding:5px 12px;font:inherit;font-weight:700;cursor:pointer;flex:none}
+/* the update pill is one morphing button: ⟳ check (idle) → ⟳ spinning → ⬇ download */
+#updbtn{background:#2a2a2a;color:#b3b3b3;border:1px solid #ffffff2e;border-radius:50%;width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;transition:color .15s,border-color .15s,background .15s}
+#updbtn:hover{color:#fff;border-color:#ffffff66}
+#updbtn.go{background:#1ed760;color:#000;border-color:#1ed760}
 #updbtn:disabled{opacity:.6;cursor:default}
+#updbtn.spin svg{animation:updspin .9s linear infinite}
+@keyframes updspin{to{transform:rotate(360deg)}}
+#upd.icononly{padding:7px;gap:0}
 #empty{color:#b3b3b3;padding:24px 8px;font-size:14px}
 #empty h3{color:#fff;margin:0 0 6px}
 #bigplayBtns{display:flex}
@@ -329,7 +335,7 @@ body{-webkit-tap-highlight-color:transparent}
 <div id=toast class=tcard></div>
 <div id=upnext class=tcard></div>
 <div id=dl><span id=dllabel>fetching</span><div id=dlbar><i id=dlfill></i></div><span id=dlpct>0%</span></div>
-<div id=upd><span id=updtext></span><button id=updbtn onclick=startUpdate()>Restart &amp; Update</button></div>
+<div id=upd><span id=updtext></span><button id=updbtn onclick=updAction() title="Check for updates"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
 <audio id=au preload=auto></audio>
 <script>
 var AU=document.getElementById('au');
@@ -1015,37 +1021,66 @@ try{var _v=parseFloat(localStorage.getItem('kot_vol'));if(!isNaN(_v)){AU.volume=
 try{if(localStorage.getItem('kot_shuf')==='1'){SHUF=true;document.querySelectorAll('.aicon#shufb,.aicon#shuf2,.aicon#fsShuf').forEach(function(b){b.classList.add('on')})}}catch(e){}
 try{var _r=parseInt(localStorage.getItem('kot_repeat'));if(!isNaN(_r)){REPEAT=_r;updateRepeatUI()}}catch(e){}
 /* ---------------- updates (macOS app bundle) ---------------- */
+var IC_CHECK='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
+var IC_DOWN='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+var _updManual=false,_updTimer=0;
 function renderUpdate(st){
   var d=document.getElementById('upd'),t=document.getElementById('updtext'),b=document.getElementById('updbtn');
   if(!st||!st.supported){d.classList.remove('on');return}
+  d.classList.add('on');
+  updAction.st=st;
   if(st.state==='downloading'||st.state==='installing'||st.state==='ready'){
-    d.classList.add('on');b.style.display='none';
+    b.style.display='none';
     t.textContent=st.state==='downloading'?'downloading update '+Math.round(st.pct||0)+'%':(st.state==='ready'?'restarting...':'installing update...');
+    d.classList.remove('icononly');
     return;
   }
-  if(st.state==='error'){d.classList.add('on');b.style.display='';b.disabled=false;b.textContent='Retry';t.textContent=st.error||'update failed';return}
-  if(st.available){
-    d.classList.add('on');
-    if(st.can_install===false){
-      b.style.display='none';
-      t.textContent='Kotassium '+(st.latest||'')+' is available — move it to Applications to update';
-    } else {
-      b.style.display='';b.disabled=false;b.textContent='Restart & Update';
-      t.textContent='Kotassium '+(st.latest||'')+' is available';
-    }
-  } else d.classList.remove('on');
+  var chk=(st.state==='checking'),got=!!st.available&&st.state!=='error';
+  b.style.display='';
+  b.classList.toggle('spin',chk);
+  b.classList.toggle('go',(got||st.state==='error')&&st.can_install!==false);
+  b.innerHTML=(got||st.state==='error')?IC_DOWN:IC_CHECK;
+  b.title=chk?'Checking for updates...':(st.state==='error'?'Retry update':(got?'Restart & Update':'Check for updates'));
+  b.disabled=chk;
+  if(st.state==='error')t.textContent=st.error||'update failed';
+  else if(st.can_install===false)t.textContent='Kotassium '+(st.latest||'')+' is available — move it to Applications to update';
+  else if(got)t.textContent='Kotassium '+(st.latest||'')+' is available';
+  else if(st.error)t.textContent=st.error;
+  else if(_updManual){
+    _updManual=false;
+    t.textContent='Kotassium '+(st.version||'')+' is up to date';
+    setTimeout(function(){renderUpdate(updAction.st)},4000);
+  }
+  else t.textContent='';
+  d.classList.toggle('icononly',!t.textContent);
 }
-function pollUpdate(){
-  fetch('/api/update').then(function(r){return r.json()}).then(function(st){
-    renderUpdate(st);
-    if(st.state==='downloading'||st.state==='installing')setTimeout(pollUpdate,700);
-  }).catch(function(){});
+function updAction(){
+  var st=updAction.st||{};
+  if(st.available&&st.state!=='error')startUpdate();else checkUpdate();
+}
+function checkUpdate(){
+  _updManual=true;
+  var b=document.getElementById('updbtn');
+  if(b){b.disabled=true;b.classList.add('spin')}
+  postJSON('/api/update/check',{}).then(function(st){renderUpdate(st);pollUpdate(300)})
+    .catch(function(){_updManual=false;toast('could not check for updates')});
+}
+function pollUpdate(delay){
+  if(_updTimer)return;
+  var go=function(){
+    _updTimer=0;
+    fetch('/api/update').then(function(r){return r.json()}).then(function(st){
+      renderUpdate(st);
+      if(st.state==='downloading'||st.state==='installing'||st.state==='checking')pollUpdate(700);
+    }).catch(function(){});
+  };
+  if(delay)_updTimer=setTimeout(go,delay);else go();
 }
 function startUpdate(){
   var b=document.getElementById('updbtn');
-  if(b){b.disabled=true;b.textContent='Starting...'}
-  postJSON('/api/update',{}).then(function(st){renderUpdate(st);setTimeout(pollUpdate,500)})
-    .catch(function(){toast('could not start the update')});
+  if(b){b.disabled=true;b.classList.add('spin')}
+  postJSON('/api/update',{}).then(function(st){renderUpdate(st);pollUpdate(500)})
+    .catch(function(){if(b)b.disabled=false;toast('could not start the update')});
 }
 if(/[?&]desktop=1/.test(location.search))setTimeout(pollUpdate,1500);
 if(!/[?&]desktop=1/.test(location.search)){

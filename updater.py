@@ -321,7 +321,22 @@ def start_install():
 
 
 def check_async():
-    threading.Thread(target=check, daemon=True).start()
+    """Start a release check in the background, returning the status with
+    state="checking" so the page can spin while the answer is on its way.
+
+    Never runs alongside another check (one click = one GitHub request, and
+    the anonymous quota is 60/hour) and never disturbs an install in
+    progress: while a download is running its own state is more interesting
+    than a fresh check.
+    """
+    with _lock:
+        run = _state.get("state") not in ("checking", "downloading",
+                                          "installing", "ready")
+        if run:
+            _state.update(state="checking", error=None)
+    if run:
+        threading.Thread(target=check, daemon=True).start()
+    return status()
 
 
 # ---------------------------------------------------------------- selftest

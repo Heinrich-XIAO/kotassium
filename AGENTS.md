@@ -93,9 +93,17 @@ of these lines as the message's last line:
   `dbus-run-session -- desktop-venv/bin/python -m unittest tests.test_mpris`
   and `xvfb-run -a desktop-venv/bin/python tools/ui_check.py`.
 - Updates are self-replacing (`updater.py`): the public repo's latest release
-  is checked at launch, the DMG is verified against `SHA256SUMS`, staged, and
-  a detached `swap.sh` replaces `/Applications/Kotassium.app` after exit and
-  reopens it. `desktop.py` sets `updater.on_installed` so the window closes —
-  never swap while the app is alive. `python updater.py --selftest <dmg>`
-  (run in CI) exercises mount + swap against a throwaway target. Only frozen
-  macOS builds report `supported`; the page hides the pill everywhere else.
+  is checked at launch and re-checked on demand from the page's pill, the DMG
+  is verified against `SHA256SUMS`, staged, and a detached `swap.sh` replaces
+  `/Applications/Kotassium.app` after exit and reopens it. `desktop.py` sets
+  `updater.on_installed` so the window closes — never swap while the app is
+  alive. `python updater.py --selftest <dmg>` (run in CI) exercises mount +
+  swap against a throwaway target. `updater.check_async()` runs a check on a
+  background thread and returns immediately with `state: "checking"`; it is
+  single-flight (one click = one GitHub request, so it never stacks a second
+  thread and never clobbers an install in progress). The page polls
+  `GET /api/update` until the state settles. `POST /api/update/check` triggers
+  that manual check. The top-right pill is one morphing button — ⟳ check (idle)
+  → ⟳ spin (checking) → ⬇ download (update available) → Restart/Retry — and
+  only frozen macOS builds report `supported`; the page hides the pill
+  everywhere else.
