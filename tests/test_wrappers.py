@@ -18,6 +18,7 @@ class WrapperTests(unittest.TestCase):
         "desktop.py",
         "android/app/src/main/java/app/kotassium/mobile/MainActivity.java",
         "android/app/src/main/java/app/kotassium/mobile/ServeService.java",
+        "titlebar_macos.py",
     )
 
     def test_wrappers_contain_no_markup(self):

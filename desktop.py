@@ -9,6 +9,8 @@ integration that a browser tab cannot do:
   * MPRIS v2 on Linux (media keys, GNOME media widget, lock screen)
   * track-change notifications (notify-send / osascript)
   * a single instance and remembered window geometry
+  * macOS: the native title bar folded into the page's top bar
+    (Spotify-style, see titlebar_macos)
 
 The page reports what it is playing to the server (/api/nowplaying); this
 process polls that and feeds the OS. Media-key presses are queued to a worker
@@ -275,10 +277,25 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
     geom = load_geometry()
     kwargs = dict(geom) if geom else {"width": DEFAULT_SIZE[0], "height": DEFAULT_SIZE[1]}
     url = normalize_url(url) if url else "http://127.0.0.1:%d/" % port
+    params = []
     if not dev:
         # desktop=1 stops the page from polling /api/mtime every 2s: that
         # reload-on-change behaviour is only wanted while editing the UI.
-        url += ("&" if "?" in url else "?") + "desktop=1"
+        params.append("desktop=1")
+    if IS_MAC:
+        # Spotify-style chrome: no OS title strip. The page pads its top bar
+        # for the traffic lights and marks it as the window's drag region.
+        params.append("tb=mac")
+    if params:
+        url += ("&" if "?" in url else "?") + "&".join(params)
+    if IS_MAC:
+        # Only elements marked pywebview-drag-region start a window drag, so
+        # pressing inside the search field selects text instead of moving the
+        # window. Ignored by pywebview versions that predate the setting.
+        try:
+            webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
+        except Exception:
+            pass
     w = webview.create_window(
         "Kotassium",
         url,
@@ -286,6 +303,15 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
         background_color="#000000",
         **kwargs
     )
+    if IS_MAC:
+        # before_show runs synchronously before the window is ordered front,
+        # so the native title bar never flashes first. On any failure the
+        # window keeps its normal, usable title bar.
+        try:
+            import titlebar_macos
+            w.events.before_show += lambda: titlebar_macos.integrate(w)
+        except Exception as e:
+            print("[kotassium] title bar: %s" % e, flush=True)
 
     # updater.py runs the swap script once this process is gone; closing the
     # window is what ends it.

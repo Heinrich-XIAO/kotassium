@@ -21,7 +21,7 @@ DATA_FILES = [
 OPTIONS = {
     "argv_emulation": False,
     "packages": ["webview"],
-    "includes": ["serve_web", "spotify_get", "notify", "updater"],
+    "includes": ["serve_web", "spotify_get", "notify", "updater", "titlebar_macos"],
     # Linux-only modules: don't try to bundle PyGObject / MPRIS on macOS.
     "excludes": ["gi", "mpris_linux"],
     "plist": {
