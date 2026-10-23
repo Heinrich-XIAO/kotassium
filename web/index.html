@@ -263,7 +263,6 @@ body{-webkit-tap-highlight-color:transparent}
 #fsQhead b{font-size:15px;font-weight:800}
 #fsQhead span{font-size:12px;color:#8a8a8a}
 .fsQrow{display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:10px;cursor:pointer}
-.fsQrow.cur{background:#ffffff0d}
 .fsQrow:active{background:#ffffff14}
 .fsQn{width:18px;font-size:13px;color:#6f6f6f;text-align:center;flex:none}
 .fsQcov{width:40px;height:40px;border-radius:6px;flex:none;background:#282828;background-size:cover;background-position:center}
@@ -830,11 +829,14 @@ function openFs(){
     return}
   if(fs.classList.contains('on'))return;
   syncFs();
-  var _c=document.querySelector('#fsQrow.cur');if(_c&&_c.scrollIntoView)_c.scrollIntoView({block:'nearest'});
   /* start off-screen, then animate up on the next frame */
   fs.style.transition='none';
   fs.style.transform='translateY(100%)';
   fs.classList.add('on');
+  /* open at the top of the list so the very next track is the first row.
+     This has to come after the 'on' class: while the sheet is display:none
+     the queue has no layout box and setting scrollTop would be ignored. */
+  var _q=document.getElementById('fsQueue');if(_q)_q.scrollTop=0;
   void fs.offsetHeight;
   fs.style.transition='transform .3s '+FS_EASE;
   fs.style.transform='translateY(0)'}
@@ -901,14 +903,18 @@ fsSlider(document.getElementById('fsVolBar'),function(v){AU.volume=v*v;AU.muted=
 function renderFsQueue(){
   var box=document.getElementById('fsQrows'),cnt=document.getElementById('fsQcount'),wrap=document.getElementById('fsQueue');
   if(!box||!wrap)return;
-  wrap.style.display=Q.length?'':'none';
-  cnt.textContent=Q.length+(Q.length===1?' track':' tracks');
+  /* "Up next" means what has not played yet: skip the current track - the
+     hero art above already shows it - and count only what is still to come.
+     Nothing selected yet (QI<0) means the whole queue is upcoming. */
+  var first=(QI>=0)?QI+1:0,n=Math.max(0,Q.length-first);
+  wrap.style.display=(Q.length===0||(QI>=0&&n===0))?'none':'';
+  cnt.textContent=n+(n===1?' track':' tracks');
   var h='';
-  for(var i=0;i<Q.length;i++){
+  for(var i=first;i<Q.length;i++){
     var t=Q[i]||{};
     var bg=String(coverBg(t.cover)).replace(/"/g,"'");
-    h+='<div class="fsQrow'+(i===QI?' cur':'')+'" data-i="'+i+'">'+
-       '<span class=fsQn>'+(i+1)+'</span>'+
+    h+='<div class="fsQrow" data-i="'+i+'">'+
+       '<span class=fsQn>'+(i-first+1)+'</span>'+
        '<span class=fsQcov style="background:'+bg+'"></span>'+
        '<span class=fsQt><b>'+esc(t.t||'')+'</b><small>'+esc(t.a||'')+'</small></span>'+
        '<span class=fsQtime>'+fmt(t.ms||0)+'</span></div>';
