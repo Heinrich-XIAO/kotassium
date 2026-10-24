@@ -219,6 +219,8 @@ class WiringTests(unittest.TestCase):
         # the flag must be read from the URL, before the bar is used
         self.assertIn("documentElement.className", page)
         self.assertIn("addEventListener('dblclick'", page)
+        self.assertIn("addEventListener('mousedown'", page)
+        self.assertIn("e.detail===2", page)
         self.assertIn("toggle_maximized", page)
 
 

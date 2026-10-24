@@ -1344,6 +1344,18 @@ if(/[?&]tb=mac(&|$)/.test(location.search)){
       if(window.pywebview&&window.pywebview.api)
         window.pywebview.api.toggle_maximized();
     });
+    /* pywebview's Cocoa drag-region handler calls preventDefault on mousedown,
+       which suppresses the browser's native dblclick synthesis. Implement
+       double-click ourselves on the drag region and reserve single clicks for
+       window dragging. */
+    bar.addEventListener('mousedown',function(e){
+      if(e.button!==0||e.detail<1||e.target.closest('button,input,a'))return;
+      if(e.detail===2){
+        e.preventDefault();
+        if(window.pywebview&&window.pywebview.api)
+          window.pywebview.api.toggle_maximized();
+      }
+    },true);
     bar.classList.add('pywebview-drag-region');
   });
 }
