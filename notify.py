@@ -20,12 +20,26 @@ def _q(s):
     return str(s).replace("\\", "\\\\").replace('"', '\\"')
 
 
-def notify(title, body):
+def notify(title, body, icon=None):
     if sys.platform == "darwin":
         _run(["osascript", "-e",
               'display notification "%s" with title "%s"' % (_q(body), _q(title))])
     elif shutil.which("notify-send"):
-        _run(["notify-send", "-a", "Kotassium", title, body])
+        cmd = ["notify-send", "-a", "Kotassium"]
+        if icon:
+            cmd.extend(["--icon", icon])
+        _run(cmd + [title, body])
+
+
+def default_icon():
+    """Return the bundled Kotassium icon path for notification daemons."""
+    from pathlib import Path
+
+    candidates = [
+        Path(__file__).resolve().parent / "assets" / "kotassium.svg",
+        Path(sys.executable).resolve().parent.parent / "Resources" / "assets" / "kotassium.svg",
+    ]
+    return next((str(path) for path in candidates if path.is_file()), None)
 
 
 def available():

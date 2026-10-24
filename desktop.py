@@ -260,7 +260,8 @@ def start_nowplaying_watch(port, mpris, notify_tracks):
             artist = (np.get("a") or "").strip()
             if title and title != last["title"]:
                 if last["title"] is not None and notify_tracks and np.get("state") == "playing":
-                    notify_mod.notify(title, artist or "Kotassium")
+                    notify_mod.notify(title, artist or "Kotassium",
+                                      icon=notify_mod.default_icon())
                 last["title"] = title
 
     threading.Thread(target=loop, daemon=True).start()
