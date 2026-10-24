@@ -79,6 +79,11 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("id=updcheck onclick=checkUpdate()", page)
         self.assertIn("again.style.display=got&&!chk?'flex':'none'", page)
         self.assertIn("b.title=chk?'Checking for updates...':(got?'Restart & Update'", page)
+        self.assertIn("function updateSteps(current,latest)", page)
+        self.assertIn("match(/\\d+/g)", page)
+        self.assertIn("versionText+' is available ('+updateSteps(st.version,st.latest)+')'", page)
+        self.assertIn("updateSteps(st.version,st.latest)+') — move it to Applications to update'", page)
+        self.assertIn("return count+' version'+(count===1?'':'s')+' forward'", page)
         self.assertIn("if(st.available&&st.state!=='error')startUpdate();else checkUpdate()", page)
 
     def test_platform_icons_use_shared_kotassium_logo(self):

@@ -1310,6 +1310,7 @@ function renderUpdate(st){
     return;
   }
   var chk=(st.state==='checking'),got=!!st.available&&st.state!=='error';
+  var versionText=st.latest?'Kotassium '+st.latest:'A Kotassium update';
   b.style.display='';
   if(again){again.style.display=got&&!chk?'flex':'none';again.disabled=chk}
   b.classList.toggle('spin',chk);
@@ -1318,8 +1319,8 @@ function renderUpdate(st){
   b.title=chk?'Checking for updates...':(got?'Restart & Update':(st.state==='error'?'Retry update':'Check for updates'));
   b.disabled=chk;
   if(st.state==='error')t.textContent=st.error||'update failed';
-  else if(st.can_install===false)t.textContent='Kotassium '+(st.latest||'')+' is available — move it to Applications to update';
-  else if(got)t.textContent='Kotassium '+(st.latest||'')+' is available';
+  else if(st.can_install===false)t.textContent=versionText+' is available ('+updateSteps(st.version,st.latest)+') — move it to Applications to update';
+  else if(got)t.textContent=versionText+' is available ('+updateSteps(st.version,st.latest)+')';
   else if(st.error)t.textContent=st.error;
   else if(_updManual){
     _updManual=false;
@@ -1328,6 +1329,17 @@ function renderUpdate(st){
   }
   else t.textContent='';
   d.classList.toggle('icononly',!t.textContent);
+}
+function updateSteps(current,latest){
+  var a=String(current||'').match(/\d+/g),b=String(latest||'').match(/\d+/g);
+  if(!a||!b)return 'a new version';
+  a=a.slice(0,3).map(Number);b=b.slice(0,3).map(Number);
+  while(a.length<3)a.push(0);
+  while(b.length<3)b.push(0);
+  /* Patch releases count directly; across major/minor changes, say one
+     version forward rather than guessing how many releases were skipped. */
+  var count=(a[0]!==b[0]||a[1]!==b[1])?1:Math.max(1,b[2]-a[2]);
+  return count+' version'+(count===1?'':'s')+' forward';
 }
 function updAction(){
   var st=updAction.st||{};
