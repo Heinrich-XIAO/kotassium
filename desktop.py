@@ -248,7 +248,7 @@ class WindowChromeAPI:
         if self.window is None:
             return False
         try:
-            if self.window.native.isZoomed():
+            if self.window.maximized:
                 self.window.restore()
             else:
                 self.window.maximize()
@@ -256,6 +256,18 @@ class WindowChromeAPI:
         except Exception as e:
             print("[kotassium] maximize window: %s" % e, flush=True)
             return False
+
+    def close_window(self):
+        if self.window is None:
+            return False
+        self.window.destroy()
+        return True
+
+    def minimize_window(self):
+        if self.window is None:
+            return False
+        self.window.minimize()
+        return True
 
 
 def start_nowplaying_watch(port, mpris, notify_tracks):
@@ -304,8 +316,7 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
         # reload-on-change behaviour is only wanted while editing the UI.
         params.append("desktop=1")
     if IS_MAC:
-        # Spotify-style chrome: no OS title strip. The page pads its top bar
-        # for the traffic lights and marks it as the window's drag region.
+        # The app page supplies frameless window controls in its top bar.
         params.append("tb=mac")
     if params:
         url += ("&" if "?" in url else "?") + "&".join(params)
@@ -321,14 +332,15 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
         url,
         min_size=MIN_SIZE,
         background_color="#000000",
+        frameless=IS_MAC,
+        easy_drag=False,
         js_api=chrome_api,
         **kwargs
     )
     chrome_api.window = w
     if IS_MAC:
-        # before_show runs synchronously before the window is ordered front,
-        # so the native title bar never flashes first. AppKit handles titlebar
-        # dragging and double-click zoom; no WebView drag region is involved.
+        # Native titlebar removed: the page draws the three controls and calls
+        # this JS bridge for close/minimize/maximize.
         try:
             import titlebar_macos
             w.events.before_show += lambda: titlebar_macos.integrate(w)

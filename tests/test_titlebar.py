@@ -10,7 +10,6 @@ import unittest
 from types import SimpleNamespace
 
 import titlebar_macos
-from titlebar_macos import light_origins, lights_right_edge
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -135,28 +134,15 @@ class BrokenNative:
 
 
 class GeometryTests(unittest.TestCase):
-    def test_origins_step_clear_of_the_button(self):
-        for width in (12.0, 14.0, 16.0):
-            xs = light_origins(width)
-            self.assertEqual(len(xs), 3)
-            self.assertEqual(xs[0], 20.0)
-            self.assertTrue(all(b - a >= width + 4
-                                for a, b in zip(xs, xs[1:])),
-                            "lights must not touch at width %s" % width)
-
-    def test_page_reserves_room_for_the_lights(self):
+    def test_app_controls_precede_home_and_search(self):
         page = read("web/index.html")
-        pads = dict(re.findall(r"html\.tbmac #(top|dfsTop)\{padding-left:(\d+)px\}",
-                               page))
-        self.assertEqual(set(pads), {"top", "dfsTop"},
-                         "the shell's top bars must pad for the lights")
-        for width in (12.0, 14.0, 16.0):
-            for bar, pad in pads.items():
-                self.assertLessEqual(
-                    lights_right_edge(width) + 8, int(pad),
-                    "%s padding leaves no gap after lights of width %s"
-                    % (bar, width))
-
+        top = page.index('<div id=top>')
+        controls = page.index('<div id=macControls>', top)
+        home = page.index('<button id=homeBtn', top)
+        search = page.index('<div id=searchwrap', top)
+        self.assertLess(controls, home)
+        self.assertLess(home, search)
+        self.assertIn("html.tbmac #top{padding-left:16px}", page)
 
 class IntegrateTests(unittest.TestCase):
     def setUp(self):
@@ -170,29 +156,12 @@ class IntegrateTests(unittest.TestCase):
         native = FakeNative()
         window = SimpleNamespace(native=native)
         self.assertTrue(titlebar_macos.integrate(window))
-        self.assertTrue(native._mask & (1 << 15),
-                        "full-size content view must be set")
-        self.assertIs(native.transparent, True)
-        self.assertIsNone(native.toolbar)
-        self.assertEqual(native.title_visibility, StubAppKit.NSWindowTitleHidden)
-        self.assertEqual(native.titlebar_separator,
-                         StubAppKit.NSWindowTitlebarSeparatorStyleNone)
-        self.assertEqual(native.background_color, "clear")
-        self.assertEqual(native.frame_displayed, ((0, 0, 900, 600), True))
         self.assertIs(native.movable_by_background, True)
         self.assertIsNotNone(native._delegate)
         self.assertEqual(
             native._delegate.windowWillUseStandardFrame_defaultFrame_(
                 native, (1, 2, 3, 4)),
             (0, 24, 1440, 876))
-        self.assertEqual([b.frame().origin.x for b in native.buttons],
-                         [20.0, 40.0, 60.0])
-        # y stays where AppKit put it (centred in the native title bar)
-        self.assertEqual([b.frame().origin.y for b in native.buttons],
-                         [6.0, 6.0, 6.0])
-        # a normal window keeps its lights visible: nothing may hide them
-        self.assertEqual([b.hidden for b in native.buttons],
-                         [None, None, None])
 
     def test_failures_leave_a_usable_window(self):
         window = SimpleNamespace(native=BrokenNative())
@@ -209,7 +178,10 @@ class WiringTests(unittest.TestCase):
         self.assertIn("before_show", src)
         self.assertIn("toggle_maximized", src)
         self.assertIn("DRAG_REGION_DIRECT_TARGET_ONLY", src)
-        self.assertIn("setMovableByWindowBackground_", read("titlebar_macos.py"))
+        self.assertIn("frameless=IS_MAC", src)
+        self.assertIn("easy_drag=False", src)
+        self.assertIn("close_window", src)
+        self.assertIn("minimize_window", src)
         self.assertIn("windowWillUseStandardFrame_defaultFrame_", read("titlebar_macos.py"))
 
     def test_page_marks_the_drag_region(self):
@@ -222,7 +194,13 @@ class WiringTests(unittest.TestCase):
         self.assertIn("addEventListener('mousedown'", page)
         self.assertIn("e.detail===2", page)
         self.assertIn("toggle_maximized", page)
-
+        self.assertIn("id=macControls", page)
+        self.assertIn("id=macClose", page)
+        self.assertIn("id=macMin", page)
+        self.assertIn("id=macZoom", page)
+        self.assertIn('id=macClose title="Close window" onclick=', page)
+        self.assertIn('id=macMin title="Minimize window" onclick=', page)
+        self.assertIn('id=macZoom title="Maximize window" onclick=', page)
 
 if __name__ == "__main__":
     unittest.main()
