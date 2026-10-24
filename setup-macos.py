@@ -11,6 +11,7 @@ from setuptools import setup
 VERSION = os.environ.get("KOTASSIUM_VERSION", "2.1.0").lstrip("v")
 
 APP = ["desktop.py"]
+ICON = "web/icons/kotassium.icns"
 DATA_FILES = [
     ("web", ["web/index.html", "web/manifest.webmanifest", "web/sw.js"]),
     ("web/icons", ["web/icons/icon-192.png", "web/icons/icon-512.png",
@@ -22,6 +23,7 @@ OPTIONS = {
     "argv_emulation": False,
     "packages": ["webview"],
     "includes": ["serve_web", "spotify_get", "notify", "updater", "titlebar_macos"],
+    "iconfile": ICON,
     # Linux-only modules: don't try to bundle PyGObject / MPRIS on macOS.
     "excludes": ["gi", "mpris_linux"],
     "plist": {
@@ -31,6 +33,7 @@ OPTIONS = {
         "CFBundleShortVersionString": VERSION,
         "CFBundleVersion": VERSION,
         "NSHighResolutionCapable": True,
+        "CFBundleIconFile": "kotassium.icns",
         "LSMinimumSystemVersion": "11.0",
     },
 }

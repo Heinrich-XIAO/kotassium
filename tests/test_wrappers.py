@@ -45,6 +45,16 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("<title>Kotassium</title>", page)
         self.assertIn("serviceWorker", page)
 
+    def test_platform_icons_use_shared_kotassium_logo(self):
+        mac_setup = read("setup-macos.py")
+        self.assertIn('"iconfile": ICON', mac_setup)
+        self.assertIn('"CFBundleIconFile": "kotassium.icns"', mac_setup)
+        icon_builder = read("tools/make-macos-icon.py")
+        self.assertIn('web", "icons", "icon-512.png', icon_builder)
+        self.assertIn('"iconutil", "-c", "icns"', icon_builder)
+        build = read("build-macos.sh")
+        self.assertIn("tools/make-macos-icon.py", build)
+
     def test_android_runs_the_real_server(self):
         # The APK embeds CPython, but it must import the repo's server, not a
         # copy: the Gradle build stages these files from the repo root.

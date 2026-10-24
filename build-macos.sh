@@ -12,7 +12,8 @@ VERSION="${KOTASSIUM_VERSION:-2.1.0}"
 YTDLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
 
 ./setup.sh
-desktop-venv/bin/python -m pip install --quiet py2app
+desktop-venv/bin/python -m pip install --quiet py2app Pillow
+./desktop-venv/bin/python tools/make-macos-icon.py
 
 # Ship yt-dlp inside the app so a DMG install needs no Homebrew for downloads.
 mkdir -p vendor
