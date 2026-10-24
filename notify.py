@@ -22,8 +22,16 @@ def _q(s):
 
 def notify(title, body, icon=None):
     if sys.platform == "darwin":
-        _run(["osascript", "-e",
-              'display notification "%s" with title "%s"' % (_q(body), _q(title))])
+        try:
+            from Foundation import NSUserNotification, NSUserNotificationCenter
+            notification = NSUserNotification.alloc().init()
+            notification.setTitle_(str(title))
+            notification.setInformativeText_(str(body))
+            NSUserNotificationCenter.defaultUserNotificationCenter().deliverNotification_(notification)
+        except Exception:
+            # Keep notifications best-effort if the native API is unavailable.
+            _run(["osascript", "-e",
+                  'display notification "%s" with title "%s"' % (_q(body), _q(title))])
     elif shutil.which("notify-send"):
         cmd = ["notify-send", "-a", "Kotassium"]
         if icon:
@@ -32,12 +40,12 @@ def notify(title, body, icon=None):
 
 
 def default_icon():
-    """Return the bundled Kotassium icon path for notification daemons."""
+    """Return the bundled raster Kotassium icon path for Linux notifications."""
     from pathlib import Path
 
     candidates = [
-        Path(__file__).resolve().parent / "assets" / "kotassium.svg",
-        Path(sys.executable).resolve().parent.parent / "Resources" / "assets" / "kotassium.svg",
+        Path(__file__).resolve().parent / "web" / "icons" / "icon-512.png",
+        Path(sys.executable).resolve().parent.parent / "Resources" / "web" / "icons" / "icon-512.png",
     ]
     return next((str(path) for path in candidates if path.is_file()), None)
 
