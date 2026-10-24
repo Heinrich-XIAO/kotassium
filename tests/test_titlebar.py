@@ -148,14 +148,14 @@ class WiringTests(unittest.TestCase):
         self.assertIn("IS_MAC", src)
         self.assertIn("titlebar_macos", src)
         self.assertIn("before_show", src)
-        self.assertNotIn("DRAG_REGION_DIRECT_TARGET_ONLY", src)
+        self.assertIn("DRAG_REGION_DIRECT_TARGET_ONLY", src)
         self.assertIn("setMovableByWindowBackground_", read("titlebar_macos.py"))
 
-    def test_page_does_not_use_webview_drag_regions(self):
+    def test_page_marks_the_drag_region(self):
         page = read("web/index.html")
-        self.assertNotIn("pywebview-drag-region", page)
+        self.assertIn("pywebview-drag-region", page)
         self.assertIn("tb=mac", page)
-        # CSS flag is read before the page is rendered.
+        # the flag must be read from the URL, before the bar is used
         self.assertIn("documentElement.className", page)
 
 

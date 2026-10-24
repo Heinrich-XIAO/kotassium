@@ -288,6 +288,12 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
         params.append("tb=mac")
     if params:
         url += ("&" if "?" in url else "?") + "&".join(params)
+    if IS_MAC:
+        # Only blank bar background is draggable; controls and search remain interactive.
+        try:
+            webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
+        except Exception:
+            pass
     w = webview.create_window(
         "Kotassium",
         url,
