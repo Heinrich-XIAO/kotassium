@@ -27,6 +27,12 @@ class StubAppKit:
     NSWindowZoomButton = 2
     NSWindowStyleMaskFullSizeContentView = 1 << 15
     NSWindowTitleHidden = 1
+    NSWindowTitlebarSeparatorStyleNone = 2
+
+    class NSColor:
+        @staticmethod
+        def clearColor():
+            return "clear"
 
     @staticmethod
     def NSMakePoint(x, y):
@@ -57,6 +63,9 @@ class FakeNative:
                                    FakeButton(x=49.0)]
         self.transparent = None
         self.title_visibility = None
+        self.titlebar_separator = None
+        self.background_color = None
+        self.frame_displayed = None
         self.movable_by_background = None
 
     def styleMask(self):
@@ -70,6 +79,18 @@ class FakeNative:
 
     def setTitleVisibility_(self, value):
         self.title_visibility = value
+
+    def setTitlebarSeparatorStyle_(self, value):
+        self.titlebar_separator = value
+
+    def setBackgroundColor_(self, value):
+        self.background_color = value
+
+    def frame(self):
+        return (0, 0, 900, 600)
+
+    def setFrame_display_(self, frame, display):
+        self.frame_displayed = (frame, display)
 
     def setMovableByWindowBackground_(self, value):
         self.movable_by_background = value
@@ -125,6 +146,10 @@ class IntegrateTests(unittest.TestCase):
                         "full-size content view must be set")
         self.assertIs(native.transparent, True)
         self.assertEqual(native.title_visibility, StubAppKit.NSWindowTitleHidden)
+        self.assertEqual(native.titlebar_separator,
+                         StubAppKit.NSWindowTitlebarSeparatorStyleNone)
+        self.assertEqual(native.background_color, "clear")
+        self.assertEqual(native.frame_displayed, ((0, 0, 900, 600), True))
         self.assertIs(native.movable_by_background, True)
         self.assertEqual([b.frame().origin.x for b in native.buttons],
                          [20.0, 40.0, 60.0])

@@ -55,7 +55,16 @@ def integrate(window):
                 or (1 << 15)
             native.setStyleMask_(native.styleMask() | fullsize)
             native.setTitlebarAppearsTransparent_(True)
+            # Remove the native titlebar material/separator; transparent mode
+            # alone can still leave a gray bar behind the WebView on macOS.
+            separator_hidden = getattr(AppKit, "NSWindowTitlebarSeparatorStyleNone", 2)
+            native.setTitlebarSeparatorStyle_(separator_hidden)
             native.setTitleVisibility_(getattr(AppKit, "NSWindowTitleHidden", 1))
+            native.setBackgroundColor_(AppKit.NSColor.clearColor())
+            # AppKit can leave the old content-frame inset after changing the
+            # style mask on pywebview's already-created window. Reapply its
+            # frame to force the WebView to fill the titlebar area as well.
+            native.setFrame_display_(native.frame(), True)
             # Full-size content view removes the native titlebar's drag area.
             # Enable background dragging; the page also marks its empty top
             # bar as a pywebview drag region for reliable WKWebView hit-testing.
