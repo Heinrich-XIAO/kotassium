@@ -40,6 +40,14 @@ class WrapperTests(unittest.TestCase):
             for chunk in ("id=nowp", "id=side", "function playIdx", "localStorage.getItem('kot_vol')"):
                 self.assertNotIn(chunk, src, "%s copied markup from the page" % rel)
 
+    def test_playback_controls_disable_when_no_track_is_selected(self):
+        page = read("web/index.html")
+        self.assertIn("function syncPlaybackControls()", page)
+        self.assertIn("b.disabled=!hasTrack", page)
+        self.assertIn("b.disabled=!canPrev", page)
+        self.assertIn("b.disabled=!canNext", page)
+        self.assertIn("#btns button:disabled,#fsBtns button:disabled", page)
+
     def test_page_is_the_source_of_truth(self):
         page = read("web/index.html")
         self.assertIn("<title>Kotassium</title>", page)
