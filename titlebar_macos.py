@@ -9,10 +9,48 @@ except Exception:
 _WINDOW_DELEGATES = {}
 
 
-def standard_frame(window, default):
-    """Choose the current window screen's visible frame as maximize target."""
+def _rect_values(rect):
+    """Return (x, y, width, height) for an AppKit rect or a tuple test rect."""
     try:
-        screen = window.screen()
+        return (rect.origin.x, rect.origin.y,
+                rect.size.width, rect.size.height)
+    except AttributeError:
+        return tuple(rect)
+
+
+def screen_for_window(window):
+    """Pick one display from the window's center, stable while it straddles."""
+    try:
+        screens = list(AppKit.NSScreen.screens()) if AppKit else []
+        frame = _rect_values(window.frame())
+        x, y, width, height = frame
+        cx, cy = x + width / 2, y + height / 2
+        containing = []
+        best, best_area = None, -1
+        for screen in screens:
+            sx, sy, sw, sh = _rect_values(screen.frame())
+            if sx <= cx <= sx + sw and sy <= cy <= sy + sh:
+                containing.append(screen)
+            overlap = (max(0, min(x + width, sx + sw) - max(x, sx)) *
+                       max(0, min(y + height, sy + sh) - max(y, sy)))
+            if overlap > best_area:
+                best, best_area = screen, overlap
+        if containing:
+            return containing[0]
+        if best:
+            return best
+    except Exception:
+        pass
+    try:
+        return window.screen()
+    except Exception:
+        return None
+
+
+def standard_frame(window, default):
+    """Choose the visible frame of the display containing the window center."""
+    try:
+        screen = screen_for_window(window)
         if not screen:
             return default
         # Preserve the display's screen-space origin; secondary displays can

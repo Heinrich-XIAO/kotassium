@@ -21,6 +21,13 @@ def read(rel):
 
 class StubAppKit:
     """The handful of AppKit names titlebar_macos uses, as plain values."""
+    screens = []
+
+    class NSScreen:
+        @classmethod
+        def screens(cls):
+            return StubAppKit.screens
+
     NSWindowCloseButton = 0
     NSWindowMiniaturizeButton = 1
     NSWindowZoomButton = 2
@@ -131,7 +138,8 @@ class FakeNative:
         self._delegate = delegate
 
     def screen(self):
-        return SimpleNamespace(visibleFrame=lambda: (-1920, 24, 1920, 1056))
+        return SimpleNamespace(frame=lambda: (-1920, 0, 1920, 1080),
+                               visibleFrame=lambda: (-1920, 24, 1920, 1056))
 
     def standardWindowButton_(self, kind):
         return self.buttons[kind]
@@ -158,10 +166,17 @@ class GeometryTests(unittest.TestCase):
 class IntegrateTests(unittest.TestCase):
     def setUp(self):
         self._appkit = titlebar_macos.AppKit
+        self._screens = StubAppKit.screens
         titlebar_macos.AppKit = StubAppKit
+        StubAppKit.screens = []
 
     def tearDown(self):
         titlebar_macos.AppKit = self._appkit
+        StubAppKit.screens = self._screens
+
+    def screen(self, frame, visible):
+        return SimpleNamespace(frame=lambda: frame,
+                               visibleFrame=lambda: visible)
 
     def test_flags_and_light_positions(self):
         native = FakeNative()
@@ -174,11 +189,22 @@ class IntegrateTests(unittest.TestCase):
                 native, (1, 2, 3, 4)),
             (-1920, 24, 1920, 1056))
 
-    def test_standard_frame_follows_the_window_screen(self):
-        secondary = (-1920, 24, 1920, 1056)
+    def test_standard_frame_selects_screen_containing_window_center(self):
+        primary = self.screen((0, 0, 1440, 900), (0, 24, 1440, 876))
+        secondary = self.screen((-1920, 0, 1920, 1080),
+                                (-1920, 24, 1920, 1056))
+        StubAppKit.screens = [primary, secondary]
+        native = FakeNative()
+        # Straddles both displays, but its center is on the secondary display.
+        native.frame = lambda: (-900, 100, 1000, 700)
+        native.screen = lambda: primary  # AppKit window.screen can flip near seams
+        self.assertEqual(titlebar_macos.standard_frame(native, (0, 0, 800, 600)),
+                         (-1920, 24, 1920, 1056))
+
+    def test_standard_frame_falls_back_when_no_screen_list_is_available(self):
         native = FakeNative()
         self.assertEqual(titlebar_macos.standard_frame(native, (0, 0, 800, 600)),
-                         secondary)
+                         (-1920, 24, 1920, 1056))
         native.screen = lambda: None
         self.assertEqual(titlebar_macos.standard_frame(native, (0, 0, 800, 600)),
                          (0, 0, 800, 600))
