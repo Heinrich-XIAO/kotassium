@@ -153,9 +153,9 @@ html.tbmac #dfsTop{padding-left:88px}
 #upd.on{display:flex}
 #updtext{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 /* the update pill is one morphing button: ⟳ check (idle) → ⟳ spinning → ⬇ download */
-#updbtn{background:#2a2a2a;color:#b3b3b3;border:1px solid #ffffff2e;border-radius:50%;width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;transition:color .15s,border-color .15s,background .15s}
-#updbtn:hover{color:#fff;border-color:#ffffff66}
-#updbtn.go{background:#1ed760;color:#000;border-color:#1ed760}
+#updbtn{background:#2a2a2a;color:#b3b3b3;border:0;border-radius:50%;width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;transition:color .15s,background .15s}
+#updbtn:hover{color:#fff}
+#updbtn.go{background:#1ed760;color:#000}
 #updbtn:disabled{opacity:.6;cursor:default}
 #updbtn.spin svg{animation:updspin .9s linear infinite}
 @keyframes updspin{to{transform:rotate(360deg)}}
