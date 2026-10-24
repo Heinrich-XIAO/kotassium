@@ -541,7 +541,7 @@ function renderHome(){PLAYING_PL=null;
     var _cc=(p.cover||'');if(_cc){cv.style.background=coverBg(_cc);cv.setAttribute('data-cover-url',_cc)}
     var pl=document.createElement('button');pl.id='cardPlay';pl.title='Play '+p.name;
     pl.innerHTML='<svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5l10 5.5-10 5.5z"/></svg>';
-    pl.onclick=function(e){e.stopPropagation();openPlaylist(i).then(function(){playT(0,true)})};
+    pl.onclick=function(e){e.stopPropagation();openPlaylist(i).then(function(){playList()})};
     cv.appendChild(pl);c.appendChild(cv);
     var b=document.createElement('b');b.textContent=p.name||'?';
     var s=document.createElement('small');s.textContent=(p.total||p.count)+' songs';
@@ -568,7 +568,7 @@ function renderPlaylistView(name,tracks){
   '<div id=plx style="background:'+gcss(name)+'">'+esc(name.charAt(0))+'</div>'+
   '<div class=plinfo><small>Public Playlist</small><h1>'+esc(name)+'</h1><p>'+(tracks.length)+' song'+(tracks.length===1?'':'s')+'</p></div></div>'+
   '<div id=plactions>'+
-  '<button id=bigplay onclick=playT(0,true) title="Play"><svg viewBox="0 0 16 16" fill="currentColor" style="width:28px;height:28px"><path d="M4 2.5l10 5.5-10 5.5z"/></svg></button>'+
+  '<button id=bigplay onclick=playList() title="Play"><svg viewBox="0 0 16 16" fill="currentColor" style="width:28px;height:28px"><path d="M4 2.5l10 5.5-10 5.5z"/></svg></button>'+
   '<button class=aicon id=shuf2 onclick=toggleShuffle() title="Shuffle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>'+
   '<button class=aicon id=rb2 onclick=toggleRepeat() title="Repeat"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>'+
   '</div>'+
@@ -649,6 +649,11 @@ function upcomingIdxs(){
   for(var i=QI+1;i<Q.length;i++)add(i);
   return out
 }
+/* "Play" on a playlist (the card's button or the header's big play) means
+   start this playlist - and with shuffle on that should land somewhere
+   random, not always on track 1. Tapping a specific row still starts
+   exactly where you tapped. */
+function playList(){playT(SHUF&&PL&&PL.length?Math.floor(Math.random()*PL.length):0,true)}
 function playT(i,setQ){
   if(!PL||!PL[i])return;
   if(setQ)Q=PL.slice();
