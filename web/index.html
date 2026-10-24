@@ -354,6 +354,7 @@ body{-webkit-tap-highlight-color:transparent}
 var AU=document.getElementById('au');
 var Q=[],SHUF=false,REPEAT=1,RADIO=false;
 var LINKS=[],PL=null,PLAYING_PL=null;
+var _playlistPrefetchStarted={};
 var API=function(u){return fetch(u).then(function(r){return r.json()})};
 function esc(s){return String(s==null?'':s).replace(/&/g,'&').replace(/</g,'<')}
 function fmt(ms){ms=Number(ms)||0;var s=Math.round(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
@@ -510,6 +511,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 function loadSide(){
   return API('/api/links').then(function(j){
     LINKS=j.links||[];
+    prefetchPlaylistStarts(LINKS);
     var L=document.getElementById('sideList');L.innerHTML='';
     if(!LINKS.length){
       L.innerHTML='<div id=empty><h3>Your library is empty</h3><p>Click + above and paste a Spotify playlist link.</p></div>';return}
@@ -550,6 +552,23 @@ function addLink(){
       toast('saved: '+(j.name||'link')+' - '+((j.tracks||[]).length)+' tracks');
       if(i>=0)openPlaylist(i)})}).catch(function(e){
         stop();toast('could not open: '+((e&&(e.message||e))||'network error'))})}
+/* Fetch each saved playlist and warm the track that Play would pick with the
+   current shuffle setting. The per-link guard prevents repeat visits from
+   launching duplicate metadata requests; prefetch itself de-dupes track jobs. */
+function prefetchPlaylistStarts(links){
+  (links||[]).forEach(function(link){
+    var key=link.url||link.name||'';
+    if(!key||_playlistPrefetchStarted[key])return;
+    _playlistPrefetchStarted[key]=true;
+    API('/api/links/get?url='+encodeURIComponent(link.url||'')).then(function(full){
+      var tracks=(full&&full.tracks||[]).filter(function(t){return t&&t.t});
+      if(!tracks.length){delete _playlistPrefetchStarted[key];return}
+      var choice=SHUF?Math.floor(Math.random()*tracks.length):0;
+      _playlistPrefetchStarted[key]=tracks[choice];
+      prefetch(tracks[choice]);
+    },function(){delete _playlistPrefetchStarted[key]});
+  });
+}
 /* ---------------- home ---------------- */
 function goHome(){var qi=document.getElementById('q');qi.value='';document.getElementById('searchwrap').classList.remove('filled');renderHome()}
 function renderHome(){PLAYING_PL=null;
@@ -679,6 +698,13 @@ function playList(){playT(SHUF&&PL&&PL.length?Math.floor(Math.random()*PL.length
 function playT(i,setQ){
   if(!PL||!PL[i])return;
   if(setQ)Q=PL.slice();
+  if(setQ&&SHUF){
+    var selected=PL[i];
+    Object.keys(_playlistPrefetchStarted).forEach(function(key){
+      var choice=_playlistPrefetchStarted[key];
+      if(choice&&choice.t===selected.t&&choice.a===selected.a)i=PL.indexOf(choice);
+    });
+  }
   QI=i; if(SHUF)rebuildShuffle();
   syncPlaybackControls();
   if(setQ)prefetch(PL[i]);

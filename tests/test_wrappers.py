@@ -40,6 +40,15 @@ class WrapperTests(unittest.TestCase):
             for chunk in ("id=nowp", "id=side", "function playIdx", "localStorage.getItem('kot_vol')"):
                 self.assertNotIn(chunk, src, "%s copied markup from the page" % rel)
 
+    def test_startup_prefetches_each_playlists_play_choice(self):
+        page = read("web/index.html")
+        self.assertIn("function prefetchPlaylistStarts(links)", page)
+        self.assertIn("prefetchPlaylistStarts(LINKS)", page)
+        self.assertIn("var choice=SHUF?Math.floor(Math.random()*tracks.length):0", page)
+        self.assertIn("prefetch(tracks[choice])", page)
+        self.assertIn("_playlistPrefetchStarted[key]=tracks[choice]", page)
+        self.assertIn("if(setQ&&SHUF)", page)
+
     def test_playback_controls_disable_when_no_track_is_selected(self):
         page = read("web/index.html")
         self.assertIn("function syncPlaybackControls()", page)
