@@ -97,6 +97,12 @@ of these lines as the message's last line:
   same-origin checks for POSTs.
 - macOS packaging (`setup-macos.py`, `build-macos.sh`, `install-macos.sh`) can
   only be tested on a Mac; keep it boring and note it as unverified.
+- **Before shipping, run `tools/agent-preflight.sh`.** It executes the portable
+  unittest suite, Python compilation checks and (when Node is installed) the
+  page's JavaScript syntax check. It requires `yt-dlp` available to the chosen
+  Python (`PYTHON=/path/to/python tools/agent-preflight.sh`); MPRIS tests skip
+  without a session bus. The shared release build workflow runs this same gate
+  before either platform build, so a failing preflight blocks publishing.
 - Tests: `venv/bin/python -m unittest discover -s tests`, plus
   `dbus-run-session -- desktop-venv/bin/python -m unittest tests.test_mpris`
   and `xvfb-run -a desktop-venv/bin/python tools/ui_check.py`.
