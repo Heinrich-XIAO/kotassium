@@ -1083,28 +1083,60 @@ window.addEventListener('resize',function(){if(dfsActive()&&window.innerWidth<=8
   bar.addEventListener('click',function(e){
     if(Date.now()-_swiped<400){e.stopPropagation();e.preventDefault()}
   },true);
-  var fy=0,fgo=false,fdy=0,fbase=0;
-  fs.addEventListener('touchstart',function(e){
-    if(e.target.closest&&e.target.closest('#fsProg,#fsVolBar,#fsQueue'))return;
-    /* grab the sheet exactly where it visually is - it may be animating
-       (springing back or mid-close), so pin that position before following,
-       otherwise killing the transition teleports it to the inline value */
+  var fy=0,fx=0,fgo=false,fdy=0,fbase=0,inq=false,swiped=0,moved=false,active=false;
+  /* pin the sheet exactly where it visually is - it may be animating
+     (springing back or mid-close), so capture that position before following,
+     otherwise killing the transition teleports it to the inline value */
+  function claim(cy){
     fbase=fsOffset(fs);
     fs.style.transition='none';
     fs.style.transform='translateY('+fbase+'px)';
     if(_fsHideT){clearTimeout(_fsHideT);_fsHideT=0}
-    fy=e.touches[0].clientY;fgo=true;fdy=fbase},{passive:true});
+    fy=cy;fgo=true;fdy=fbase}
+  fs.addEventListener('touchstart',function(e){
+    /* one flag owns the whole touch sequence, so a stale "in queue" from the
+       previous gesture can never claim the sheet under the seek bar */
+    if(e.target.closest&&e.target.closest('#fsProg,#fsVolBar')){
+      active=false;fgo=false;inq=false;return}
+    active=true;moved=false;
+    fx=e.touches[0].clientX;fy=e.touches[0].clientY;fgo=false;
+    /* Outside the list the sheet owns the gesture straight away. Inside "Up
+       next" the list gets first refusal: claim() is held back until touchmove
+       finds no scroll left to give, so scrolling never fights the collapse. */
+    inq=!!(e.target.closest&&e.target.closest('#fsQueue'));
+    if(!inq)claim(fy);
+  },{passive:true});
   fs.addEventListener('touchmove',function(e){
-    if(!fgo)return;
-    var y=fbase+(e.touches[0].clientY-fy);
+    if(!active)return;
+    var cx=e.touches[0].clientX,cy=e.touches[0].clientY;
+    if(!fgo){
+      if(!inq)return;
+      /* wait for a clear downward move, so taps and the list's own scroll
+         pass through untouched */
+      var dx=cx-fx,dy=cy-fy;
+      if(dy<6||Math.abs(dx)>Math.abs(dy))return;
+      var q=document.getElementById('fsQueue');
+      if(q&&q.scrollTop>0)return; /* the list can still scroll: it wins */
+      claim(cy); /* nothing left to scroll, so the collapse takes over here */
+    }
+    var y=fbase+(cy-fy);
     if(y<0)y=0; /* clamped at rest: no snap when the finger wiggles up */
-    fdy=y;fs.style.transform='translateY('+y+'px)'},{passive:true});
+    if(Math.abs(y-fbase)>6)moved=true;
+    fdy=y;fs.style.transform='translateY('+y+'px)';
+  },{passive:true});
   function release(){
-    if(!fgo)return;fgo=false;
+    if(!active)return;active=false;
+    if(!fgo)return;
+    fgo=false;
+    if(moved)swiped=Date.now();
     if(fdy>90)closeFs(); /* continues from the current position, then hides */
     else{fs.style.transition='transform .25s '+FS_EASE;fs.style.transform='translateY(0)'}}
   fs.addEventListener('touchend',release,{passive:true});
   fs.addEventListener('touchcancel',release,{passive:true});
+  /* a drag must not also activate the queue row it ended on */
+  fs.addEventListener('click',function(e){
+    if(Date.now()-swiped<400){e.stopPropagation();e.preventDefault()}
+  },true);
 })();
 /* mobile library: drag the panel left to dismiss it, since the only other
    way out is the same library button that opened it */
