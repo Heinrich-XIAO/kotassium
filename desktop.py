@@ -248,6 +248,10 @@ class WindowChromeAPI:
         if self.window is None:
             return False
         try:
+            if IS_MAC:
+                import titlebar_macos
+                return titlebar_macos.toggle_maximized(
+                    getattr(self.window, "native", None))
             if self.window.maximized:
                 self.window.restore()
             else:

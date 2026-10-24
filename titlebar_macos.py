@@ -27,6 +27,27 @@ def maximize_frame(window, default):
     return standard_frame(window, default)
 
 
+def toggle_maximized(native):
+    """Maximize directly on this window's screen, bypassing pywebview's
+    screen-agnostic maximize helper. Restore uses AppKit's saved zoom frame."""
+    if native is None:
+        return False
+    try:
+        if native.isZoomed():
+            native.zoom_(None)
+            return True
+        frame = native.frame()
+        target = maximize_frame(native, frame)
+        native.setFrame_display_animate_(target, True, True)
+        return True
+    except Exception:
+        try:
+            native.zoom_(None)
+            return True
+        except Exception:
+            return False
+
+
 def install_zoom_delegate(native):
     """Set a usable maximize frame while forwarding the existing pywebview delegate."""
     if AppKit is None:

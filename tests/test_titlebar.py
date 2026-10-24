@@ -79,6 +79,8 @@ class FakeNative:
         self.titlebar_separator = None
         self.background_color = None
         self.frame_displayed = None
+        self.animated_frame = None
+        self.zoomed = False
         self.movable_by_background = None
         self.toolbar = "existing"
         self._delegate = SimpleNamespace(respondsToSelector_=lambda selector: False)
@@ -109,6 +111,15 @@ class FakeNative:
 
     def setFrame_display_(self, frame, display):
         self.frame_displayed = (frame, display)
+
+    def setFrame_display_animate_(self, frame, display, animate):
+        self.animated_frame = (frame, display, animate)
+
+    def isZoomed(self):
+        return self.zoomed
+
+    def zoom_(self, sender):
+        self.zoomed = not self.zoomed
 
     def setMovableByWindowBackground_(self, value):
         self.movable_by_background = value
@@ -172,6 +183,18 @@ class IntegrateTests(unittest.TestCase):
         self.assertEqual(titlebar_macos.standard_frame(native, (0, 0, 800, 600)),
                          (0, 0, 800, 600))
 
+    def test_toggle_maximized_sets_frame_on_current_secondary_screen(self):
+        native = FakeNative()
+        self.assertTrue(titlebar_macos.toggle_maximized(native))
+        self.assertEqual(native.animated_frame,
+                         ((-1920, 24, 1920, 1056), True, True))
+
+    def test_toggle_maximized_restores_using_native_zoom(self):
+        native = FakeNative()
+        native.zoomed = True
+        self.assertTrue(titlebar_macos.toggle_maximized(native))
+        self.assertTrue(native.zoomed is False)
+
     def test_failures_leave_a_usable_window(self):
         window = SimpleNamespace(native=BrokenNative())
         self.assertTrue(titlebar_macos.integrate(window))
@@ -186,6 +209,7 @@ class WiringTests(unittest.TestCase):
         self.assertIn("titlebar_macos", src)
         self.assertIn("before_show", src)
         self.assertIn("toggle_maximized", src)
+        self.assertIn("titlebar_macos.toggle_maximized", src)
         self.assertIn("DRAG_REGION_DIRECT_TARGET_ONLY", src)
         self.assertIn("frameless=IS_MAC", src)
         self.assertIn("easy_drag=False", src)
