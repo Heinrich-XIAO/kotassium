@@ -626,9 +626,31 @@ var _curViewName='';
 function curViewName(){return _curViewName}
 function qi_view(){return (PLAYING_PL===_curViewName)?QI:-1}
 var QI=-1;
-var SHUFFLE_ORDER=[];var SHUFFLE_POS=0;
-function rebuildShuffle(){if(!Q.length){SHUFFLE_ORDER=[];return}SHUFFLE_ORDER=[];var idxs=[];for(var i=0;i<Q.length;i++)if(i!==QI)idxs.push(i);for(var i=idxs.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=idxs[i];idxs[i]=idxs[j];idxs[j]=t}SHUFFLE_ORDER=idxs;SHUFFLE_POS=0}
+var SHUFFLE_ORDER=[];var SHUFFLE_POS=0;var SHUFFLE_SKIP=-1;
+function rebuildShuffle(){if(!Q.length){SHUFFLE_ORDER=[];return}SHUFFLE_ORDER=[];SHUFFLE_SKIP=QI;var idxs=[];for(var i=0;i<Q.length;i++)if(i!==QI)idxs.push(i);for(var i=idxs.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=idxs[i];idxs[i]=idxs[j];idxs[j]=t}SHUFFLE_ORDER=idxs;SHUFFLE_POS=0}
 function nextIndex(){if(REPEAT===2)return QI;if(SHUF&&Q.length>1){if(!SHUFFLE_ORDER.length||SHUFFLE_POS>=SHUFFLE_ORDER.length)rebuildShuffle();return SHUFFLE_ORDER[SHUFFLE_POS]}if(QI+1<Q.length)return QI+1;if(REPEAT===1&&Q.length)return 0;return -1}
+/* The upcoming tracks in the order they will really play, used by every
+   queue view. Sequential is just QI+1.., but shuffle plays the rest of the
+   current pass - SHUFFLE_ORDER[SHUFFLE_POS..], which can point anywhere in
+   Q - so listing queue order there shows a row 1 that never plays next while
+   the Up next toast names the real one. Nothing selected (QI<0) means the
+   whole queue; repeat-one means nothing else plays at all. */
+function upcomingIdxs(){
+  var out=[],seen={};
+  function add(i){if(i<0||i>=Q.length||i===QI||seen[i])return;seen[i]=1;out.push(i)}
+  if(QI<0){for(var i=0;i<Q.length;i++)add(i);return out}
+  if(REPEAT===2)return out;
+  if(SHUF&&Q.length>1){
+    if(!SHUFFLE_ORDER.length||SHUFFLE_POS>=SHUFFLE_ORDER.length)rebuildShuffle();
+    for(var k=0;k<SHUFFLE_ORDER.length;k++){
+      if(k<SHUFFLE_POS){seen[SHUFFLE_ORDER[k]]=1;continue} /* played this pass */
+      add(SHUFFLE_ORDER[k])}
+    /* queued after the pass was drawn (radio): still to come, just later */
+    for(var i=0;i<Q.length;i++)if(i!==SHUFFLE_SKIP)add(i);
+    return out}
+  for(var i=QI+1;i<Q.length;i++)add(i);
+  return out
+}
 function playT(i,setQ){
   if(!PL||!PL[i])return;
   if(setQ)Q=PL.slice();
@@ -912,18 +934,19 @@ fsSlider(document.getElementById('fsVolBar'),function(v){AU.volume=v*v;AU.muted=
 function renderFsQueue(){
   var box=document.getElementById('fsQrows'),cnt=document.getElementById('fsQcount'),wrap=document.getElementById('fsQueue');
   if(!box||!wrap)return;
-  /* "Up next" means what has not played yet: skip the current track - the
-     hero art above already shows it - and count only what is still to come.
-     Nothing selected yet (QI<0) means the whole queue is upcoming. */
-  var first=(QI>=0)?QI+1:0,n=Math.max(0,Q.length-first);
-  wrap.style.display=(Q.length===0||(QI>=0&&n===0))?'none':'';
+  /* "Up next" means what has not played yet, in the order it will actually
+     play (see upcomingIdxs): row 1 must be the track the Up next toast
+     names, so under shuffle that is the next shuffle draw rather than QI+1.
+     The hero art above already shows the current track. */
+  var ord=upcomingIdxs(),n=ord.length;
+  wrap.style.display=(Q.length===0||n===0)?'none':'';
   cnt.textContent=n+(n===1?' track':' tracks');
   var h='';
-  for(var i=first;i<Q.length;i++){
-    var t=Q[i]||{};
+  for(var r=0;r<n;r++){
+    var i=ord[r],t=Q[i]||{};
     var bg=String(coverBg(t.cover)).replace(/"/g,"'");
     h+='<div class="fsQrow" data-i="'+i+'">'+
-       '<span class=fsQn>'+(i-first+1)+'</span>'+
+       '<span class=fsQn>'+(r+1)+'</span>'+
        '<span class=fsQcov style="background:'+bg+'"></span>'+
        '<span class=fsQt><b>'+esc(t.t||'')+'</b><small>'+esc(t.a||'')+'</small></span>'+
        '<span class=fsQtime>'+fmt(t.ms||0)+'</span></div>';
@@ -968,8 +991,9 @@ function renderDfsQueue(){
   var h='';
   if(QI>=0&&Q[QI]){
     h+='<div class=dfsQsect>Now playing</div>'+dfsRow(QI,Q[QI]);
-    h+='<div class=dfsQsect>Next up</div>';
-    for(var i=QI+1;i<Q.length;i++)h+=dfsRow(i,Q[i]);
+    var ord=upcomingIdxs();
+    if(ord.length)h+='<div class=dfsQsect>Next up</div>';
+    for(var r=0;r<ord.length;r++)h+=dfsRow(ord[r],Q[ord[r]]);
   }else{
     for(var k=0;k<Q.length;k++)h+=dfsRow(k,Q[k]);
   }
