@@ -53,9 +53,11 @@ class WrapperTests(unittest.TestCase):
         page = read("web/index.html")
         self.assertIn("function syncPlaybackControls()", page)
         self.assertIn("b.disabled=!hasTrack", page)
+        self.assertIn("dfs.disabled=!hasTrack", page)
+        self.assertIn("#dfsBtn:disabled", page)
         self.assertIn("b.disabled=!canPrev", page)
         self.assertIn("b.disabled=!canNext", page)
-        self.assertIn("#btns button:disabled,#fsBtns button:disabled", page)
+        self.assertIn("#btns button:disabled,#fsBtns button:disabled,#dfsBtn:disabled", page)
 
     def test_page_is_the_source_of_truth(self):
         page = read("web/index.html")
