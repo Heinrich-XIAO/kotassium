@@ -721,6 +721,7 @@ def handle(path, params, hdr):
             import spotify_get
             m = re.search(r"(?:open\.)?spotify\.com/(?:intl-[a-z]{2}/)?(playlist|album|track)/([A-Za-z0-9]+)", link)
             name, tracks = spotify_get.resolve(link)
+            playlist_cover = next((t.get("cover") for t in tracks if t.get("cover")), "")
             fmt = [{"t": t["title"], "a": t["artist"], "ms": int(round(t.get("dur", 0) * 1000)),
                     "album": t.get("album") or "", "cover": cover_local(t.get("cover") or "")} for t in tracks]
             # Short links (spotify.link/...) never match the regex above, so
@@ -728,7 +729,8 @@ def handle(path, params, hdr):
             # on a resolve that actually succeeded.
             kind = m.group(1) if m else ("track" if len(fmt) == 1 else "playlist")
             jr = {"type": kind, "name": name, "tracks": fmt, "count": len(fmt),
-                  "total": len(fmt), "truncated": False, "partial": False}
+                  "total": len(fmt), "truncated": False, "partial": False,
+                  "cover": cover_local(playlist_cover)}
             save_link(link, jr)
             return 200, "application/json", json.dumps(jr).encode(), None, False
         except Exception as e:
@@ -741,6 +743,8 @@ def handle(path, params, hdr):
             o = {k: e[k] for k in ("url", "name", "count", "ts") if k in e}
             if "total" in e:
                 o["total"] = e["total"]
+            if e.get("cover"):
+                o["cover"] = cover_local(e["cover"])
             o["partial"] = bool(e.get("partial"))
             slim.append(o)
         return 200, "application/json", json.dumps({"links": slim}).encode(), None, False
@@ -748,10 +752,14 @@ def handle(path, params, hdr):
         e = find_link(one("url"))
         if not e:
             return 200, "application/json", b'{"error":"not_found"}', None, False
-        for t in (e.get("tracks") or []):
+        result = dict(e)
+        if result.get("cover"):
+            result["cover"] = cover_local(result["cover"])
+        result["tracks"] = list(result.get("tracks") or [])
+        for t in result["tracks"]:
             if isinstance(t, dict) and t.get("cover"):
                 t["cover"] = cover_local(t["cover"])
-        return 200, "application/json", json.dumps(e).encode(), None, False
+        return 200, "application/json", json.dumps(result).encode(), None, False
     if path == "/api/health":
         return 200, "application/json", json.dumps({"ok": True, "app": "kotassium", "pid": os.getpid()}).encode(), None, False
     if path == "/api/ytdl":

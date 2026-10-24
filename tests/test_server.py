@@ -185,6 +185,31 @@ class CoverIndexTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(body), {})
 
+    def test_playlist_cover_is_returned_in_links_and_get(self):
+        original = serve_web.read_links
+        serve_web.read_links = lambda: [{
+            "url": "https://open.spotify.com/playlist/example",
+            "name": "Example", "count": 1, "total": 1,
+            "tracks": [{"t": "Song", "cover": "https://img.example/a.jpg"}],
+            "cover": "https://img.example/a.jpg",
+        }]
+        old_covers = serve_web.COVERS_JSON
+        serve_web.COVERS_JSON = os.path.join(self.tmp, "no-cover-map.json")
+        try:
+            code, body = self.req("GET", "/api/links")
+            self.assertEqual(code, 200)
+            self.assertEqual(json.loads(body)["links"][0]["cover"],
+                             "https://img.example/a.jpg")
+            code, body = self.req("GET", "/api/links/get?url=" +
+                                  urllib.parse.quote("https://open.spotify.com/playlist/example"))
+            self.assertEqual(code, 200)
+            result = json.loads(body)
+            self.assertEqual(result["cover"], "https://img.example/a.jpg")
+            self.assertEqual(result["tracks"][0]["cover"], "https://img.example/a.jpg")
+        finally:
+            serve_web.read_links = original
+            serve_web.COVERS_JSON = old_covers
+
     def test_index_is_closed_behind_the_password(self):
         saved = (serve_web.PASSWORD, serve_web.AUTH, serve_web.SESSION)
         serve_web.PASSWORD, serve_web.AUTH = "hunter2", True
