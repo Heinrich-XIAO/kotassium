@@ -64,6 +64,13 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("<title>Kotassium</title>", page)
         self.assertIn("serviceWorker", page)
 
+    def test_update_button_keeps_manual_recheck_separate_from_install(self):
+        page = read("web/index.html")
+        self.assertIn("id=updcheck onclick=checkUpdate()", page)
+        self.assertIn("again.style.display=got&&!chk?'flex':'none'", page)
+        self.assertIn("b.title=chk?'Checking for updates...':(got?'Restart & Update'", page)
+        self.assertIn("if(st.available&&st.state!=='error')startUpdate();else checkUpdate()", page)
+
     def test_platform_icons_use_shared_kotassium_logo(self):
         mac_setup = read("setup-macos.py")
         self.assertIn('"iconfile": ICON', mac_setup)
