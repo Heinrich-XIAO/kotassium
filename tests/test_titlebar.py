@@ -214,7 +214,7 @@ class IntegrateTests(unittest.TestCase):
         native = FakeNative()
         self.assertTrue(titlebar_macos.toggle_maximized(native))
         self.assertEqual(native.animated_frame,
-                         ((-1920, 24, 1920, 1056), True, True))
+                         ((-1920, 24, 1920, 1056), True, False))
 
     def test_toggle_maximized_restores_the_saved_normal_frame(self):
         native = FakeNative()
@@ -224,6 +224,35 @@ class IntegrateTests(unittest.TestCase):
         self.assertEqual(native.frame(), (-1920, 24, 1920, 1056))
         self.assertTrue(titlebar_macos.toggle_maximized(native))
         self.assertEqual(native.frame(), normal)
+
+    def test_toggle_maximized_dispatches_to_cocoa_main_thread(self):
+        native = FakeNative()
+        callbacks = []
+        app_helper = SimpleNamespace(callAfter=lambda fn, *args: callbacks.append((fn, args)))
+        import sys
+        saved_pkg = sys.modules.get("PyObjCTools")
+        saved = sys.modules.get("PyObjCTools.AppHelper")
+        package = SimpleNamespace(AppHelper=app_helper)
+        sys.modules["PyObjCTools"] = package
+        sys.modules["PyObjCTools.AppHelper"] = app_helper
+        real_main_thread = titlebar_macos.threading.main_thread
+        try:
+            titlebar_macos.threading.main_thread = lambda: object()
+            self.assertTrue(titlebar_macos.toggle_maximized(native))
+            self.assertEqual(len(callbacks), 1)
+            fn, args = callbacks[0]
+            self.assertIs(fn, titlebar_macos.toggle_maximized)
+            self.assertEqual(args, (native,))
+        finally:
+            titlebar_macos.threading.main_thread = real_main_thread
+            if saved is None:
+                sys.modules.pop("PyObjCTools.AppHelper", None)
+            else:
+                sys.modules["PyObjCTools.AppHelper"] = saved
+            if saved_pkg is None:
+                sys.modules.pop("PyObjCTools", None)
+            else:
+                sys.modules["PyObjCTools"] = saved_pkg
 
     def test_toggle_maximized_handles_already_maximized_frame(self):
         native = FakeNative()

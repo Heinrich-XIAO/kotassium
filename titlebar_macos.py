@@ -67,38 +67,48 @@ def maximize_frame(window, default):
 
 
 def toggle_maximized(native):
-    """Toggle between the saved normal frame and this screen's visible frame.
-
-    Keep our own restore frame: manually setting an NSWindow frame does not
-    enter AppKit's zoom state, so isZoomed()/zoom_() cannot reliably toggle it.
-    """
+    """Toggle between a saved normal frame and this screen's visible frame."""
     if native is None:
         return False
+    if threading.current_thread() is not threading.main_thread():
+        try:
+            from PyObjCTools import AppHelper
+            AppHelper.callAfter(toggle_maximized, native)
+            return True
+        except Exception as e:
+            print("[kotassium] maximize dispatch: %s" % e, flush=True)
+            return False
+
     key = id(native)
     try:
         current = _rect_values(native.frame())
         saved = _MAXIMIZED_FRAMES.get(key)
         if saved is not None:
-            if _frames_match(current, saved[1]) or _frames_match(
-                    current, saved[2]):
+            if _frames_match(current, saved[1]) or _frames_match(current, saved[2]):
+                native.setFrame_display_animate_(saved[0], True, False)
                 _MAXIMIZED_FRAMES.pop(key, None)
-                native.setFrame_display_animate_(saved[0], True, True)
             else:
-                # A user resize/move after maximizing becomes the new normal
-                # frame before maximizing again on the display now containing it.
-                _MAXIMIZED_FRAMES.pop(key, None)
+                # A user resized/moved it while maximized; treat that as the
+                # new normal frame and maximize again on its current display.
                 target = _rect_values(maximize_frame(native, current))
-                _MAXIMIZED_FRAMES[key] = (current, target, target)
-                native.setFrame_display_animate_(target, True, True)
+                if not _frames_match(current, target):
+                    native.setFrame_display_animate_(target, True, False)
+                    _MAXIMIZED_FRAMES[key] = (current, target, target)
+                else:
+                    _MAXIMIZED_FRAMES.pop(key, None)
             return True
+
         target = _rect_values(maximize_frame(native, current))
         if _frames_match(current, target):
             return True
+        # Store before changing the frame; AppKit may deliver callbacks while
+        # setFrame is processing, and the state must already be consistent.
         _MAXIMIZED_FRAMES[key] = (current, target, target)
-        native.setFrame_display_animate_(target, True, True)
+        native.setFrame_display_animate_(target, True, False)
         return True
-    except Exception:
+    except Exception as e:
         _MAXIMIZED_FRAMES.pop(key, None)
+        print("[kotassium] maximize frame: %s" % e, flush=True)
         return False
 
 
