@@ -14,9 +14,8 @@ input{background:none;border:0;color:#fff;font-family:inherit}
 input:focus{outline:none}
 svg{display:block}
 #top{height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:8px 16px;background:#000;position:relative;z-index:5}
-/* In the macOS full-size-content window the OS owns the top 28pt beneath
-   the traffic lights; start the app bar below it instead of underlapping it. */
-html.tbmac #top{height:92px;padding-top:36px}
+/* macOS app chrome is a single page bar; native traffic lights overlay its left side. */
+html.tbmac #top{height:64px;padding-top:8px}
 #homeBtn{width:48px;height:48px;border-radius:50%;background:#1f1f1f;display:grid;place-items:center;transition:transform .1s;flex:none}
 #homeBtn:hover{transform:scale(1.06);background:#2a2a2a}
 #searchwrap{background:#1f1f1f;border-radius:500px;height:48px;flex:1 1 480px;max-width:600px;display:flex;align-items:center;padding:0 14px;border:1px solid transparent}
@@ -30,7 +29,7 @@ html.tbmac #top{height:92px;padding-top:36px}
 #qDiv{width:1px;height:24px;background:#ffffff26;flex:none;margin:0 4px 0 6px}
 #qBrowse{width:32px;height:32px;border-radius:6px;color:#b3b3b3;display:grid;place-items:center;flex:none}
 #qBrowse:hover{color:#fff;background:#ffffff14}
-/* macOS shell (tb=mac): room for the native traffic lights inside the bar */
+/* macOS shell: traffic lights sit at the left; page controls begin after them. */
 html.tbmac #top{padding-left:88px}
 html.tbmac #dfsTop{padding-left:88px}
 #mid{flex:1;display:flex;min-height:0;background:#121212;padding:8px;gap:8px}
@@ -1336,11 +1335,18 @@ function startUpdate(){
   postJSON('/api/update',{}).then(function(st){renderUpdate(st);pollUpdate(500)})
     .catch(function(){if(b)b.disabled=false;toast('could not start the update')});
 }
-/* macOS titlebar-less shell: drag only the empty top-bar background, not its
-   controls or search field. */
+/* macOS titlebar-less shell: drag empty top-bar space and double-click it to maximize. */
 if(/[?&]tb=mac(&|$)/.test(location.search)){
-document.getElementById('top').classList.add('pywebview-drag-region');
-document.getElementById('dfsTop').classList.add('pywebview-drag-region')}
+  ['top','dfsTop'].forEach(function(id){
+    var bar=document.getElementById(id);
+    bar.addEventListener('dblclick',function(e){
+      if(e.target.closest('button,input,a'))return;
+      if(window.pywebview&&window.pywebview.api)
+        window.pywebview.api.toggle_maximized();
+    });
+    bar.classList.add('pywebview-drag-region');
+  });
+}
 if(/[?&]desktop=1/.test(location.search))setTimeout(pollUpdate,1500);
 if(!/[?&]desktop=1/.test(location.search)){
 var _mt=0;fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){_mt=j.mtime||0}).catch(function(){});

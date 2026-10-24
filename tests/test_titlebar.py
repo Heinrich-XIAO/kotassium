@@ -81,6 +81,7 @@ class FakeNative:
         self.background_color = None
         self.frame_displayed = None
         self.movable_by_background = None
+        self.toolbar = "existing"
         self._delegate = SimpleNamespace(respondsToSelector_=lambda selector: False)
 
     def styleMask(self):
@@ -91,6 +92,9 @@ class FakeNative:
 
     def setTitlebarAppearsTransparent_(self, value):
         self.transparent = value
+
+    def setToolbar_(self, toolbar):
+        self.toolbar = toolbar
 
     def setTitleVisibility_(self, value):
         self.title_visibility = value
@@ -169,12 +173,13 @@ class IntegrateTests(unittest.TestCase):
         self.assertTrue(native._mask & (1 << 15),
                         "full-size content view must be set")
         self.assertIs(native.transparent, True)
+        self.assertIsNone(native.toolbar)
         self.assertEqual(native.title_visibility, StubAppKit.NSWindowTitleHidden)
         self.assertEqual(native.titlebar_separator,
                          StubAppKit.NSWindowTitlebarSeparatorStyleNone)
         self.assertEqual(native.background_color, "clear")
         self.assertEqual(native.frame_displayed, ((0, 0, 900, 600), True))
-        self.assertIs(native.movable_by_background, False)
+        self.assertIs(native.movable_by_background, True)
         self.assertIsNotNone(native._delegate)
         self.assertEqual(
             native._delegate.windowWillUseStandardFrame_defaultFrame_(
@@ -202,6 +207,7 @@ class WiringTests(unittest.TestCase):
         self.assertIn("IS_MAC", src)
         self.assertIn("titlebar_macos", src)
         self.assertIn("before_show", src)
+        self.assertIn("toggle_maximized", src)
         self.assertIn("DRAG_REGION_DIRECT_TARGET_ONLY", src)
         self.assertIn("setMovableByWindowBackground_", read("titlebar_macos.py"))
         self.assertIn("windowWillUseStandardFrame_defaultFrame_", read("titlebar_macos.py"))
@@ -212,6 +218,8 @@ class WiringTests(unittest.TestCase):
         self.assertIn("tb=mac", page)
         # the flag must be read from the URL, before the bar is used
         self.assertIn("documentElement.className", page)
+        self.assertIn("addEventListener('dblclick'", page)
+        self.assertIn("toggle_maximized", page)
 
 
 if __name__ == "__main__":

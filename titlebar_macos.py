@@ -107,20 +107,22 @@ def integrate(window):
                 or (1 << 15)
             native.setStyleMask_(native.styleMask() | fullsize)
             native.setTitlebarAppearsTransparent_(True)
-            # Remove the native titlebar material/separator; transparent mode
-            # alone can still leave a gray bar behind the WebView on macOS.
+            # Transparent unified content removes the distinct native title strip.
             separator_hidden = getattr(AppKit, "NSWindowTitlebarSeparatorStyleNone", 2)
             native.setTitlebarSeparatorStyle_(separator_hidden)
             native.setTitleVisibility_(getattr(AppKit, "NSWindowTitleHidden", 1))
+            # Keep AppKit's traffic-light controls but remove its toolbar and
+            # title text. Full-size transparent content lets our page cover
+            # the titlebar region rather than leaving a separate OS strip.
+            native.setToolbar_(None)
             native.setBackgroundColor_(AppKit.NSColor.clearColor())
             # AppKit can leave the old content-frame inset after changing the
             # style mask on pywebview's already-created window. Reapply its
             # frame to force the WebView to fill the titlebar area as well.
             native.setFrame_display_(native.frame(), True)
-            # Dragging is handled by pywebview's explicit page drag region.
-            # Native background dragging competes with WebKit hit-testing near
-            # screen edges, making constrained moves jump back and forth.
-            native.setMovableByWindowBackground_(False)
+            # AppKit handles dragging when the page drag-region doesn't; the
+            # explicit page double-click action handles maximize/restore.
+            native.setMovableByWindowBackground_(True)
             install_zoom_delegate(native)
         except Exception as e:
             print("[kotassium] title bar flags: %s" % e, flush=True)
@@ -141,11 +143,7 @@ def integrate(window):
 
 
 def place_lights(native):
-    """Slide close/minimize/zoom right; y stays at AppKit's default.
-
-    The default keeps the lights centred in the native title bar (~14pt from
-    the top), which is where Spotify puts them inside its taller app bar.
-    """
+    """Place close/minimize/zoom traffic lights at the left of the app bar."""
     try:
         kinds = (AppKit.NSWindowCloseButton,
                  AppKit.NSWindowMiniaturizeButton,

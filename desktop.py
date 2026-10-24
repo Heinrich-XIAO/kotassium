@@ -238,6 +238,26 @@ def relax_autoplay():
     return False
 
 
+class WindowChromeAPI:
+    """Small JS bridge for the native macOS titlebar interactions."""
+
+    def __init__(self):
+        self.window = None
+
+    def toggle_maximized(self):
+        if self.window is None:
+            return False
+        try:
+            if self.window.native.isZoomed():
+                self.window.restore()
+            else:
+                self.window.maximize()
+            return True
+        except Exception as e:
+            print("[kotassium] maximize window: %s" % e, flush=True)
+            return False
+
+
 def start_nowplaying_watch(port, mpris, notify_tracks):
     """Poll the page's now-playing report; drive MPRIS and notifications."""
     url = "http://127.0.0.1:%d/api/nowplaying" % port
@@ -295,13 +315,16 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
             webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
         except Exception:
             pass
+    chrome_api = WindowChromeAPI()
     w = webview.create_window(
         "Kotassium",
         url,
         min_size=MIN_SIZE,
         background_color="#000000",
+        js_api=chrome_api,
         **kwargs
     )
+    chrome_api.window = w
     if IS_MAC:
         # before_show runs synchronously before the window is ordered front,
         # so the native title bar never flashes first. AppKit handles titlebar
