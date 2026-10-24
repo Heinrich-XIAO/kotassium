@@ -53,11 +53,22 @@ class WrapperTests(unittest.TestCase):
         self.assertIn('web", "icons", "icon-512.png', icon_builder)
         self.assertIn('"iconutil", "-c", "icns"', icon_builder)
         build = read("build-macos.sh")
+        self.assertIn("tools/normalize-icons.py", build)
         self.assertIn("tools/make-macos-icon.py", build)
+        normalizer = read("tools/normalize-icons.py")
+        self.assertIn("Image.Resampling.LANCZOS", normalizer)
+        self.assertIn("0.82", normalizer)
+        self.assertIn("size / 2 - cx", normalizer)
+        for icon in ("web/icons/icon-512.png", "web/icons/icon-192.png",
+                     "web/icons/apple-touch-icon.png", "web/icons/icon-maskable-512.png",
+                     "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"):
+            self.assertTrue(os.path.isfile(os.path.join(ROOT, icon)), icon)
 
     def test_android_runs_the_real_server(self):
         # The APK embeds CPython, but it must import the repo's server, not a
         # copy: the Gradle build stages these files from the repo root.
+        normalizer = read("tools/normalize-icons.py")
+        self.assertIn('android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png', normalizer)
         gradle = read("android/app/build.gradle")
         for name in ("serve_web.py", "spotify_get.py", "updater.py"):
             self.assertIn(name, gradle, "android build must stage %s" % name)

@@ -13,6 +13,7 @@ YTDLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_maco
 
 ./setup.sh
 desktop-venv/bin/python -m pip install --quiet py2app Pillow
+./desktop-venv/bin/python tools/normalize-icons.py
 ./desktop-venv/bin/python tools/make-macos-icon.py
 
 # Ship yt-dlp inside the app so a DMG install needs no Homebrew for downloads.
