@@ -120,7 +120,7 @@ class FakeNative:
         self._delegate = delegate
 
     def screen(self):
-        return SimpleNamespace(visibleFrame=lambda: (0, 24, 1440, 876))
+        return SimpleNamespace(visibleFrame=lambda: (-1920, 24, 1920, 1056))
 
     def standardWindowButton_(self, kind):
         return self.buttons[kind]
@@ -161,7 +161,16 @@ class IntegrateTests(unittest.TestCase):
         self.assertEqual(
             native._delegate.windowWillUseStandardFrame_defaultFrame_(
                 native, (1, 2, 3, 4)),
-            (0, 24, 1440, 876))
+            (-1920, 24, 1920, 1056))
+
+    def test_standard_frame_follows_the_window_screen(self):
+        secondary = (-1920, 24, 1920, 1056)
+        native = FakeNative()
+        self.assertEqual(titlebar_macos.standard_frame(native, (0, 0, 800, 600)),
+                         secondary)
+        native.screen = lambda: None
+        self.assertEqual(titlebar_macos.standard_frame(native, (0, 0, 800, 600)),
+                         (0, 0, 800, 600))
 
     def test_failures_leave_a_usable_window(self):
         window = SimpleNamespace(native=BrokenNative())

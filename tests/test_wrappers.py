@@ -47,6 +47,9 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("var choice=SHUF?Math.floor(Math.random()*tracks.length):0", page)
         self.assertIn("prefetch(tracks[choice])", page)
         self.assertIn("_playlistPrefetchStarted[key]=tracks[choice]", page)
+        self.assertIn("_playlistPrefetchPending[key]", page)
+        self.assertIn("_playlistPrefetchPending[key].then(function(){playList()})", page)
+        self.assertIn("PL.findIndex(function(t){return t.t===choice.t&&t.a===choice.a})", page)
         self.assertIn("if(setQ&&SHUF)", page)
 
     def test_playback_controls_disable_when_no_track_is_selected(self):

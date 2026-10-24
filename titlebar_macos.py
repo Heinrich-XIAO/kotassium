@@ -10,12 +10,21 @@ _WINDOW_DELEGATES = {}
 
 
 def standard_frame(window, default):
-    """Choose the screen's visible frame as the native maximize target."""
+    """Choose the current window screen's visible frame as maximize target."""
     try:
         screen = window.screen()
-        return screen.visibleFrame() if screen else default
+        if not screen:
+            return default
+        # Preserve the display's screen-space origin; secondary displays can
+        # have negative coordinates relative to the primary display.
+        return screen.visibleFrame()
     except Exception:
         return default
+
+
+def maximize_frame(window, default):
+    """Frame covering the visible area of the display holding the window."""
+    return standard_frame(window, default)
 
 
 def install_zoom_delegate(native):
@@ -33,7 +42,7 @@ def install_zoom_delegate(native):
                 return self
 
             def windowWillUseStandardFrame_defaultFrame_(self, window, default):
-                return standard_frame(window, default)
+                return maximize_frame(window, default)
 
             def respondsToSelector_(self, selector):
                 if self._delegate and self._delegate.respondsToSelector_(selector):
