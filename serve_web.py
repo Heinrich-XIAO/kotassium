@@ -773,6 +773,17 @@ def handle(path, params, hdr):
             return 200, "application/json", open(os.path.join(STATE, "manifest.json"), "rb").read(), None, False
         except Exception:
             return 200, "application/json", b"{}", None, False
+    if path == "/api/cover/index":
+        # The page keeps its url -> file map in memory only, so every reload
+        # used to re-learn each thumbnail from the remote CDN - and a view
+        # that rendered before it learned showed the raw URL. Hand back the
+        # durable map so the page can resolve known covers on first paint.
+        try:
+            with open(COVERS_JSON) as fh:
+                m = json.load(fh)
+        except Exception:
+            m = {}
+        return 200, "application/json", json.dumps(m).encode(), None, False
     if path == "/api/library":
         out = []
         for f in sorted(os.listdir(LIB)):

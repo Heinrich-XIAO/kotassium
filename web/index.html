@@ -465,6 +465,16 @@ function rewriteCover(url,key){
     if(el.getAttribute('data-cover-url')===url){
       el.style.background='url("/cover/'+key+'") center/cover no-repeat';
       el.removeAttribute('data-cover-url')}})}
+/* The server owns the durable url -> filename map (covers.json); _coverCache
+   above is only this page-load's copy of it, which used to start empty on
+   every reload - so the same thumbnail resolved to a local file in one view
+   and to the raw remote URL in another, until each view re-learned it. Seed
+   from the server once at startup so every surface agrees on first paint. */
+function seedCoverCache(){
+  return API('/api/cover/index').then(function(m){
+    if(!m||typeof m!=='object')return;
+    for(var u in m){if(_coverCache[u]===undefined&&m[u])_coverCache[u]=m[u]}
+  }).catch(function(){})}
 function coverBg(url){
   if(!url)return 'linear-gradient(135deg,#333,#555)';
   var k=_coverCache[url];if(k&&k!=='pending')return 'url("/cover/'+k+'") center/cover no-repeat';
@@ -826,8 +836,11 @@ AU.addEventListener('timeupdate',function(){
     var ni=nextIndex();
     if(ni>=0 && Q[ni]){
       var t=Q[ni];
-      var cov=t.cover?('/cover/'+(window._coverCache&&window._coverCache[t.cover]||'')||t.cover):'';
-      un.innerHTML='<span style="color:#b3b3b3;font-size:11px;margin-right:8px">Up next</span><div style="display:flex;align-items:center;gap:8px"><div style="width:36px;height:36px;border-radius:4px;background:#282828;flex:none;background-size:cover;background-position:center;'+(t.cover?'background-image:url(\''+t.cover.replace(/'/g,'')+'\')':'')+'"></div><div style="min-width:0"><b style="display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.t||'')+'</b><small style="display:block;font-size:11px;color:#b3b3b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.a||'')+'</small></div></div>';
+      /* same cache as every other thumbnail: coverBg resolves to the local
+         /cover/ file when the server has it, and the data-cover-url lets
+         rewriteCover swap it in if it is still being fetched */
+      var bg=String(coverBg(t.cover)).replace(/"/g,"'");
+      un.innerHTML='<span style="color:#b3b3b3;font-size:11px;margin-right:8px">Up next</span><div style="display:flex;align-items:center;gap:8px"><div style="width:36px;height:36px;border-radius:4px;flex:none;background:'+bg+'" '+(t.cover?'data-cover-url="'+esc(t.cover)+'"':'')+'></div><div style="min-width:0"><b style="display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.t||'')+'</b><small style="display:block;font-size:11px;color:#b3b3b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.a||'')+'</small></div></div>';
       if(!un._gone)upnextVis(true);
     } else {un._gone=false;upnextVis(false)}
   }else{un._gone=false;upnextVis(false)}
@@ -950,7 +963,7 @@ function renderFsQueue(){
     var bg=String(coverBg(t.cover)).replace(/"/g,"'");
     h+='<div class="fsQrow" data-i="'+i+'">'+
        '<span class=fsQn>'+(r+1)+'</span>'+
-       '<span class=fsQcov style="background:'+bg+'"></span>'+
+       '<span class=fsQcov style="background:'+bg+'"'+(t.cover?' data-cover-url="'+esc(t.cover)+'"':'')+'></span>'+
        '<span class=fsQt><b>'+esc(t.t||'')+'</b><small>'+esc(t.a||'')+'</small></span>'+
        '<span class=fsQtime>'+fmt(t.ms||0)+'</span></div>';
   }
@@ -1005,7 +1018,7 @@ function renderDfsQueue(){
 function dfsRow(i,t){
   var bg=String(coverBg(t&&t.cover)).replace(/"/g,"'");
   return '<div class="dfsQrow'+(i===QI?' cur':'')+'" data-i="'+i+'">'+
-    '<span class=dfsQcov style="background:'+bg+'"></span>'+
+    '<span class=dfsQcov style="background:'+bg+'"'+(t&&t.cover?' data-cover-url="'+esc(t.cover)+'"':'')+'></span>'+
     '<span class=dfsQt><b>'+esc(t&&t.t||'')+'</b><small>'+esc(t&&t.a||'')+'</small></span></div>';
 }
 document.getElementById('dfsQrows').addEventListener('click',function(e){
@@ -1278,7 +1291,7 @@ if(/[?&]desktop=1/.test(location.search))setTimeout(pollUpdate,1500);
 if(!/[?&]desktop=1/.test(location.search)){
 var _mt=0;fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){_mt=j.mtime||0}).catch(function(){});
 setInterval(function(){fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){if(_mt&&j.mtime&&j.mtime!==_mt)location.reload()}).catch(function(){})},2000);
-}window.addEventListener('load',function(){loadSide().then(renderHome)});
+}window.addEventListener('load',function(){seedCoverCache().then(function(){return loadSide()}).then(renderHome)});
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='127.0.0.1'||location.hostname==='localhost')){
   navigator.serviceWorker.register('/sw.js').catch(function(){});
 }

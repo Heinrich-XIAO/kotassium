@@ -1,3 +1,4 @@
+import base64
 import http.client
 import shutil
 import tempfile
@@ -128,6 +129,74 @@ class ServerSecurityTests(unittest.TestCase):
         self.assertEqual(code, 404)
         code, _ = self.req("GET", "/cover/..%2F..%2Flinks.json")
         self.assertEqual(code, 404)
+
+
+class CoverIndexTests(unittest.TestCase):
+    """/api/cover/index hands the page the durable url -> filename map.
+
+    The page keeps that map in memory only, so without this endpoint every
+    reload re-learned each thumbnail at its own pace and the same song showed
+    a local file in one view and the raw remote URL in another.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="kot-covers-")
+        cls._saved = (serve_web.COVER_DIR, serve_web.COVERS_JSON)
+        serve_web.COVER_DIR = cls.tmp
+        serve_web.COVERS_JSON = os.path.join(cls.tmp, "covers.json")
+        cls.srv = serve_web.make_server("127.0.0.1", 0)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        (serve_web.COVER_DIR, serve_web.COVERS_JSON) = cls._saved
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def req(self, method, path, body=None, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request(method, path, body=body, headers=headers or {})
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, data
+
+    def post_cover(self, url, payload=b"\xff\xd8\xff\xe0fakjpeg"):
+        body = json.dumps({"url": url, "data": base64.b64encode(payload).decode()}).encode()
+        return self.req("POST", "/api/cover/cache", body=body,
+                        headers={"Origin": "http://127.0.0.1:%d" % self.port,
+                                 "Content-Type": "application/json"})
+
+    def test_index_lists_cached_covers(self):
+        code, body = self.post_cover("https://img.example/a.jpg")
+        self.assertEqual(code, 200)
+        f = json.loads(body)["file"]
+        code, body = self.req("GET", "/api/cover/index")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(body), {"https://img.example/a.jpg": f})
+
+    def test_index_is_empty_without_a_map(self):
+        if os.path.exists(serve_web.COVERS_JSON):
+            os.remove(serve_web.COVERS_JSON)
+        code, body = self.req("GET", "/api/cover/index")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(body), {})
+
+    def test_index_is_closed_behind_the_password(self):
+        saved = (serve_web.PASSWORD, serve_web.AUTH, serve_web.SESSION)
+        serve_web.PASSWORD, serve_web.AUTH = "hunter2", True
+        serve_web.SESSION = serve_web._session_token()
+        serve_web._fails.clear()
+        try:
+            code, body = self.req("GET", "/api/cover/index")
+            self.assertEqual(code, 401)
+            self.assertEqual(json.loads(body)["error"], "auth")
+        finally:
+            (serve_web.PASSWORD, serve_web.AUTH, serve_web.SESSION) = saved
+            serve_web._fails.clear()
 
 
 class ResolverTests(unittest.TestCase):
