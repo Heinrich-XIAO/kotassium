@@ -205,7 +205,7 @@ body{-webkit-tap-highlight-color:transparent}
 #searchwrap{flex:1 1 auto;min-width:0}
 #qDiv,#qBrowse{display:none}
 #mid{position:relative;padding:4px}
-#side{position:absolute;z-index:30;left:4px;top:4px;bottom:4px;width:280px;display:none;background:#181818;border-radius:8px;box-shadow:0 12px 32px #000d;flex:none}
+#side{position:absolute;z-index:30;left:4px;top:4px;bottom:4px;width:280px;display:none;background:#181818;border-radius:8px;box-shadow:0 12px 32px #000d;flex:none;touch-action:pan-y pinch-zoom}
 #side.open{display:flex}
 #side.collapsed{left:auto;right:auto;width:68px;flex:none}
 #homeView{padding:16px}
@@ -1102,6 +1102,64 @@ window.addEventListener('resize',function(){if(dfsActive()&&window.innerWidth<=8
     else{fs.style.transition='transform .25s '+FS_EASE;fs.style.transform='translateY(0)'}}
   fs.addEventListener('touchend',release,{passive:true});
   fs.addEventListener('touchcancel',release,{passive:true});
+})();
+/* mobile library: drag the panel left to dismiss it, since the only other
+   way out is the same library button that opened it */
+(function(){
+  var side=document.getElementById('side');if(!side)return;
+  var sx=0,sy=0,go=false,swiped=0,ly=0,lt=0;
+  function mob(){return window.matchMedia('(max-width:820px)').matches}
+  side.addEventListener('touchstart',function(e){
+    if(!mob()||!side.classList.contains('open'))return;
+    /* the link field keeps its own horizontal touches (cursor/selection) */
+    if(e.target.closest&&e.target.closest('input'))return;
+    sx=e.touches[0].clientX;sy=e.touches[0].clientY;go=false;
+    ly=sx;lt=Date.now();
+  },{passive:true});
+  side.addEventListener('touchmove',function(e){
+    if(!go&&(!mob()||!side.classList.contains('open')))return;
+    var mx=e.touches[0].clientX-sx,my=e.touches[0].clientY-sy;
+    if(!go){
+      /* wait for a clearly leftward move, so taps and the list's vertical
+         scroll pass through untouched */
+      if(mx>=-6||Math.abs(my)>=Math.abs(mx))return;
+      go=true;
+      side.style.transition='none';
+    }
+    ly=e.touches[0].clientX;lt=Date.now();
+    side.style.transform='translateX('+Math.min(0,mx)+'px)';
+  },{passive:true});
+  function end(e){
+    if(!go)return;
+    go=false;swiped=Date.now();
+    var w=side.getBoundingClientRect().width||280;
+    var x=Math.min(0,(e.changedTouches?e.changedTouches[0].clientX:sx)-sx);
+    /* still-travelling speed on release, in px/ms (negative = leftward) */
+    var vx=e.changedTouches && lt ?(e.changedTouches[0].clientX-ly)/Math.max(1,Date.now()-lt):0;
+    side.style.transition='transform .25s '+FS_EASE;
+    if(x<-w*0.4||vx<-0.5){ /* past 40%, or a confident flick: slide out and close */
+      side.style.transform='translateX(-100%)';
+      setTimeout(function(){
+        /* the transform is cleared if the button reopened it mid-slide */
+        if(side.style.transform!=='translateX(-100%)')return;
+        side.classList.remove('open');
+        side.style.transition='';side.style.transform='';
+      },250);
+    }else{ /* shy of that: spring back into place */
+      side.style.transform='translateX(0)';
+      setTimeout(function(){if(!go){side.style.transition='';side.style.transform=''}},250);
+    }
+  }
+  side.addEventListener('touchend',end,{passive:true});
+  side.addEventListener('touchcancel',end,{passive:true});
+  /* a swipe must not also activate the playlist row it ended on */
+  side.addEventListener('click',function(e){
+    if(Date.now()-swiped<400){e.stopPropagation();e.preventDefault()}
+  },true);
+  /* a fresh open starts from scratch, never from a half-finished slide */
+  document.getElementById('libBtn').addEventListener('click',function(){
+    side.style.transition='';side.style.transform=''
+  });
 })();
 document.addEventListener('keydown',function(e){
   if(e.code==='Space'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();toggle()}});
