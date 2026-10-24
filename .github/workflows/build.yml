@@ -56,6 +56,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-macos-build.txt
+
+      - name: Restore yt-dlp binary
+        id: yt-dlp-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: vendor/yt-dlp
+          key: yt-dlp-macos-${{ runner.arch }}-latest
 
       - name: Version
         id: ver
@@ -65,7 +74,20 @@ jobs:
         env:
           KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
           KOTASSIUM_URL: ${{ vars.KOTASSIUM_URL }}
-        run: ./build-macos.sh
+        run: |
+          mkdir -p vendor
+          if [ ! -x vendor/yt-dlp ]; then
+            curl -fL --retry 3 -o vendor/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
+            chmod +x vendor/yt-dlp
+          fi
+          ./build-macos.sh
+
+      - name: Cache yt-dlp binary
+        uses: actions/cache/save@v4
+        if: ${{ steps.yt-dlp-cache.outputs.cache-hit != 'true' }}
+        with:
+          path: vendor/yt-dlp
+          key: yt-dlp-macos-${{ runner.arch }}-latest
 
       - name: Smoke test the bundle
         run: |
@@ -148,6 +170,12 @@ jobs:
         id: ver
         run: echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
 
+      - name: Cache Python packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: android-pip-${{ runner.os }}-py312-yt-dlp-certifi-v1
+
       - name: Signing key
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
@@ -166,7 +194,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           cd android
-          gradle assembleRelease --no-daemon \
+          gradle assembleRelease --build-cache --parallel --no-daemon \
             -PkotassiumUrl="$KOTASSIUM_URL" \
             -PappVersion="${{ steps.ver.outputs.version }}"
 
