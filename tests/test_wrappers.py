@@ -69,6 +69,55 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("b.disabled=!canNext", page)
         self.assertIn("#btns button:disabled,#fsBtns button:disabled,#dfsBtn:disabled", page)
 
+    def test_page_really_escapes_what_it_injects(self):
+        # esc() was two no-ops - .replace(/&/g,'&').replace(/</g,'<') - so every
+        # Spotify/YouTube/Deezer title, playlist name and cover URL was parsed
+        # as markup wherever it was written into innerHTML.
+        page = read("web/index.html")
+        self.assertIn("function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;')", page)
+        self.assertIn(".replace(/</g,'&lt;').replace(/>/g,'&gt;')", page)
+        self.assertIn(".replace(/\"/g,'&quot;').replace(/'/g,'&#39;')", page)
+        # the up-next card inlines its title and artist directly
+        self.assertIn("ellipsis\">'+esc(t.t||'')+'</b>", page)
+        self.assertIn("ellipsis\">'+esc(t.a||'')+'</small>", page)
+        # cover URLs sit inside style="background:url(...)" strings
+        self.assertIn("function cssUrl(u)", page)
+        self.assertIn("'url(\"'+cssUrl(url)+'\") center/cover no-repeat'", page)
+
+    def test_mobile_library_drawer_can_be_opened(self):
+        # Below 820px #side is a slide-over (#side.open), not a collapsible
+        # rail: toggleSide used to only flip SIDECOLL, which applySide threw
+        # away on a narrow window, so the library was unreachable on a phone.
+        page = read("web/index.html")
+        self.assertIn("if(window.matchMedia('(max-width:820px)').matches){", page)
+        self.assertIn("var open=!s.classList.contains('open');", page)
+        self.assertIn("s.classList.toggle('open',open);", page)
+        # opening a playlist dismisses the drawer, closing clears the swipe
+        self.assertIn("classList.remove('open')", page)
+        # and the rail preference must survive a trip through a narrow window
+        self.assertIn("/* mobile keeps its own open/closed state - don't clobber the rail pref */", page)
+
+    def test_playing_playlist_is_not_the_opened_one(self):
+        # PLAYING_PL drives both the row highlight and the "now playing"
+        # playlist label; openPlaylist used to overwrite it, so browsing
+        # playlist B while A played highlighted a random row of B.
+        page = read("web/index.html")
+        self.assertIn("    _curViewName=p.name;\n", page)
+        self.assertNotIn("PLAYING_PL=p.name", page)
+        self.assertIn("if(setQ){Q=PL.slice();PLAYING_PL=_curViewName}", page)
+        # and a search result must be able to show as the playing row
+        self.assertIn("'#tbl .row,#tbl .srow'", page)
+        self.assertNotIn("#srowrow", page)
+        self.assertIn(".srow.playing .rtxt b", page)
+
+    def test_queue_views_follow_repeat_all_and_open_after_a_failed_prefetch(self):
+        page = read("web/index.html")
+        # repeat-all wraps to track 1, so the queue views must too
+        self.assertIn("if(REPEAT===1&&QI===Q.length-1)for(var i=0;i<QI;i++)add(i);", page)
+        # a prefetch that resolves null used to return a fetch that was never
+        # rendered: clicking the playlist did nothing at all
+        self.assertIn(".then(function(full){return full||API('/api/links/get?url='+encodeURIComponent(p.url))})", page)
+
     def test_page_is_the_source_of_truth(self):
         page = read("web/index.html")
         self.assertIn("<title>Kotassium</title>", page)
