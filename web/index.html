@@ -1281,12 +1281,6 @@ function startUpdate(){
   postJSON('/api/update',{}).then(function(st){renderUpdate(st);pollUpdate(500)})
     .catch(function(){if(b)b.disabled=false;toast('could not start the update')});
 }
-/* macOS shell: the top bar doubles as the window's drag region (pywebview
-   listens for pywebview-drag-region; direct-match only, so the search field
-   keeps text selection and buttons keep their clicks) */
-if(/[?&]tb=mac(&|$)/.test(location.search)){
-document.getElementById('top').classList.add('pywebview-drag-region');
-document.getElementById('dfsTop').classList.add('pywebview-drag-region')}
 if(/[?&]desktop=1/.test(location.search))setTimeout(pollUpdate,1500);
 if(!/[?&]desktop=1/.test(location.search)){
 var _mt=0;fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){_mt=j.mtime||0}).catch(function(){});

@@ -57,6 +57,7 @@ class FakeNative:
                                    FakeButton(x=49.0)]
         self.transparent = None
         self.title_visibility = None
+        self.movable_by_background = None
 
     def styleMask(self):
         return self._mask
@@ -69,6 +70,9 @@ class FakeNative:
 
     def setTitleVisibility_(self, value):
         self.title_visibility = value
+
+    def setMovableByWindowBackground_(self, value):
+        self.movable_by_background = value
 
     def standardWindowButton_(self, kind):
         return self.buttons[kind]
@@ -121,6 +125,7 @@ class IntegrateTests(unittest.TestCase):
                         "full-size content view must be set")
         self.assertIs(native.transparent, True)
         self.assertEqual(native.title_visibility, StubAppKit.NSWindowTitleHidden)
+        self.assertIs(native.movable_by_background, True)
         self.assertEqual([b.frame().origin.x for b in native.buttons],
                          [20.0, 40.0, 60.0])
         # y stays where AppKit put it (centred in the native title bar)
@@ -143,13 +148,14 @@ class WiringTests(unittest.TestCase):
         self.assertIn("IS_MAC", src)
         self.assertIn("titlebar_macos", src)
         self.assertIn("before_show", src)
-        self.assertIn("DRAG_REGION_DIRECT_TARGET_ONLY", src)
+        self.assertNotIn("DRAG_REGION_DIRECT_TARGET_ONLY", src)
+        self.assertIn("setMovableByWindowBackground_", read("titlebar_macos.py"))
 
-    def test_page_marks_the_drag_region(self):
+    def test_page_does_not_use_webview_drag_regions(self):
         page = read("web/index.html")
-        self.assertIn("pywebview-drag-region", page)
+        self.assertNotIn("pywebview-drag-region", page)
         self.assertIn("tb=mac", page)
-        # the flag must be read from the URL, before the bar is used
+        # CSS flag is read before the page is rendered.
         self.assertIn("documentElement.className", page)
 
 

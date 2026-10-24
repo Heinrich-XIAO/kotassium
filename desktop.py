@@ -288,14 +288,6 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
         params.append("tb=mac")
     if params:
         url += ("&" if "?" in url else "?") + "&".join(params)
-    if IS_MAC:
-        # Only elements marked pywebview-drag-region start a window drag, so
-        # pressing inside the search field selects text instead of moving the
-        # window. Ignored by pywebview versions that predate the setting.
-        try:
-            webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
-        except Exception:
-            pass
     w = webview.create_window(
         "Kotassium",
         url,
@@ -305,8 +297,8 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
     )
     if IS_MAC:
         # before_show runs synchronously before the window is ordered front,
-        # so the native title bar never flashes first. On any failure the
-        # window keeps its normal, usable title bar.
+        # so the native title bar never flashes first. AppKit handles titlebar
+        # dragging and double-click zoom; no WebView drag region is involved.
         try:
             import titlebar_macos
             w.events.before_show += lambda: titlebar_macos.integrate(w)

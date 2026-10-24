@@ -56,6 +56,11 @@ def integrate(window):
             native.setStyleMask_(native.styleMask() | fullsize)
             native.setTitlebarAppearsTransparent_(True)
             native.setTitleVisibility_(getattr(AppKit, "NSWindowTitleHidden", 1))
+            # Native titlebar hit-testing gives correct window dragging and
+            # preserves macOS's configured double-click action (normally zoom).
+            # The webview drag-region handler instead computes a stale offset
+            # when the content view extends beneath the titlebar.
+            native.setMovableByWindowBackground_(True)
         except Exception as e:
             print("[kotassium] title bar flags: %s" % e, flush=True)
         place_lights(native)
