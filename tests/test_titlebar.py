@@ -150,7 +150,7 @@ class IntegrateTests(unittest.TestCase):
                          StubAppKit.NSWindowTitlebarSeparatorStyleNone)
         self.assertEqual(native.background_color, "clear")
         self.assertEqual(native.frame_displayed, ((0, 0, 900, 600), True))
-        self.assertIs(native.movable_by_background, True)
+        self.assertIs(native.movable_by_background, False)
         self.assertEqual([b.frame().origin.x for b in native.buttons],
                          [20.0, 40.0, 60.0])
         # y stays where AppKit put it (centred in the native title bar)

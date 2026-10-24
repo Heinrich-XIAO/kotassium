@@ -65,10 +65,10 @@ def integrate(window):
             # style mask on pywebview's already-created window. Reapply its
             # frame to force the WebView to fill the titlebar area as well.
             native.setFrame_display_(native.frame(), True)
-            # Full-size content view removes the native titlebar's drag area.
-            # Enable background dragging; the page also marks its empty top
-            # bar as a pywebview drag region for reliable WKWebView hit-testing.
-            native.setMovableByWindowBackground_(True)
+            # Dragging is handled by pywebview's explicit page drag region.
+            # Native background dragging competes with WebKit hit-testing near
+            # screen edges, making constrained moves jump back and forth.
+            native.setMovableByWindowBackground_(False)
         except Exception as e:
             print("[kotassium] title bar flags: %s" % e, flush=True)
         place_lights(native)
