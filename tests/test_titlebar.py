@@ -157,148 +157,37 @@ class GeometryTests(unittest.TestCase):
     def test_app_controls_precede_home_and_search(self):
         page = read("web/index.html")
         top = page.index('<div id=top>')
-        controls = page.index('<div id=macControls>', top)
         home = page.index('<button id=homeBtn', top)
         search = page.index('<div id=searchwrap', top)
-        self.assertLess(controls, home)
         self.assertLess(home, search)
-        self.assertIn("html.tbmac #top{padding-left:16px}", page)
 
-class IntegrateTests(unittest.TestCase):
-    def setUp(self):
-        self._appkit = titlebar_macos.AppKit
-        self._screens = StubAppKit.screens
-        titlebar_macos.AppKit = StubAppKit
-        StubAppKit.screens = []
-
-    def tearDown(self):
-        titlebar_macos.AppKit = self._appkit
-        StubAppKit.screens = self._screens
-
-    def screen(self, frame, visible):
-        return SimpleNamespace(frame=lambda: frame,
-                               visibleFrame=lambda: visible)
-
-    def test_flags_and_light_positions(self):
+    def test_custom_titlebar_helpers_are_retired_noops(self):
         native = FakeNative()
-        window = SimpleNamespace(native=native)
-        self.assertTrue(titlebar_macos.integrate(window))
-        self.assertIs(native.movable_by_background, True)
-        self.assertIsNotNone(native._delegate)
-        self.assertEqual(
-            native._delegate.windowWillUseStandardFrame_defaultFrame_(
-                native, (1, 2, 3, 4)),
-            (-1920, 24, 1920, 1056))
-
-    def test_standard_frame_selects_screen_containing_window_center(self):
-        primary = self.screen((0, 0, 1440, 900), (0, 24, 1440, 876))
-        secondary = self.screen((-1920, 0, 1920, 1080),
-                                (-1920, 24, 1920, 1056))
-        StubAppKit.screens = [primary, secondary]
-        native = FakeNative()
-        # Straddles both displays, but its center is on the secondary display.
-        native.frame = lambda: (-900, 100, 1000, 700)
-        native.screen = lambda: primary  # AppKit window.screen can flip near seams
-        self.assertEqual(titlebar_macos.standard_frame(native, (0, 0, 800, 600)),
-                         (-1920, 24, 1920, 1056))
-
-    def test_standard_frame_falls_back_when_no_screen_list_is_available(self):
-        native = FakeNative()
-        self.assertEqual(titlebar_macos.standard_frame(native, (0, 0, 800, 600)),
-                         (-1920, 24, 1920, 1056))
-        native.screen = lambda: None
-        self.assertEqual(titlebar_macos.standard_frame(native, (0, 0, 800, 600)),
-                         (0, 0, 800, 600))
-
-    def test_toggle_maximized_sets_frame_on_current_secondary_screen(self):
-        native = FakeNative()
-        self.assertTrue(titlebar_macos.toggle_maximized(native))
-        self.assertEqual(native.animated_frame,
-                         ((-1920, 24, 1920, 1056), True, False))
-
-    def test_toggle_maximized_restores_the_saved_normal_frame(self):
-        native = FakeNative()
-        normal = (50, 70, 900, 600)
-        native._frame = normal
-        self.assertTrue(titlebar_macos.toggle_maximized(native))
-        self.assertEqual(native.frame(), (-1920, 24, 1920, 1056))
-        self.assertTrue(titlebar_macos.toggle_maximized(native))
-        self.assertEqual(native.frame(), normal)
-
-    def test_toggle_maximized_dispatches_to_cocoa_main_thread(self):
-        native = FakeNative()
-        callbacks = []
-        app_helper = SimpleNamespace(callAfter=lambda fn, *args: callbacks.append((fn, args)))
-        import sys
-        saved_pkg = sys.modules.get("PyObjCTools")
-        saved = sys.modules.get("PyObjCTools.AppHelper")
-        package = SimpleNamespace(AppHelper=app_helper)
-        sys.modules["PyObjCTools"] = package
-        sys.modules["PyObjCTools.AppHelper"] = app_helper
-        real_main_thread = titlebar_macos.threading.main_thread
-        try:
-            titlebar_macos.threading.main_thread = lambda: object()
-            self.assertTrue(titlebar_macos.toggle_maximized(native))
-            self.assertEqual(len(callbacks), 1)
-            fn, args = callbacks[0]
-            self.assertIs(fn, titlebar_macos.toggle_maximized)
-            self.assertEqual(args, (native,))
-        finally:
-            titlebar_macos.threading.main_thread = real_main_thread
-            if saved is None:
-                sys.modules.pop("PyObjCTools.AppHelper", None)
-            else:
-                sys.modules["PyObjCTools.AppHelper"] = saved
-            if saved_pkg is None:
-                sys.modules.pop("PyObjCTools", None)
-            else:
-                sys.modules["PyObjCTools"] = saved_pkg
-
-    def test_toggle_maximized_handles_already_maximized_frame(self):
-        native = FakeNative()
-        native.frame = lambda: (-1920, 24, 1920, 1056)
-        self.assertTrue(titlebar_macos.toggle_maximized(native))
-        self.assertIsNone(titlebar_macos._MAXIMIZED_FRAMES.get(id(native)))
+        self.assertFalse(titlebar_macos.integrate(SimpleNamespace(native=native)))
+        self.assertFalse(titlebar_macos.toggle_maximized(native))
+        self.assertEqual(titlebar_macos.standard_frame(native, (1, 2, 3, 4)),
+                         (1, 2, 3, 4))
+        self.assertIsNone(titlebar_macos.forget_window(native))
 
     def test_failures_leave_a_usable_window(self):
         window = SimpleNamespace(native=BrokenNative())
-        self.assertTrue(titlebar_macos.integrate(window))
-        self.assertTrue(titlebar_macos.integrate(SimpleNamespace(native=None)))
+        self.assertFalse(titlebar_macos.integrate(window))
+        self.assertFalse(titlebar_macos.integrate(SimpleNamespace(native=None)))
 
 
 class WiringTests(unittest.TestCase):
-    def test_desktop_passes_the_flag_and_hooks_the_event(self):
+    def test_desktop_uses_native_resizable_window(self):
         src = read("desktop.py")
-        self.assertIn('"tb=mac"', src)
-        self.assertIn("IS_MAC", src)
-        self.assertIn("titlebar_macos", src)
-        self.assertIn("before_show", src)
-        self.assertIn("toggle_maximized", src)
-        self.assertIn("titlebar_macos.toggle_maximized", src)
-        self.assertIn("DRAG_REGION_DIRECT_TARGET_ONLY", src)
-        self.assertIn("frameless=IS_MAC", src)
-        self.assertIn("easy_drag=False", src)
-        self.assertIn("close_window", src)
-        self.assertIn("minimize_window", src)
-        self.assertIn("windowWillUseStandardFrame_defaultFrame_", read("titlebar_macos.py"))
+        self.assertNotIn('"tb=mac"', src)
+        self.assertNotIn("frameless=IS_MAC", src)
+        self.assertNotIn("import titlebar_macos", src)
+        self.assertNotIn("easy_drag=False", src)
 
-    def test_page_marks_the_drag_region(self):
+    def test_mac_page_does_not_replace_native_window_controls(self):
         page = read("web/index.html")
-        self.assertIn("pywebview-drag-region", page)
-        self.assertIn("tb=mac", page)
-        # the flag must be read from the URL, before the bar is used
-        self.assertIn("documentElement.className", page)
-        self.assertNotIn("addEventListener('dblclick'", page)
-        self.assertIn("addEventListener('mousedown'", page)
-        self.assertIn("e.detail===2", page)
-        self.assertIn("toggle_maximized", page)
-        self.assertIn("id=macControls", page)
-        self.assertIn("id=macClose", page)
-        self.assertIn("id=macMin", page)
-        self.assertIn("id=macZoom", page)
-        self.assertIn('id=macClose title="Close window" onclick=', page)
-        self.assertIn('id=macMin title="Minimize window" onclick=', page)
-        self.assertIn('id=macZoom title="Maximize window" onclick=', page)
+        self.assertNotIn("id=macControls", page)
+        self.assertNotIn("pywebview-drag-region", page)
+        self.assertNotIn("toggle_maximized", page)
 
 if __name__ == "__main__":
     unittest.main()

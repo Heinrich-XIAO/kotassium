@@ -238,42 +238,6 @@ def relax_autoplay():
     return False
 
 
-class WindowChromeAPI:
-    """Small JS bridge for the native macOS titlebar interactions."""
-
-    def __init__(self):
-        self.window = None
-
-    def toggle_maximized(self):
-        if self.window is None:
-            return False
-        try:
-            if IS_MAC:
-                import titlebar_macos
-                return titlebar_macos.toggle_maximized(
-                    getattr(self.window, "native", None))
-            if self.window.maximized:
-                self.window.restore()
-            else:
-                self.window.maximize()
-            return True
-        except Exception as e:
-            print("[kotassium] maximize window: %s" % e, flush=True)
-            return False
-
-    def close_window(self):
-        if self.window is None:
-            return False
-        self.window.destroy()
-        return True
-
-    def minimize_window(self):
-        if self.window is None:
-            return False
-        self.window.minimize()
-        return True
-
-
 def start_nowplaying_watch(port, mpris, notify_tracks):
     """Poll the page's now-playing report; drive MPRIS and notifications."""
     url = "http://127.0.0.1:%d/api/nowplaying" % port
@@ -319,37 +283,15 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
         # desktop=1 stops the page from polling /api/mtime every 2s: that
         # reload-on-change behaviour is only wanted while editing the UI.
         params.append("desktop=1")
-    if IS_MAC:
-        # The app page supplies frameless window controls in its top bar.
-        params.append("tb=mac")
     if params:
         url += ("&" if "?" in url else "?") + "&".join(params)
-    if IS_MAC:
-        # Only blank bar background is draggable; controls and search remain interactive.
-        try:
-            webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
-        except Exception:
-            pass
-    chrome_api = WindowChromeAPI()
     w = webview.create_window(
         "Kotassium",
         url,
         min_size=MIN_SIZE,
         background_color="#000000",
-        frameless=IS_MAC,
-        easy_drag=False,
-        js_api=chrome_api,
         **kwargs
     )
-    chrome_api.window = w
-    if IS_MAC:
-        # Native titlebar removed: the page draws the three controls and calls
-        # this JS bridge for close/minimize/maximize.
-        try:
-            import titlebar_macos
-            w.events.before_show += lambda: titlebar_macos.integrate(w)
-        except Exception as e:
-            print("[kotassium] title bar: %s" % e, flush=True)
 
     # updater.py runs the swap script once this process is gone; closing the
     # window is what ends it.

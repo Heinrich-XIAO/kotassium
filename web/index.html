@@ -14,14 +14,7 @@ input{background:none;border:0;color:#fff;font-family:inherit}
 input:focus{outline:none}
 svg{display:block}
 #top{height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:8px 16px;background:#000;position:relative;z-index:5}
-/* macOS app chrome is a single page bar with app-owned window controls. */
-html.tbmac #top{height:64px;padding-top:8px}
 #homeBtn{width:48px;height:48px;border-radius:50%;background:#1f1f1f;display:grid;place-items:center;transition:transform .1s;flex:none}
-#macControls{display:none;align-items:center;gap:8px;flex:none;margin-right:6px}
-#macControls button{width:12px;height:12px;border-radius:50%;padding:0;box-shadow:inset 0 0 0 1px #0002}
-#macClose{background:#ff5f57}#macMin{background:#febc2e}#macZoom{background:#28c840}
-#macControls button:hover{filter:brightness(1.12)}
-html.tbmac #macControls{display:flex}
 #homeBtn:hover{transform:scale(1.06);background:#2a2a2a}
 #searchwrap{background:#1f1f1f;border-radius:500px;height:48px;flex:1 1 480px;max-width:600px;display:flex;align-items:center;padding:0 14px;border:1px solid transparent}
 #searchwrap:hover{background:#2a2a2a}
@@ -34,9 +27,6 @@ html.tbmac #macControls{display:flex}
 #qDiv{width:1px;height:24px;background:#ffffff26;flex:none;margin:0 4px 0 6px}
 #qBrowse{width:32px;height:32px;border-radius:6px;color:#b3b3b3;display:grid;place-items:center;flex:none}
 #qBrowse:hover{color:#fff;background:#ffffff14}
-/* macOS shell: app-owned controls occupy the left edge of the existing bar. */
-html.tbmac #top{padding-left:16px}
-html.tbmac #dfsTop{padding-left:88px}
 #mid{flex:1;display:flex;min-height:0;background:#121212;padding:8px;gap:8px}
 #side{flex:0 0 262px;background:#121212;border-radius:8px;display:flex;flex-direction:column;min-height:0;transition:flex-basis .2s}
 #main{flex:1;background:#121212;border-radius:8px;overflow-y:auto;position:relative}
@@ -287,9 +277,8 @@ body{-webkit-tap-highlight-color:transparent}
 /* the control buttons are flex:none so they never squash into an ellipse;
    on the narrowest phones the gap shrinks instead to keep the row inside */
 @media(max-width:360px){#fsBtns{gap:16px}}
-</style><script>/* macOS shell (tb=mac from desktop.py): reserve the bar's left side for the traffic lights */if(/[?&]tb=mac(&|$)/.test(location.search))document.documentElement.className+=' tbmac'</script></head><body>
+</style></head><body>
 <div id=top>
-<div id=macControls><button id=macClose title="Close window" onclick="window.pywebview.api.close_window()"></button><button id=macMin title="Minimize window" onclick="window.pywebview.api.minimize_window()"></button><button id=macZoom title="Maximize window" onclick="window.pywebview.api.toggle_maximized()"></button></div>
 <button id=libBtn onclick="toggleSide()" title="Collapse library"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M3 3h2.5v18H3zM7 3h2.5v18H7zM11 3.6L21.6 5v14L11 20.4z"/></svg></button>
 <button id=homeBtn onclick=goHome() title="Home"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 3l9 8h-2.5v9h-5v-6h-3v6h-5v-9H3z"/></svg></button>
 <div id=searchwrap><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b3b3b3" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id=q placeholder="What do you want to play?" oninput="document.getElementById('searchwrap').classList.toggle('filled',!!this.value)" onkeydown="if(event.key==='Enter')doSearch()"><button id=qClear onclick="var i=document.getElementById('q');i.value='';document.getElementById('searchwrap').classList.remove('filled');i.focus()" title="Clear search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button><span id=qDiv></span><button id=qBrowse onclick=goHome() title="Browse your playlists"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4.5h13v2H3zM3 8.25h13v2H3zM3 12h18v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z"/></svg></button></div>
@@ -1369,27 +1358,6 @@ function startUpdate(){
   if(b){b.disabled=true;b.classList.add('spin')}
   postJSON('/api/update',{}).then(function(st){renderUpdate(st);pollUpdate(500)})
     .catch(function(){if(b)b.disabled=false;toast('could not start the update')});
-}
-/* macOS titlebar-less shell: drag empty top-bar space and double-click it to maximize. */
-if(/[?&]tb=mac(&|$)/.test(location.search)){
-  ['top','dfsTop'].forEach(function(id){
-    var bar=document.getElementById(id);
-    /* pywebview's Cocoa drag-region handler calls preventDefault on mousedown,
-       which suppresses the browser's native dblclick synthesis. Implement
-       double-click ourselves on the drag region and reserve single clicks for
-       window dragging. */
-    bar.addEventListener('mousedown',function(e){
-      if(e.button!==0||e.detail<1||e.target.closest('button,input,a'))return;
-      if(e.detail===2){
-        e.preventDefault();
-        if(window.pywebview&&window.pywebview.api)
-          window.pywebview.api.toggle_maximized();
-      }
-    },true);
-    bar.classList.add('pywebview-drag-region');
-  });
-  var controls=document.getElementById('macControls');
-  controls.addEventListener('mousedown',function(e){e.stopPropagation()});
 }
 if(/[?&]desktop=1/.test(location.search))setTimeout(pollUpdate,1500);
 if(!/[?&]desktop=1/.test(location.search)){
