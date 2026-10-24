@@ -38,6 +38,20 @@ class StubAppKit:
     def NSMakePoint(x, y):
         return (x, y)
 
+    class NSObject:
+        @classmethod
+        def alloc(cls):
+            return cls()
+
+        def init(self):
+            return self
+
+        def respondsToSelector_(self, selector):
+            return False
+
+        def forwardingTargetForSelector_(self, selector):
+            return None
+
 
 class FakeButton:
     def __init__(self, x=7.0, y=6.0, width=14.0):
@@ -67,6 +81,7 @@ class FakeNative:
         self.background_color = None
         self.frame_displayed = None
         self.movable_by_background = None
+        self._delegate = SimpleNamespace(respondsToSelector_=lambda selector: False)
 
     def styleMask(self):
         return self._mask
@@ -94,6 +109,15 @@ class FakeNative:
 
     def setMovableByWindowBackground_(self, value):
         self.movable_by_background = value
+
+    def delegate(self):
+        return self._delegate
+
+    def setDelegate_(self, delegate):
+        self._delegate = delegate
+
+    def screen(self):
+        return SimpleNamespace(visibleFrame=lambda: (0, 24, 1440, 876))
 
     def standardWindowButton_(self, kind):
         return self.buttons[kind]
@@ -151,6 +175,11 @@ class IntegrateTests(unittest.TestCase):
         self.assertEqual(native.background_color, "clear")
         self.assertEqual(native.frame_displayed, ((0, 0, 900, 600), True))
         self.assertIs(native.movable_by_background, False)
+        self.assertIsNotNone(native._delegate)
+        self.assertEqual(
+            native._delegate.windowWillUseStandardFrame_defaultFrame_(
+                native, (1, 2, 3, 4)),
+            (0, 24, 1440, 876))
         self.assertEqual([b.frame().origin.x for b in native.buttons],
                          [20.0, 40.0, 60.0])
         # y stays where AppKit put it (centred in the native title bar)
@@ -175,6 +204,7 @@ class WiringTests(unittest.TestCase):
         self.assertIn("before_show", src)
         self.assertIn("DRAG_REGION_DIRECT_TARGET_ONLY", src)
         self.assertIn("setMovableByWindowBackground_", read("titlebar_macos.py"))
+        self.assertIn("windowWillUseStandardFrame_defaultFrame_", read("titlebar_macos.py"))
 
     def test_page_marks_the_drag_region(self):
         page = read("web/index.html")

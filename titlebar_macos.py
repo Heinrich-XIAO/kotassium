@@ -24,6 +24,58 @@ except Exception:  # no pyobjc, or not macOS: leave the window as it is
 LIGHT_X0 = 20.0    # left edge of the close light, points from the window edge
 LIGHT_STEP = 20.0  # centre-to-centre spacing: light width plus a gap
 
+# Keep the delegate strongly referenced: NSWindow's delegate link is not a
+# reliable owner for a Python proxy object.
+_WINDOW_DELEGATES = {}
+
+
+def standard_frame(window, default):
+    """Return the full usable display frame, centered and excluding OS chrome."""
+    try:
+        screen = window.screen()
+        if screen is None:
+            return default
+        return screen.visibleFrame()
+    except Exception:
+        return default
+
+
+def install_zoom_delegate(native):
+    """Give native zoom a screen-filling standard frame without losing pywebview callbacks."""
+    if AppKit is None:
+        return False
+    try:
+        original = native.delegate()
+
+        class ZoomDelegate(AppKit.NSObject):
+            def initWithDelegate_(self, delegate):
+                self = AppKit.NSObject.init(self)
+                if self is None:
+                    return None
+                self._delegate = delegate
+                return self
+
+            def windowWillUseStandardFrame_defaultFrame_(self, window, default):
+                return standard_frame(window, default)
+
+            def respondsToSelector_(self, selector):
+                if self._delegate and self._delegate.respondsToSelector_(selector):
+                    return True
+                return AppKit.NSObject.respondsToSelector_(self, selector)
+
+            def forwardingTargetForSelector_(self, selector):
+                if self._delegate and self._delegate.respondsToSelector_(selector):
+                    return self._delegate
+                return AppKit.NSObject.forwardingTargetForSelector_(self, selector)
+
+        delegate = ZoomDelegate.alloc().initWithDelegate_(original)
+        native.setDelegate_(delegate)
+        _WINDOW_DELEGATES[id(native)] = (delegate, original)
+        return True
+    except Exception as e:
+        print("[kotassium] maximize frame: %s" % e, flush=True)
+        return False
+
 
 def light_origins(width, x0=LIGHT_X0, step=LIGHT_STEP):
     """Frame origins (x) of the three lights for a button of `width`."""
@@ -69,6 +121,7 @@ def integrate(window):
             # Native background dragging competes with WebKit hit-testing near
             # screen edges, making constrained moves jump back and forth.
             native.setMovableByWindowBackground_(False)
+            install_zoom_delegate(native)
         except Exception as e:
             print("[kotassium] title bar flags: %s" % e, flush=True)
         place_lights(native)

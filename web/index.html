@@ -14,6 +14,9 @@ input{background:none;border:0;color:#fff;font-family:inherit}
 input:focus{outline:none}
 svg{display:block}
 #top{height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:8px 16px;background:#000;position:relative;z-index:5}
+/* In the macOS full-size-content window the OS owns the top 28pt beneath
+   the traffic lights; start the app bar below it instead of underlapping it. */
+html.tbmac #top{height:92px;padding-top:36px}
 #homeBtn{width:48px;height:48px;border-radius:50%;background:#1f1f1f;display:grid;place-items:center;transition:transform .1s;flex:none}
 #homeBtn:hover{transform:scale(1.06);background:#2a2a2a}
 #searchwrap{background:#1f1f1f;border-radius:500px;height:48px;flex:1 1 480px;max-width:600px;display:flex;align-items:center;padding:0 14px;border:1px solid transparent}
