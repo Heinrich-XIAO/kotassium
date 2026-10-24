@@ -747,7 +747,7 @@ function setPausedIcon(p){
 function playTrack(tr){
   if(!tr)return;
   showNow(tr);meta(tr);markActive();
-  if(tr.source==='youtube'){return localResolve(tr,true)}
+  if(tr.source==='youtube'||tr.source==='newgrounds'){return localResolve(tr,true)}
   if(tr.source&&tr.source!=='local'){
     var u='/api/play?src='+tr.source+'&id='+tr.id;
     if(tr.preview)u+='&preview='+encodeURIComponent(tr.preview);
@@ -785,14 +785,27 @@ function localResolve(tr,fresh){
   }
   localResolveFresh(tr)
 }
+/* Candidates for a track that has to be fetched: YouTube first, then the
+   Newgrounds Audio Portal (direct mp3s, a lot of the same catalogue). The
+   Newgrounds query gets t/a separately because the portal ANDs whole terms:
+   "artist title" there matches remakes quoting the artist, not the original. */
+function findCands(tr){
+  var q=(tr.a?tr.a+' ':'')+(tr.t||'');
+  if(tr.source==='newgrounds'&&tr.id)return Promise.resolve([{source:'newgrounds',id:tr.id}]);
+  return API('/api/search?src=youtube&q='+encodeURIComponent(q)).then(function(j){
+    var yt=(j.results||[]).filter(function(r){return r.source==='youtube'}).slice(0,5);
+    if(yt.length)return yt;
+    return API('/api/search?src=newgrounds&q='+encodeURIComponent(q)+'&t='+encodeURIComponent(tr.t||'')+'&a='+encodeURIComponent(tr.a||'')).then(function(k){
+      return (k.results||[]).filter(function(r){return r.source==='newgrounds'}).slice(0,5);
+    },function(){return []});
+  });
+}
 function localResolveFresh(tr){
   stopSrc();setPausedIcon(true);
   toast('fetching new '+(tr.t||'')+'...');
-  var key=(tr.t||'')+'|'+(tr.a||'');
-  API('/api/search?src=youtube&q='+encodeURIComponent((tr.a?tr.a+' ':'')+(tr.t||''))).then(function(j){
-    var cands=(j.results||[]).filter(function(r){return r.source==='youtube'}).slice(0,5);
+  findCands(tr).then(function(cands){
     if(!cands.length){toast('no source found for '+(tr.t||''));return}
-    tryCands(cands,0,tr)});
+    tryCands(cands,0,tr)},function(){toast('no source found for '+(tr.t||''))});
 }
 function tryCands(cands,k,tr){
   if(k>=cands.length){toast('could not download '+(tr.t||'')+' - skipped');nx();return}
@@ -820,18 +833,18 @@ function rememberYt(tr,id){
   try{localStorage.setItem('kot_ytcache',JSON.stringify(_cache))}catch(e){}}
 function prefetch(tr){
   if(!tr)return;
-  if(tr.source&&tr.source!=='youtube')return; /* streamed sources: nothing to fetch */
+  if(tr.source&&tr.source!=='youtube'&&tr.source!=='newgrounds')return; /* streamed sources: nothing to fetch */
   var key=(tr.t||'')+'|'+(tr.a||'');
   if(_pfDone[key])return;
-  var id=(tr.source==='youtube'&&tr.id)||_cache[key];
+  var id=((tr.source==='youtube'||tr.source==='newgrounds')&&tr.id)||_cache[key];
   if(id){
     _pfDone[key]=1;
-    if(tr.source==='youtube')rememberYt(tr,id);
+    rememberYt(tr,id);
     dlJob(id,tr.t,true).catch(function(){_pfDone[key]=0});
     return}
   _pfDone[key]=1;
-  API('/api/search?src=youtube&q='+encodeURIComponent((tr.a?tr.a+' ':'')+(tr.t||''))).then(function(j){
-    var c=(j.results||[]).filter(function(r){return r.source==='youtube'})[0];
+  findCands(tr).then(function(cands){
+    var c=cands&&cands[0];
     if(!c){_pfDone[key]=0;return}
     rememberYt(tr,c.id);
     dlJob(c.id,tr.t,true).catch(function(){_pfDone[key]=0})},function(){_pfDone[key]=0});

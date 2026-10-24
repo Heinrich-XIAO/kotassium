@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """serve_web.py - Kotassium as a plain website for fast iteration."""
-import argparse, base64, hashlib, hmac, html, http.cookies, ipaddress, json, os, re, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.parse, urllib.request
+import argparse, base64, gzip, hashlib, hmac, html, http.cookiejar, http.cookies, ipaddress, json, os, re, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
 
 import updater
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -449,6 +449,314 @@ def sc_search(q):
 def ia_search(q):
     return {"results": []}
 
+# ----------------------------------------------------------- newgrounds lane
+# Newgrounds' Audio Portal hands out direct mp3s, but its HTML pages sit
+# behind "NG Guard": a 403 carrying a proof-of-work challenge (argon2id in
+# practice) whose solution earns a short-lived verification for our address.
+# We answer it exactly like the site's own script does. The file itself
+# (audio.ngfiles.com, or the official /audio/download/<id>) needs none of that.
+NG_ORIGIN = "https://www.newgrounds.com"
+_NG_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+_NG_HDRS = {
+    "User-Agent": _NG_UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+}
+_NG_JAR = http.cookiejar.CookieJar()
+_NG_OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_NG_JAR))
+_NG_LOCK = threading.Lock()   # one proof-of-work at a time, not one per thread
+
+def _ng_call(url, data=None, referer=None, accept=None, xhr=False):
+    """A single browser-shaped request. Newgrounds gzips whether or not we
+    ask for it, and urllib will not decompress that on its own."""
+    h = dict(_NG_HDRS)
+    if accept:
+        h["Accept"] = accept
+    if referer:
+        h["Referer"] = referer
+    if xhr:
+        h["X-Requested-With"] = "XMLHttpRequest"
+    if data is not None:
+        h["Content-Type"] = "application/json"
+        data = json.dumps(data).encode()
+    req = urllib.request.Request(url, data=data, headers=h)
+    try:
+        with _NG_OPENER.open(req, timeout=30) as r:
+            code, body, hdrs = r.status, r.read(), dict(r.headers)
+    except urllib.error.HTTPError as e:
+        code, body, hdrs = e.code, e.read(), dict(e.headers)
+    if (hdrs.get("Content-Encoding") or "").lower() == "gzip" or body[:2] == b"\x1f\x8b":
+        try:
+            body = gzip.decompress(body)
+        except Exception:
+            pass
+    return code, body
+
+def _ng_zero_bits(b):
+    n = 0
+    for x in b:
+        if x == 0:
+            n += 8
+            continue
+        n += 8 - x.bit_length()
+        break
+    return n
+
+def _ng_pow(chal):
+    """Solve an NG Guard challenge. sha256 is stdlib; argon2id (what the site
+    actually sends) needs argon2-cffi - without it this raises, so the lane
+    records the miss instead of taking the other sources down with it."""
+    payload = base64.urlsafe_b64decode(chal["payload"] + "=" * (-len(chal["payload"]) % 4))
+    bits, algo = int(chal["bits"]), chal.get("algo") or "sha256"
+    t0, nonce = time.time(), 0
+    if algo == "sha256":
+        def digest(n):
+            return hashlib.sha256(payload + b":" + str(n).encode()).digest()
+    elif algo == "argon2id":
+        try:
+            from argon2 import Type, low_level
+        except Exception:
+            raise RuntimeError("newgrounds needs argon2-cffi (venv/bin/pip install argon2-cffi)")
+        p = chal.get("params") or {}
+        # The challenge carries no salt and a zero-salt solve is what
+        # /verify accepts, so Newgrounds hashes from zeros too.
+        def digest(n):
+            return low_level.hash_secret_raw(
+                secret=payload + b":" + str(n).encode(), salt=b"\x00" * 8,
+                time_cost=int(p.get("iterations", 1)),
+                memory_cost=int(p.get("memorySize", 19456)),
+                parallelism=int(p.get("parallelism", 1)),
+                hash_len=int(p.get("hashLength", 32)), type=Type.ID, version=0x13)
+    else:
+        raise RuntimeError("unsupported newgrounds guard: " + str(algo))
+    while _ng_zero_bits(digest(nonce)) < bits:
+        nonce += 1
+        if time.time() - t0 > 60:
+            raise RuntimeError("newgrounds guard solve timed out")
+    out = {"algo": algo, "bits": chal["bits"], "demo": False, "nonce": str(nonce),
+           "payload": chal["payload"], "sig": chal["sig"],
+           "solveTimeMs": int((time.time() - t0) * 1000)}
+    if algo == "argon2id":
+        out["params"] = chal.get("params")
+    return out
+
+def _ng_fetch(url, referer=None, accept=None, xhr=False, tries=3):
+    """GET a newgrounds.com page, solving NG Guard when it 403s. The
+    verification is remembered server-side, so one solve usually covers every
+    later request; the lock stops a burst of search threads from each paying
+    for their own proof-of-work."""
+    code, body = 403, b""
+    for attempt in range(tries):
+        code, body = _ng_call(url, referer=referer or url, accept=accept, xhr=xhr)
+        if code != 403 or attempt == tries - 1:
+            return code, body
+        with _NG_LOCK:
+            # GET, not POST: the endpoint validates action/formNonce on a
+            # body and answers a bare {} with 400.
+            st, raw = _ng_call(NG_ORIGIN + "/_guard/api/v1/challenge",
+                               accept="application/json", referer=url)
+            if st != 200:
+                continue
+            try:
+                chal = json.loads(raw)
+            except Exception:
+                continue
+            if not isinstance(chal, dict) or not chal.get("payload"):
+                continue
+            ver = _ng_pow(chal)   # raises when argon2-cffi is missing
+            _ng_call(NG_ORIGIN + "/_guard/api/v1/verify", data=ver,
+                     accept="application/json", referer=url, xhr=True)
+    return code, body
+
+def _ng_attr(tag, name):
+    m = re.search(r'\b' + name + r'="([^"]*)"', tag)
+    return html.unescape(m.group(1)) if m else ""
+
+def _ng_cards(page):
+    """Result cards from an Audio Portal search: id/title live on the anchor,
+    artist/duration/cover in the card around it (the anchor closes before the
+    PLAY control, so each window runs to the next listen link)."""
+    marks = list(re.finditer(r'<a\s+([^>]*?/audio/listen/(\d+)[^>]*)>', page))
+    out = []
+    for i, m in enumerate(marks):
+        tag = m.group(1)
+        if "item-audiosubmission" not in tag:
+            continue   # breadcrumb/sidebar link, not a result
+        win = page[m.end(): marks[i + 1].start() if i + 1 < len(marks) else m.end() + 4000]
+        title = _ng_attr(tag, "title")
+        if not title:
+            h4 = re.search(r"<h4[^>]*>(.*?)</h4>", win, re.S)
+            title = re.sub(r"<[^>]+>", "", h4.group(1)) if h4 else ""
+        artist = re.search(r"<span>\s*by\s*<strong>([^<]+)</strong>", win, re.S)
+        dur = re.search(r'data-audio-duration="(\d+)"', win)
+        cover = re.search(r'src="(https://aicon\.ngfiles\.com/[^"]+)"', win)
+        out.append({"id": m.group(2), "title": html.unescape(title).strip(),
+                    "artist": html.unescape(artist.group(1)).strip() if artist else "",
+                    "dur": int(dur.group(1)) if dur else 0,
+                    "cover": cover.group(1) if cover else ""})
+    return out
+
+def _ng_search_page(terms):
+    # c=3 is the Audio category of newgrounds.com's top search form.
+    url = NG_ORIGIN + "/search/conduct/audio?c=3&terms=" + urllib.parse.quote(terms)
+    code, body = _ng_fetch(url, referer=NG_ORIGIN + "/audio/")
+    if code != 200:
+        raise RuntimeError("newgrounds search HTTP %s" % code)
+    return body.decode("utf-8", "replace")
+
+def _ng_tokens(s):
+    return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
+
+def _ng_norm(s):
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+_NG_FLUFF = re.compile(r"\b(?:remix|re-?creation|re-?make|cover|tribute|replica|"
+                       r"karaoke|instrumental|edit)\b", re.I)
+
+def ng_search(q, t="", a=""):
+    """Newgrounds Audio Portal lane.
+
+    The portal ANDs whole terms across a record, so "artist title" often only
+    matches remakes that quote the artist in their title while the original
+    drops out of the results entirely. Searching the bare title as well, then
+    ranking by title/artist coverage (and against remix markers), brings the
+    original back to the top. t/a are hints the page already knows.
+    """
+    q, t, a = (q or "").strip(), (t or "").strip(), (a or "").strip()
+    terms = []
+    if t:
+        terms.append(t)
+    if q and q.lower() not in [x.lower() for x in terms]:
+        terms.append(q)
+    if not terms:
+        return {"results": []}
+    found = {}
+    for i, term in enumerate(terms):
+        try:
+            cards = _ng_cards(_ng_search_page(term))
+        except Exception:
+            if not found:
+                raise    # nothing to rank: let the lane record the reason
+            continue
+        for rank, c in enumerate(cards):
+            found.setdefault(c["id"], (i, rank, c))
+    want = _ng_tokens(t or q) | _ng_tokens(a)
+    want_t = _ng_norm(t)
+
+    def key(item):
+        i, rank, c = item
+        have = _ng_tokens(c["title"]) | _ng_tokens(c["artist"])
+        cover = len(want & have) / float(len(want)) if want else 0.0
+        ct = _ng_norm(c["title"])
+        exact = int(bool(want_t) and (ct == want_t or ct.endswith(" - " + want_t)
+                                      or ct.startswith(want_t + " - ")))
+        return (exact, cover, -int(bool(_NG_FLUFF.search(c["title"]))), -i, -rank)
+
+    out = []
+    for _, _, c in sorted(found.values(), key=key, reverse=True)[:12]:
+        out.append({"source": "newgrounds", "id": "ng-" + c["id"],
+                    "title": c["title"], "artist": c["artist"], "dur": c["dur"],
+                    "cover": c["cover"], "full": True})
+    return {"results": out}
+
+def ng_resolve(mid):
+    """The CDN mp3 for a Newgrounds audio id, plus what the page knows."""
+    mid = re.sub(r"\D", "", str(mid or ""))
+    if not mid:
+        raise RuntimeError("bad newgrounds id")
+    code, body = _ng_fetch(NG_ORIGIN + "/audio/listen/" + mid,
+                           referer=NG_ORIGIN + "/audio/")
+    if code != 200:
+        raise RuntimeError("newgrounds listen page HTTP %s" % code)
+    txt = body.decode("utf-8", "replace").replace("\\/", "/")
+    m = re.search(r"[\"']url[\"']\s*:\s*[\"']([^\"']+\.mp3[^\"']*)[\"']", txt)
+    if not m:
+        m = re.search(r"https://audio\.ngfiles\.com/[^\s\"']+\.mp3[^\s\"']*", txt)
+    if not m:
+        raise RuntimeError("no mp3 url in newgrounds page")
+    out = {"id": mid, "url": html.unescape(m.group(1))}
+    for name, pat in (("title", r"[\"']title[\"']\s*:\s*[\"']([^\"']*)[\"']"),
+                      ("artist", r"[\"']author[\"']\s*:\s*[\"']([^\"']*)[\"']"),
+                      ("dur", r"[\"']duration[\"']\s*:\s*(\d+)")):
+        mm = re.search(pat, txt)
+        if mm:
+            out[name] = int(mm.group(1)) if name == "dur" else mm.group(1)
+    return out
+
+def _ng_looks_audio(b):
+    return (b[:3] == b"ID3" or b[:4] == b"OggS" or b[:4] == b"fLaC"
+            or (len(b) > 1 and b[0] == 0xff and b[1] & 0xe0 == 0xe0))
+
+def _ng_stream_to(url, path, progress=None):
+    req = urllib.request.Request(url, headers={"User-Agent": _NG_UA})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r, open(path, "wb") as out:
+            total = int(r.headers.get("Content-Length") or 0)
+            got = 0
+            while True:
+                chunk = r.read(1 << 16)
+                if not chunk:
+                    break
+                out.write(chunk)
+                got += len(chunk)
+                if progress and total:
+                    progress(min(99.0, got * 100.0 / total))
+    except Exception:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        raise
+
+def ng_fetch(vid, progress=None):
+    """Download an `ng-<id>` library entry. Newgrounds serves the mp3 itself,
+    so this never touches yt-dlp or ffmpeg - the file lands as .mp3 directly
+    and _take_download names/registers it like any other track."""
+    if not vid.startswith("ng-"):
+        raise RuntimeError("bad newgrounds id")
+    mid = re.sub(r"\D", "", vid[3:])
+    if not mid:
+        raise RuntimeError("bad newgrounds id")
+    tmp = os.path.join(LIB, ".yt_" + vid + ".mp3")
+    try:
+        _ng_stream_to(ng_resolve(mid)["url"], tmp, progress)
+    except Exception as first:
+        # The listen page may have changed shape; the portal's own "Download
+        # this song" route still hands the mp3 over (guard-aware like every
+        # other page fetch on this host).
+        try:
+            code, body = _ng_fetch(NG_ORIGIN + "/audio/download/" + mid,
+                                   referer=NG_ORIGIN + "/audio/listen/" + mid)
+            if code != 200 or not _ng_looks_audio(body):
+                raise RuntimeError("newgrounds download route HTTP %s" % code)
+            with open(tmp, "wb") as out:
+                out.write(body)
+            if progress:
+                progress(99.0)
+        except Exception:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise first
+    name = _take_download(vid, progress)
+    if not name:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise RuntimeError("newgrounds download failed")
+    return name
+
 def dl_file(src, tid, url):
     f = os.path.join(LIB, tid + ".mp3")
     if os.path.exists(f):
@@ -540,6 +848,8 @@ def ytdl(vid, progress=None):
         if progress:
             progress(100.0)
         return os.path.basename(existing)
+    if vid.startswith("ng-"):
+        return ng_fetch(vid, progress)  # Newgrounds hands out the mp3 itself
     if YTDLP_INPROC:
         return _ytdl_inproc(vid, progress)
     if not YTDLP:
@@ -677,14 +987,19 @@ def handle(path, params, hdr):
         q, src = one("q"), one("src", "all")
         out, errs = [], {}
         lanes = []
-        if src not in ("deezer", "archive"):
+        if src not in ("deezer", "archive", "newgrounds"):
             lanes.append(("youtube", yt_search))
-        if src not in ("youtube", "archive"):
+        if src not in ("youtube", "archive", "newgrounds"):
             lanes.append(("deezer", dz_search))
         if src in ("all", "soundcloud"):
             lanes.append(("soundcloud", sc_search))
         if src in ("all", "archive"):
             lanes.append(("archive", ia_search))
+        if src in ("all", "newgrounds"):
+            # t/a are the page's track/artist hints: the Audio Portal matches
+            # whole terms, so the bare title is what finds the original while
+            # artist+title often only matches remakes quoting the artist.
+            lanes.append(("newgrounds", lambda qq: ng_search(qq, one("t"), one("a"))))
         for name, fn in lanes:
             try:
                 j = fn(q)
@@ -702,6 +1017,14 @@ def handle(path, params, hdr):
             return 200, "audio/mpeg", open(f, "rb").read(), None, False
         if src == "archive":
             return 302, None, b"", {"Location": "https://archive.org/download/" + tid + "/" + tid + "_vbr.mp3"}, False
+        if src == "newgrounds":
+            try:
+                url = ng_resolve(tid[3:] if tid.startswith("ng-") else tid)["url"]
+            except Exception as e:
+                # The page sits behind NG Guard; say why instead of the
+                # blanket 502 do_GET would otherwise hand back.
+                return 502, "text/plain", str(e)[:200].encode(), None, False
+            return 302, None, b"", {"Location": url}, False
         return 400, "text/plain", b"bad src", None, False
     if path == "/api/download":
         src, tid = one("src"), one("id")

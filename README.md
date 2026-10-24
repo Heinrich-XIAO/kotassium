@@ -5,10 +5,12 @@ single HTML page. The desktop window and the Android app are thin shells that
 load that page — they contain no UI of their own, so a fix in `web/index.html`
 lands on every platform at once.
 
-- `serve_web.py` — the server: Spotify link resolution, multi-source search,
-  permanent MP3 downloads via `yt-dlp` (as background jobs with progress),
-  on-disk library, cover caching, now-playing state, optional password gate.
-  Serves `web/index.html`, the PWA manifest and the service worker.
+- `serve_web.py` — the server: Spotify link resolution, multi-source search
+  (YouTube, Deezer, and the Newgrounds Audio Portal), permanent MP3 downloads
+  via `yt-dlp` as background jobs with progress (Newgrounds tracks are plain
+  mp3 fetches, no extractor needed), on-disk library, cover caching,
+  now-playing state, optional password gate. Serves `web/index.html`, the
+  PWA manifest and the service worker.
 - `web/index.html` — the UI (single file, no build step). The only place UI
   lives.
 - `desktop.py` — desktop shell: either runs the same server on `127.0.0.1`
@@ -213,14 +215,17 @@ not need it).
 ## Dependencies
 
 Python standard library plus `yt-dlp` (expected at `venv/bin/yt-dlp`; override
-with `KOTASSIUM_YTDLP`), and `ffmpeg` on `PATH` (or in Homebrew's
-`/opt/homebrew/bin`, `/usr/local/bin`) for MP3 conversion and preview clips.
+with `KOTASSIUM_YTDLP`), `argon2-cffi` (the Newgrounds source answers that
+site's proof-of-work guard with it; without it that lane reports a miss in
+`/api/search`'s `errors` and every other source keeps working), and `ffmpeg`
+on `PATH` (or in Homebrew's `/opt/homebrew/bin`, `/usr/local/bin`) for MP3
+conversion and preview clips.
 The desktop shell adds `pywebview` plus, on Linux, system GTK3/WebKitGTK 4.1
 (Fedora: `gtk3 webkit2gtk4.1`). On macOS `setup.sh` installs pywebview and its
 pyobjc dependencies from pip.
 
 ```sh
-python3 -m venv venv && venv/bin/pip install yt-dlp
+python3 -m venv venv && venv/bin/pip install yt-dlp argon2-cffi
 venv/bin/python -m unittest discover -s tests
 
 # MPRIS needs a session bus; this runs it against a throwaway one:

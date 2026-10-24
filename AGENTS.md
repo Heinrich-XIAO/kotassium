@@ -62,6 +62,19 @@ of these lines as the message's last line:
   library root; tests and `tools/demo.py` use a throwaway copy.
 - `spotify_get.py` is required by `serve_web.py` (Spotify link resolution);
   keep it if the server keeps working.
+- The Newgrounds Audio Portal is a search/download lane inside `serve_web.py`
+  (`ng_search` / `ng_resolve` / `ng_fetch`). Its HTML pages sit behind
+  "NG Guard": a 403 proof-of-work challenge (argon2id) that `_ng_fetch`
+  solves with `argon2-cffi` when importable and otherwise records as a
+  per-lane error in `/api/search` - never let that lane take the others down.
+  Get the challenge with GET (POST validates action/formNonce and 400s).
+  Library ids are namespaced `ng-<audio id>`, so `/api/ytdl` and the page's
+  id cache hand them to `ng_fetch` (direct mp3 from audio.ngfiles.com, the
+  official `/audio/download/<id>` as fallback) instead of yt-dlp, and ffmpeg
+  is never required for them. Keep the `c=3` search URL and the separate t/a
+  hints: the portal ANDs whole terms, so artist+title alone matches remakes
+  while the bare title finds the original. Android's pip list has no
+  argon2-cffi, so the lane degrades there by design.
 - There is no cloud/Vercel edition — `server/` was removed along with the
   fallback in `/api/spot/resolve`. Don't reintroduce a second UI copy or a
   deploy step.
