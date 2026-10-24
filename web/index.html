@@ -233,9 +233,7 @@ body{-webkit-tap-highlight-color:transparent}
 #fs.on{display:flex;position:fixed;left:0;top:0;right:0;bottom:0;z-index:80;background:linear-gradient(180deg,#232323,#0b0b0b 50%);flex-direction:column;gap:12px;padding:8px 20px calc(14px + env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
 #fsGrip{width:44px;height:5px;border-radius:3px;background:#ffffff40;margin:2px auto 0;flex:none}
 #fsHead{display:flex;align-items:center;gap:10px;flex:none}
-#fsClose{width:40px;height:40px;border-radius:50%;background:#ffffff1f;color:#fff;display:grid;place-items:center;flex:none}
 #fsPl{flex:1;min-width:0;text-align:center;color:#b3b3b3;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#fsHeadpad{width:40px;flex:none}
 #fsArt{width:min(74vw,34vh);aspect-ratio:1;border-radius:10px;background:#282828;margin:6px auto 0;flex:none;box-shadow:0 18px 50px #000b}
 #fsTxt{text-align:center;min-width:0;flex:none;padding:0 6px}
 #fsTxt b{display:block;font-size:22px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -314,7 +312,8 @@ body{-webkit-tap-highlight-color:transparent}
 </div>
 <div id=fs>
 <div id=fsGrip></div>
-<div id=fsHead><button id=fsClose onclick=closeFs() title="Collapse player"><svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6l5 5 5-5H3z"/></svg></button><span id=fsPl></span><span id=fsHeadpad></span></div>
+<!-- collapsing is a swipe down (or the grip); no collapse button -->
+<div id=fsHead><span id=fsPl></span></div>
 <div id=fsArt></div>
 <div id=fsTxt><b id=fsTitle>Choose a playlist to listen</b><small id=fsArtist>nothing playing</small></div>
 <div id=fsQueue><div id=fsQhead><b>Up next</b><span id=fsQcount></span></div><div id=fsQrows></div></div>
@@ -1082,7 +1081,7 @@ window.addEventListener('resize',function(){if(dfsActive()&&window.innerWidth<=8
   },true);
   var fy=0,fgo=false,fdy=0,fbase=0;
   fs.addEventListener('touchstart',function(e){
-    if(e.target.closest&&e.target.closest('#fsProg,#fsVolBar,#fsClose,#fsQueue'))return;
+    if(e.target.closest&&e.target.closest('#fsProg,#fsVolBar,#fsQueue'))return;
     /* grab the sheet exactly where it visually is - it may be animating
        (springing back or mid-close), so pin that position before following,
        otherwise killing the transition teleports it to the inline value */
