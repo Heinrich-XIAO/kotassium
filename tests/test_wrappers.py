@@ -40,6 +40,13 @@ class WrapperTests(unittest.TestCase):
             for chunk in ("id=nowp", "id=side", "function playIdx", "localStorage.getItem('kot_vol')"):
                 self.assertNotIn(chunk, src, "%s copied markup from the page" % rel)
 
+    def test_library_icon_toggles_sidebar_and_duplicate_icon_is_removed(self):
+        page = read("web/index.html")
+        self.assertIn('<button id=libBtn onclick="toggleSide()" title="Collapse library">', page)
+        self.assertNotIn('id=collSide', page)
+        self.assertIn("document.getElementById('libBtn')", page)
+        self.assertIn("b.title=SIDECOLL?'Expand library':'Collapse library'", page)
+
     def test_startup_prefetches_each_playlists_play_choice(self):
         page = read("web/index.html")
         self.assertIn("function prefetchPlaylistStarts(links)", page)
