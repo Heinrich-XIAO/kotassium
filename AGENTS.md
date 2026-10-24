@@ -75,6 +75,18 @@ of these lines as the message's last line:
   hints: the portal ANDs whole terms, so artist+title alone matches remakes
   while the bare title finds the original. Android's pip list has no
   argon2-cffi, so the lane degrades there by design.
+- SoundCloud is the third search/download lane (`sc_search` / `sc_track` /
+  `sc_media` / `sc_fetch`). api-v2 needs the public `client_id` from
+  SoundCloud's own script bundles: `_sc_client_id` scrapes it lazily,
+  `_sc_json` re-scrapes once on a 401/403, and the lane **raises** on failure
+  so `/api/search` records it in `errors` - a silent `{"results": []}` made it
+  look like "no results" while the API was refusing us. Library ids are
+  namespaced `sc-<track id>`; `ytdl()` and the page's id cache hand them to
+  `sc_fetch`, which prefers a progressive mp3 and otherwise reassembles the
+  HLS playlist (init segment + fragments) into an `.m4a` - fMP4 concatenates
+  cleanly, so neither ffmpeg nor yt-dlp is involved and Android keeps working.
+  Never store the resolved media URL: it is signed and must be resolved per
+  download. `src=soundcloud` runs that lane alone, like every other selector.
 - There is no cloud/Vercel edition — `server/` was removed along with the
   fallback in `/api/spot/resolve`. Don't reintroduce a second UI copy or a
   deploy step.

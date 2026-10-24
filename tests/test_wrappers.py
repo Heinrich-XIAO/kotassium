@@ -110,6 +110,20 @@ class WrapperTests(unittest.TestCase):
         self.assertNotIn("#srowrow", page)
         self.assertIn(".srow.playing .rtxt b", page)
 
+    def test_soundcloud_is_the_third_candidate_lane(self):
+        # YouTube age-gates some queries (it answers with an age prompt and no
+        # results at all) and Newgrounds files the same song under a different
+        # title, so the resolver needs a third place to look - and the fetched
+        # id must travel through the job path like every other download.
+        page = read("web/index.html")
+        self.assertIn("if(tr.source==='soundcloud'&&tr.id)", page)
+        self.assertIn("'/api/search?src=soundcloud&q='", page)
+        self.assertIn("||tr.source==='soundcloud'){return localResolve(tr,true)}", page)
+        self.assertIn("&&tr.source!=='soundcloud')return;", page)
+        self.assertIn(
+            "(tr.source==='youtube'||tr.source==='newgrounds'||tr.source==='soundcloud')&&tr.id",
+            page)
+
     def test_queue_views_follow_repeat_all_and_open_after_a_failed_prefetch(self):
         page = read("web/index.html")
         # repeat-all wraps to track 1, so the queue views must too

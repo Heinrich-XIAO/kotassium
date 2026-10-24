@@ -6,9 +6,10 @@ load that page — they contain no UI of their own, so a fix in `web/index.html`
 lands on every platform at once.
 
 - `serve_web.py` — the server: Spotify link resolution, multi-source search
-  (YouTube, Deezer, and the Newgrounds Audio Portal), permanent MP3 downloads
-  via `yt-dlp` as background jobs with progress (Newgrounds tracks are plain
-  mp3 fetches, no extractor needed), on-disk library, cover caching,
+  (YouTube, Deezer, SoundCloud, and the Newgrounds Audio Portal), permanent
+  MP3 downloads via `yt-dlp` as background jobs with progress (Newgrounds
+  tracks are plain mp3 fetches and SoundCloud tracks are reassembled from its
+  HLS stream, so neither needs the extractor or ffmpeg), on-disk library, cover caching,
   now-playing state, optional password gate. Serves `web/index.html`, the
   PWA manifest and the service worker.
 - `web/index.html` — the UI (single file, no build step). The only place UI
@@ -218,6 +219,9 @@ Python standard library plus `yt-dlp` (expected at `venv/bin/yt-dlp`; override
 with `KOTASSIUM_YTDLP`), `argon2-cffi` (the Newgrounds source answers that
 site's proof-of-work guard with it; without it that lane reports a miss in
 `/api/search`'s `errors` and every other source keeps working), and `ffmpeg`
+for MP3 conversion and preview clips. The SoundCloud source needs neither: it
+takes its `client_id` from SoundCloud's own script bundles and re-scrapes it
+when the API answers 401.
 on `PATH` (or in Homebrew's `/opt/homebrew/bin`, `/usr/local/bin`) for MP3
 conversion and preview clips.
 The desktop shell adds `pywebview` plus, on Linux, system GTK3/WebKitGTK 4.1

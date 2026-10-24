@@ -782,7 +782,7 @@ function setPausedIcon(p){
 function playTrack(tr){
   if(!tr)return;
   showNow(tr);meta(tr);markActive();
-  if(tr.source==='youtube'||tr.source==='newgrounds'){return localResolve(tr,true)}
+  if(tr.source==='youtube'||tr.source==='newgrounds'||tr.source==='soundcloud'){return localResolve(tr,true)}
   if(tr.source&&tr.source!=='local'){
     var u='/api/play?src='+tr.source+'&id='+tr.id;
     if(tr.preview)u+='&preview='+encodeURIComponent(tr.preview);
@@ -827,11 +827,19 @@ function localResolve(tr,fresh){
 function findCands(tr){
   var q=(tr.a?tr.a+' ':'')+(tr.t||'');
   if(tr.source==='newgrounds'&&tr.id)return Promise.resolve([{source:'newgrounds',id:tr.id}]);
+  if(tr.source==='soundcloud'&&tr.id)return Promise.resolve([{source:'soundcloud',id:tr.id}]);
   return API('/api/search?src=youtube&q='+encodeURIComponent(q)).then(function(j){
     var yt=(j.results||[]).filter(function(r){return r.source==='youtube'}).slice(0,5);
     if(yt.length)return yt;
     return API('/api/search?src=newgrounds&q='+encodeURIComponent(q)+'&t='+encodeURIComponent(tr.t||'')+'&a='+encodeURIComponent(tr.a||'')).then(function(k){
-      return (k.results||[]).filter(function(r){return r.source==='newgrounds'}).slice(0,5);
+      var ng=(k.results||[]).filter(function(r){return r.source==='newgrounds'}).slice(0,5);
+      if(ng.length)return ng;
+      /* Third lane: SoundCloud's own catalogue, which is where a lot of
+         unsigned uploads live - it also catches tracks whose title differs
+         between platforms, exactly like Merp Merp / Beep Beep. */
+      return API('/api/search?src=soundcloud&q='+encodeURIComponent(q)).then(function(l){
+        return (l.results||[]).filter(function(r){return r.source==='soundcloud'}).slice(0,5);
+      },function(){return []});
     },function(){return []});
   });
 }
@@ -868,10 +876,10 @@ function rememberYt(tr,id){
   try{localStorage.setItem('kot_ytcache',JSON.stringify(_cache))}catch(e){}}
 function prefetch(tr){
   if(!tr)return;
-  if(tr.source&&tr.source!=='youtube'&&tr.source!=='newgrounds')return; /* streamed sources: nothing to fetch */
+  if(tr.source&&tr.source!=='youtube'&&tr.source!=='newgrounds'&&tr.source!=='soundcloud')return; /* streamed sources: nothing to fetch */
   var key=(tr.t||'')+'|'+(tr.a||'');
   if(_pfDone[key])return;
-  var id=((tr.source==='youtube'||tr.source==='newgrounds')&&tr.id)||_cache[key];
+  var id=((tr.source==='youtube'||tr.source==='newgrounds'||tr.source==='soundcloud')&&tr.id)||_cache[key];
   if(id){
     _pfDone[key]=1;
     rememberYt(tr,id);
