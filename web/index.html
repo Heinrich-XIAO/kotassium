@@ -1374,11 +1374,6 @@ function startUpdate(){
 if(/[?&]tb=mac(&|$)/.test(location.search)){
   ['top','dfsTop'].forEach(function(id){
     var bar=document.getElementById(id);
-    bar.addEventListener('dblclick',function(e){
-      if(e.target.closest('button,input,a'))return;
-      if(window.pywebview&&window.pywebview.api)
-        window.pywebview.api.toggle_maximized();
-    });
     /* pywebview's Cocoa drag-region handler calls preventDefault on mousedown,
        which suppresses the browser's native dblclick synthesis. Implement
        double-click ourselves on the drag region and reserve single clicks for

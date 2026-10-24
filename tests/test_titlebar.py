@@ -114,13 +114,14 @@ class FakeNative:
         self.background_color = value
 
     def frame(self):
-        return (0, 0, 900, 600)
+        return getattr(self, "_frame", (0, 0, 900, 600))
 
     def setFrame_display_(self, frame, display):
         self.frame_displayed = (frame, display)
 
     def setFrame_display_animate_(self, frame, display, animate):
         self.animated_frame = (frame, display, animate)
+        self._frame = frame
 
     def isZoomed(self):
         return self.zoomed
@@ -215,11 +216,20 @@ class IntegrateTests(unittest.TestCase):
         self.assertEqual(native.animated_frame,
                          ((-1920, 24, 1920, 1056), True, True))
 
-    def test_toggle_maximized_restores_using_native_zoom(self):
+    def test_toggle_maximized_restores_the_saved_normal_frame(self):
         native = FakeNative()
-        native.zoomed = True
+        normal = (50, 70, 900, 600)
+        native._frame = normal
         self.assertTrue(titlebar_macos.toggle_maximized(native))
-        self.assertTrue(native.zoomed is False)
+        self.assertEqual(native.frame(), (-1920, 24, 1920, 1056))
+        self.assertTrue(titlebar_macos.toggle_maximized(native))
+        self.assertEqual(native.frame(), normal)
+
+    def test_toggle_maximized_handles_already_maximized_frame(self):
+        native = FakeNative()
+        native.frame = lambda: (-1920, 24, 1920, 1056)
+        self.assertTrue(titlebar_macos.toggle_maximized(native))
+        self.assertIsNone(titlebar_macos._MAXIMIZED_FRAMES.get(id(native)))
 
     def test_failures_leave_a_usable_window(self):
         window = SimpleNamespace(native=BrokenNative())
@@ -249,7 +259,7 @@ class WiringTests(unittest.TestCase):
         self.assertIn("tb=mac", page)
         # the flag must be read from the URL, before the bar is used
         self.assertIn("documentElement.className", page)
-        self.assertIn("addEventListener('dblclick'", page)
+        self.assertNotIn("addEventListener('dblclick'", page)
         self.assertIn("addEventListener('mousedown'", page)
         self.assertIn("e.detail===2", page)
         self.assertIn("toggle_maximized", page)

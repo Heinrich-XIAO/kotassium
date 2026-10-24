@@ -7,6 +7,7 @@ except Exception:
     AppKit = None
 
 _WINDOW_DELEGATES = {}
+_MAXIMIZED_FRAMES = {}
 
 
 def _rect_values(rect):
@@ -66,24 +67,50 @@ def maximize_frame(window, default):
 
 
 def toggle_maximized(native):
-    """Maximize directly on this window's screen, bypassing pywebview's
-    screen-agnostic maximize helper. Restore uses AppKit's saved zoom frame."""
+    """Toggle between the saved normal frame and this screen's visible frame.
+
+    Keep our own restore frame: manually setting an NSWindow frame does not
+    enter AppKit's zoom state, so isZoomed()/zoom_() cannot reliably toggle it.
+    """
     if native is None:
         return False
+    key = id(native)
     try:
-        if native.isZoomed():
-            native.zoom_(None)
+        current = _rect_values(native.frame())
+        saved = _MAXIMIZED_FRAMES.get(key)
+        if saved is not None:
+            if _frames_match(current, saved[1]) or _frames_match(
+                    current, saved[2]):
+                _MAXIMIZED_FRAMES.pop(key, None)
+                native.setFrame_display_animate_(saved[0], True, True)
+            else:
+                # A user resize/move after maximizing becomes the new normal
+                # frame before maximizing again on the display now containing it.
+                _MAXIMIZED_FRAMES.pop(key, None)
+                target = _rect_values(maximize_frame(native, current))
+                _MAXIMIZED_FRAMES[key] = (current, target, target)
+                native.setFrame_display_animate_(target, True, True)
             return True
-        frame = native.frame()
-        target = maximize_frame(native, frame)
+        target = _rect_values(maximize_frame(native, current))
+        if _frames_match(current, target):
+            return True
+        _MAXIMIZED_FRAMES[key] = (current, target, target)
         native.setFrame_display_animate_(target, True, True)
         return True
     except Exception:
-        try:
-            native.zoom_(None)
-            return True
-        except Exception:
-            return False
+        _MAXIMIZED_FRAMES.pop(key, None)
+        return False
+
+
+def _frames_match(a, b):
+    """Compare AppKit frame values with a small float tolerance."""
+    return len(a) == len(b) and all(abs(float(x) - float(y)) < 1 for x, y in zip(a, b))
+
+
+def forget_window(native):
+    """Drop per-window maximize state when the window closes."""
+    if native is not None:
+        _MAXIMIZED_FRAMES.pop(id(native), None)
 
 
 def install_zoom_delegate(native):
@@ -132,6 +159,8 @@ def integrate(window):
         if native is None:
             return
         try:
+            if getattr(window, "events", None):
+                window.events.closed += lambda: forget_window(native)
             native.setMovableByWindowBackground_(True)
             install_zoom_delegate(native)
         except Exception as e:
