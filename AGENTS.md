@@ -65,6 +65,14 @@ of these lines as the message's last line:
 - There is no cloud/Vercel edition — `server/` was removed along with the
   fallback in `/api/spot/resolve`. Don't reintroduce a second UI copy or a
   deploy step.
+- **Report the auto-release version after pushes.** Each push to `main` triggers
+  `.github/workflows/auto-release.yml`, which chooses the next patch version
+  by taking the highest plain `vX.Y.Z` tag and incrementing its patch (see
+  `.github/next_version.py`). When a change is committed and pushed to `main`,
+  calculate that workflow's resulting version from the current remote tags and
+  include `vX.Y.Z` as the final line of the reply, noting that it is pending
+  the workflows completing. Do not claim the release succeeded until CI
+  confirms it. If no push occurred, keep the existing final status lines.
 - `venv/` supplies `yt-dlp`; `desktop-venv/` supplies `pywebview`. `setup.sh`
   builds it with `--system-site-packages` on Linux (WebKitGTK/PyGObject are
   distro packages) and a plain venv on macOS. Both are gitignored.
