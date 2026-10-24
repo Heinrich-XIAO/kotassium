@@ -667,7 +667,9 @@ function playList(){playT(SHUF&&PL&&PL.length?Math.floor(Math.random()*PL.length
 function playT(i,setQ){
   if(!PL||!PL[i])return;
   if(setQ)Q=PL.slice();
-  QI=i; if(SHUF)rebuildShuffle(); playTrack(PL[i])
+  QI=i; if(SHUF)rebuildShuffle();
+  if(setQ)prefetch(PL[i]);
+  playTrack(PL[i])
 }
 function showNow(tr){
   var nt=document.getElementById('nowt');
