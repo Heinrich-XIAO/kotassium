@@ -54,7 +54,11 @@ html.tbmac #dfsTop{padding-left:88px}
 .pitem{display:flex;align-items:center;gap:12px;padding:6px 10px;border-radius:6px;cursor:pointer}
 .pitem:hover{background:#ffffff14}
 .pitem.active{background:#ffffff1f}
-.pcover{width:44px;height:44px;border-radius:4px;flex:none;display:grid;place-items:center;font-weight:800;font-size:18px}
+.pcover{width:44px;height:44px;border-radius:4px;flex:none;display:grid;place-items:center;font-weight:800;font-size:18px;position:relative;cursor:pointer}
+.pitem:hover .pcover:after{content:"";position:absolute;inset:0;background:#0007;border-radius:inherit}
+.pcoverPlay{position:absolute;inset:0;z-index:1;display:grid;place-items:center;color:#fff;opacity:0;transition:opacity .12s}
+.pitem:hover .pcoverPlay,.pcoverPlay:focus-visible{opacity:1}
+#side.collapsed .pcoverPlay svg{width:22px;height:22px}
 .pmeta{min-width:0}
 .pmeta b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pmeta small{color:#b3b3b3;font-size:12px}
@@ -508,6 +512,11 @@ function loadSide(){
       var li=document.createElement('div');li.className='pitem';li.dataset.i=i;li.title=p.name||'';
       var c=document.createElement('div');c.className='pcover';c.style.background=gcss(p.name);c.textContent=(p.name||'?').charAt(0).toUpperCase();
       var _pc=(p.cover||'');if(_pc){c.style.background=coverBg(_pc);c.setAttribute('data-cover-url',_pc)}
+      var play=document.createElement('span');play.className='pcoverPlay';play.title='Play '+(p.name||'playlist');
+      play.innerHTML='<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5l10 5.5-10 5.5z"/></svg>';
+      play.onclick=function(e){e.stopPropagation();openPlaylist(i).then(function(){playList()})};
+      c.onclick=function(e){e.stopPropagation();openPlaylist(i).then(function(){playList()})};
+      c.appendChild(play);
       var meta=document.createElement('div');meta.className='pmeta';
       var b=document.createElement('b');b.textContent=p.name||'?';
       var s=document.createElement('small');
