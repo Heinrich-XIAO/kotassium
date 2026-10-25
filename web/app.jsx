@@ -60,6 +60,7 @@ function App() {
   const [playlist, setPlaylist] = useState([]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
   const [queue, setQueue] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [playingPlaylist, setPlayingPlaylist] = useState('');
@@ -153,13 +154,6 @@ function App() {
       if (node.id === 'toast') toastTimer.current = setTimeout(() => setToastText(''), 3000);
     }
   };
-  const resolveCover = useCallback((url) => {
-    if (!url) return '';
-    const key = coverMap[url];
-    if (key) return escStyle(`/cover/${key}`);
-    warmCover(url);
-    return escStyle(url);
-  }, [coverMap, warmCover]);
   const warmCover = useCallback((url) => {
     if (!url || url.startsWith('/cover/') || coverCacheRef.current[url]) return;
     coverCacheRef.current[url] = 'pending';
@@ -168,6 +162,13 @@ function App() {
       .then((data) => postJSON('/api/cover/cache', { url, data }).then((j) => { if (j?.file) { coverCacheRef.current[url] = j.file; setCoverMap((m) => ({ ...m, [url]: j.file })); } }))
       .catch(() => { coverCacheRef.current[url] = null; });
   }, []);
+  const resolveCover = useCallback((url) => {
+    if (!url) return '';
+    const key = coverMap[url];
+    if (key) return escStyle(`/cover/${key}`);
+    warmCover(url);
+    return escStyle(url);
+  }, [coverMap, warmCover]);
 
   const loadLinks = useCallback(() => API('/api/links').then((j) => { const rows = j.links || []; setLinks(rows); return rows; }), []);
   const startQueueRef = useRef(null);

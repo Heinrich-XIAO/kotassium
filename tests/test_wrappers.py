@@ -76,6 +76,11 @@ class WrapperTests(unittest.TestCase):
         result = subprocess.run(["node", "--check", os.path.join(ROOT, "web/app.js")], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_react_callbacks_are_initialized_before_use_and_search_state_exists(self):
+        app = read("web/app.jsx")
+        self.assertLess(app.index("const warmCover = useCallback"), app.index("const resolveCover = useCallback"))
+        self.assertIn("const [searching, setSearching] = useState(false)", app)
+
     def test_legacy_web_ui_regressions_are_covered_by_react_state_and_handlers(self):
         app = read("web/app.jsx")
         self.assertIn("localStorage.setItem('kot_side_collapsed'", app)
