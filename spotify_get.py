@@ -467,6 +467,31 @@ def resolve_pathfinder(kind, sid, provider):
             break
     return (pv.get("title") or pv.get("name") or "playlist"), tracks
 
+def playlist_image(url):
+    """Spotify's own square image for a playlist link, or None.
+
+    No track carries a playlist's cover art, so a library thumbnail has to
+    ask for it separately - the first track's album art stays the fallback.
+    This runs after a resolve that already succeeded, so every failure
+    answers fast (one shot, no retry ladder) instead of hanging the request
+    that worked. Album and track links already carry their cover on the
+    first track, so only playlists make the extra call, and a short
+    spotify.link URL never matches here - it falls back too.
+    """
+    m = re.search(r"spotify\.com/(?:intl-[a-z]{2}/)?playlist/([A-Za-z0-9]+)", url or "")
+    if not m:
+        return None
+    try:
+        token = _token_override or get_token(tries=1)
+        images = http_json(f"https://api.spotify.com/v1/playlists/{m.group(1)}/images",
+                           headers={"Authorization": f"Bearer {token}"}, timeout=10)
+    except Exception as e:
+        log(f"playlist image lookup failed: {e}")
+        return None
+    if isinstance(images, list) and images and isinstance(images[0], dict):
+        return images[0].get("url") or None
+    return None
+
 def resolve(url):
     if url.startswith("spotify:"):
         m = re.match(r"spotify:(track|album|playlist):([A-Za-z0-9]+)", url)

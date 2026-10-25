@@ -226,6 +226,35 @@ class CoverIndexTests(unittest.TestCase):
             serve_web.read_links = original
             serve_web.COVERS_JSON = old_covers
 
+    def test_resolve_prefers_the_playlists_own_thumbnail(self):
+        import spotify_get
+        saved = (spotify_get.resolve, spotify_get.playlist_image,
+                 serve_web.save_link)
+        saved_links = []
+        spotify_get.resolve = lambda url: ("My Playlist", [
+            {"title": "T", "artist": "A", "dur": 4.0, "album": "",
+             "cover": "https://img.example/first.jpg"}])
+        spotify_get.playlist_image = lambda url: "https://i.scdn.co/image/plthumb"
+        serve_web.save_link = lambda url, jr: saved_links.append(jr)
+        target = "/api/spot/resolve?url=" + urllib.parse.quote(
+            "https://open.spotify.com/playlist/abc123")
+        try:
+            code, body = self.req("GET", target)
+            self.assertEqual(code, 200)
+            self.assertEqual(json.loads(body)["cover"],
+                             "https://i.scdn.co/image/plthumb")
+            self.assertEqual(saved_links[-1]["cover"],
+                             "https://i.scdn.co/image/plthumb")
+            # No image from Spotify: the first track's art still covers it.
+            spotify_get.playlist_image = lambda url: None
+            code, body = self.req("GET", target)
+            self.assertEqual(code, 200)
+            self.assertEqual(json.loads(body)["cover"],
+                             "https://img.example/first.jpg")
+        finally:
+            spotify_get.resolve, spotify_get.playlist_image = saved[:2]
+            serve_web.save_link = saved[2]
+
     def test_index_is_closed_behind_the_password(self):
         saved = (serve_web.PASSWORD, serve_web.AUTH, serve_web.SESSION)
         serve_web.PASSWORD, serve_web.AUTH = "hunter2", True

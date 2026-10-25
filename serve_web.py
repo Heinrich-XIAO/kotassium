@@ -1228,7 +1228,11 @@ def handle(path, params, hdr):
             import spotify_get
             m = re.search(r"(?:open\.)?spotify\.com/(?:intl-[a-z]{2}/)?(playlist|album|track)/([A-Za-z0-9]+)", link)
             name, tracks = spotify_get.resolve(link)
-            playlist_cover = next((t.get("cover") for t in tracks if t.get("cover")), "")
+            # A playlist's own square image lives on the playlist, not on any
+            # of its tracks, so ask Spotify for it and keep the first track's
+            # album art as the fallback when that extra call fails.
+            playlist_cover = spotify_get.playlist_image(link) or next(
+                (t.get("cover") for t in tracks if t.get("cover")), "")
             fmt = [{"t": t["title"], "a": t["artist"], "ms": int(round(t.get("dur", 0) * 1000)),
                     "album": t.get("album") or "", "cover": cover_local(t.get("cover") or "")} for t in tracks]
             # Short links (spotify.link/...) never match the regex above, so
