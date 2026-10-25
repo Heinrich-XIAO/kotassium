@@ -370,6 +370,12 @@ body.dfs #dfsQueue{display:flex}
 #toast.visible,#upnext.visible{opacity:1;pointer-events:auto}
 #upnext{top:88px}
 /* settings */
+/* Keep the desktop queue scrollbar subtle on macOS WebKit and other engines. */
+#dfsQueue #dfsQrows{scrollbar-width:thin;scrollbar-color:#ffffff18 transparent}
+#dfsQueue #dfsQrows::-webkit-scrollbar{width:6px}
+#dfsQueue #dfsQrows::-webkit-scrollbar-track{background:transparent}
+#dfsQueue #dfsQrows::-webkit-scrollbar-thumb{background:#ffffff18;border-radius:6px}
+#dfsQueue #dfsQrows::-webkit-scrollbar-thumb:hover{background:#ffffff32}
 #settingsBtn{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;color:#969696;flex:none;transition:color .16s,background .16s,transform .16s}
 #settingsBtn:hover{color:#fff;background:#ffffff12;transform:rotate(12deg)}
 #settingsBtn:active{transform:rotate(24deg) scale(.94)}

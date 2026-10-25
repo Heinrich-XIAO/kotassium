@@ -215,6 +215,13 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("version${count === 1 ? '' : 's'} forward", app)
         self.assertIn("updateState.can_install === false", app)
 
+    def test_desktop_queue_scrollbar_is_subtle(self):
+        page = read("web/index.html")
+        self.assertIn("#dfsQueue #dfsQrows{scrollbar-width:thin;scrollbar-color:#ffffff18 transparent}", page)
+        self.assertIn("#dfsQueue #dfsQrows::-webkit-scrollbar{width:6px}", page)
+        self.assertIn("#dfsQueue #dfsQrows::-webkit-scrollbar-track{background:transparent}", page)
+        self.assertIn("#dfsQueue #dfsQrows::-webkit-scrollbar-thumb{background:#ffffff18;border-radius:6px}", page)
+
     def test_up_next_toast_places_white_heading_above_track_details(self):
         page = read("web/index.html")
         self.assertIn("grid-template-columns:36px minmax(0,1fr)", page)
