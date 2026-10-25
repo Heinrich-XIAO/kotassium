@@ -54,6 +54,22 @@ class ServerSecurityTests(unittest.TestCase):
                            headers={"Origin": "https://evil.example"})
         self.assertEqual(code, 403)
 
+    def test_rollback_post_is_origin_guarded(self):
+        code, _ = self.req("POST", "/api/update/rollback",
+                           headers={"Origin": "https://evil.example"})
+        self.assertEqual(code, 403)
+
+    def test_rollback_post_reports_unsupported_platform(self):
+        code, body = self.req("POST", "/api/update/rollback", body=b"{}",
+                              headers={"Origin": "http://127.0.0.1:%d" % self.port,
+                                       "Content-Type": "application/json"})
+        self.assertEqual(code, 200)
+        self.assertIn("rollback is only available", json.loads(body)["error"])
+
+    def test_rollback_is_post_only(self):
+        code, _ = self.req("GET", "/api/update/rollback")
+        self.assertEqual(code, 404)
+
     def test_update_check_is_origin_guarded(self):
         code, _ = self.req("POST", "/api/update/check",
                            headers={"Origin": "https://evil.example"})

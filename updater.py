@@ -22,6 +22,7 @@ _lock = threading.Lock()
 _state = {"state": "idle", "pct": 0, "error": None, "available": False,
           "latest": None, "url": None, "notes": None, "checked": 0}
 _worker = None
+_rollback_worker = None
 
 # Set by desktop.py: called once the swap script is running and this process
 # should quit. Falls back to a hard exit if the window does not close.
@@ -69,6 +70,22 @@ def can_install():
     if "/AppTranslocation/" in app or app.startswith("/Volumes/"):
         return False
     return os.access(os.path.dirname(app), os.W_OK)
+
+
+def previous_app_path(target=None):
+    """Path where a successful self-update keeps the last working app bundle."""
+    target = target or app_path()
+    return target + ".old" if target else None
+
+
+def rollback_available():
+    previous = previous_app_path()
+    return bool(SUPPORTED and can_install() and previous and os.path.isdir(previous))
+
+
+def _rollback_available_for(target):
+    previous = previous_app_path(target)
+    return bool(target and os.path.isdir(target) and previous and os.path.isdir(previous))
 
 
 # ---------------------------------------------------------------- versions
@@ -203,9 +220,10 @@ def download(asset, sums_asset=None, progress=None):
 
 SWAP_SCRIPT = """#!/bin/sh
 # Written by Kotassium's updater. Waits for the old app to exit, swaps in the
-# new bundle, and reopens it. On any failure the old bundle is put back (and
-# reopened), so a failed update never leaves the user without an app.
-TARGET="$1"; NEW="$2"; PID="$3"; RELAUNCH="$4"
+# new bundle, and reopens it. Keep one previous app for manual recovery; restore
+# it automatically if the new bundle cannot be installed.
+TARGET="$1"; NEW="$2"; PID="$3"; RELAUNCH="$4"; MODE="$5"
+PREVIOUS="$TARGET.old"; SAVED="$TARGET.old.next"
 if [ "$PID" != "0" ]; then
   i=0
   while kill -0 "$PID" 2>/dev/null; do
@@ -214,19 +232,34 @@ if [ "$PID" != "0" ]; then
     [ "$i" -gt 240 ] && exit 1
   done
 fi
-rm -rf "$TARGET.old"
-if ! mv "$TARGET" "$TARGET.old"; then
+rm -rf "$SAVED"
+if [ -d "$PREVIOUS" ]; then
+  if ! mv "$PREVIOUS" "$SAVED"; then
+    [ "$RELAUNCH" = "1" ] && open "$TARGET"
+    exit 1
+  fi
+fi
+if ! mv "$TARGET" "$PREVIOUS"; then
+  [ -d "$SAVED" ] && mv "$SAVED" "$PREVIOUS"
   [ "$RELAUNCH" = "1" ] && open "$TARGET"
   exit 1
 fi
 if ditto "$NEW" "$TARGET"; then
-  rm -rf "$TARGET.old" "$NEW"
+  if [ "$MODE" = "keep" ]; then
+    rm -rf "$SAVED"
+  elif [ "$MODE" = "rollback" ] || [ "$MODE" = "discard" ]; then
+    rm -rf "$PREVIOUS" "$SAVED"
+  elif [ -d "$SAVED" ]; then
+    mv "$SAVED" "$PREVIOUS"
+  fi
+  rm -rf "$NEW"
   xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null
   [ "$RELAUNCH" = "1" ] && open "$TARGET"
   exit 0
 fi
 rm -rf "$TARGET"
-mv "$TARGET.old" "$TARGET"
+mv "$PREVIOUS" "$TARGET"
+[ -d "$SAVED" ] && mv "$SAVED" "$PREVIOUS"
 [ "$RELAUNCH" = "1" ] && open "$TARGET"
 exit 1
 """
@@ -255,8 +288,8 @@ def stage(dmg):
     return dst, out
 
 
-def swap(staged_app, target=None, relaunch=True, pid=None):
-    """Spawn the detached swap script. Returns the script path."""
+def swap(staged_app, target=None, relaunch=True, pid=None, mode="normal"):
+    """Spawn a detached swap; mode can retain or discard the previous bundle."""
     target = target or app_path()
     if not target:
         raise RuntimeError("not running from an app bundle")
@@ -268,7 +301,8 @@ def swap(staged_app, target=None, relaunch=True, pid=None):
     with open(log, "ab") as lf:
         subprocess.Popen(["/bin/sh", script, target, staged_app,
                           str(pid if pid is not None else os.getpid()),
-                          "1" if relaunch else "0"],
+                          "1" if relaunch else "0",
+                          str(mode)],
                          stdout=lf, stderr=lf, stdin=subprocess.DEVNULL,
                          start_new_session=True)
     return script
@@ -284,7 +318,7 @@ def install(asset, sums_asset=None):
         with _lock:
             _state.update(state="installing", pct=100)
         staged, _tmp = stage(dmg)
-        swap(staged)
+        swap(staged, mode="keep")
         with _lock:
             _state.update(state="ready", pct=100)
         if on_installed:
@@ -320,6 +354,40 @@ def start_install():
     return status()
 
 
+def rollback():
+    """Restore the retained previous bundle without needing the React UI."""
+    global _rollback_worker
+    if not SUPPORTED or not can_install():
+        raise RuntimeError("rollback is only available from a writable app bundle")
+    if not rollback_available():
+        raise RuntimeError("no previous Kotassium version is available")
+    if _rollback_worker and _rollback_worker.is_alive():
+        return status()
+    target = app_path()
+    previous = previous_app_path(target)
+    staged_dir = tempfile.mkdtemp(prefix="kotassium-rollback-")
+    staged = os.path.join(staged_dir, "Kotassium.app")
+    try:
+        subprocess.run(["ditto", previous, staged], check=True, capture_output=True)
+        swap(staged, target=target, mode="rollback")
+    except Exception:
+        shutil.rmtree(staged_dir, ignore_errors=True)
+        raise
+    _rollback_worker = threading.Thread(target=_exit_for_rollback, daemon=True)
+    _rollback_worker.start()
+    return dict(status(), state="installing", rollback_started=True)
+
+
+def _exit_for_rollback():
+    if on_installed:
+        try:
+            on_installed()
+        except Exception:
+            pass
+    time.sleep(6)
+    os._exit(0)
+
+
 def check_async():
     """Start a release check in the background, returning the status with
     state="checking" so the page can spin while the answer is on its way.
@@ -352,7 +420,7 @@ def selftest(dmg):
     print("staged  %s" % staged)
     target = os.path.join(tmp, "Target.app")
     subprocess.run(["ditto", staged, target], check=True, capture_output=True)
-    script = swap(staged, target=target, relaunch=False, pid=0)
+    script = swap(staged, target=target, relaunch=False, pid=0, mode="discard")
     print("script  %s" % script)
     deadline = time.time() + 60
     while time.time() < deadline and os.path.exists(staged):

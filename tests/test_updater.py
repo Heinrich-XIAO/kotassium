@@ -85,6 +85,28 @@ class AssetTests(unittest.TestCase):
         st = updater.start_install()
         self.assertEqual(st["state"], "idle")
 
+    def test_previous_bundle_is_available_only_for_a_writable_supported_install(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            previous = tmp + ".old"
+            os.makedirs(previous)
+            real_supported, real_install, real_app_path = (
+                updater.SUPPORTED, updater.can_install, updater.app_path)
+            updater.SUPPORTED = True
+            updater.can_install = lambda: True
+            updater.app_path = lambda: tmp
+            try:
+                self.assertTrue(updater.rollback_available())
+                updater.can_install = lambda: False
+                self.assertFalse(updater.rollback_available())
+                updater.can_install = lambda: True
+                updater.SUPPORTED = False
+                self.assertFalse(updater.rollback_available())
+            finally:
+                updater.SUPPORTED = real_supported
+                updater.can_install = real_install
+                updater.app_path = real_app_path
+            shutil.rmtree(previous)
+
     def test_check_async_reports_checking_immediately(self):
         # check_async must return without blocking, flipping state to checking
         # so the page can spin while GitHub is queried in the background.
@@ -198,20 +220,25 @@ class SwapScriptTests(unittest.TestCase):
             f.write("#!/bin/sh\n" + body)
         os.chmod(p, 0o755)
 
-    def _run(self, fail=False):
+    def _run(self, fail=False, mode="normal", previous=None):
         target = os.path.join(self.tmp, "Kotassium.app")
         new = os.path.join(self.tmp, "New.app")
         for d, ver in ((target, "old"), (new, "new")):
             os.makedirs(os.path.join(d, "Contents"))
             with open(os.path.join(d, "Contents", "v"), "w") as f:
                 f.write(ver)
+        if previous:
+            previous_path = target + ".old"
+            os.makedirs(os.path.join(previous_path, "Contents"))
+            with open(os.path.join(previous_path, "Contents", "v"), "w") as f:
+                f.write(previous)
         script = os.path.join(self.tmp, "swap.sh")
         with open(script, "w") as f:
             f.write(updater.SWAP_SCRIPT)
         env = dict(os.environ, PATH=self.bin + os.pathsep + os.environ["PATH"])
         if fail:
             env["FAIL"] = "1"
-        r = subprocess.run(["/bin/sh", script, target, new, "0", "0"],
+        r = subprocess.run(["/bin/sh", script, target, new, "0", "0", mode],
                            env=env, capture_output=True)
         return r.returncode, target, new
 
@@ -221,7 +248,24 @@ class SwapScriptTests(unittest.TestCase):
         with open(os.path.join(target, "Contents", "v")) as f:
             self.assertEqual(f.read(), "new")
         self.assertFalse(os.path.exists(new))
+        self.assertTrue(os.path.isdir(target + ".old"))
+        with open(os.path.join(target + ".old", "Contents", "v")) as f:
+            self.assertEqual(f.read(), "old")
+
+    def test_update_retains_only_the_most_recent_previous_bundle(self):
+        code, target, _ = self._run(mode="keep", previous="older")
+        self.assertEqual(code, 0)
+        with open(os.path.join(target + ".old", "Contents", "v")) as f:
+            self.assertEqual(f.read(), "old")
+        self.assertFalse(os.path.exists(target + ".old.next"))
+
+    def test_rollback_discards_the_failed_current_bundle(self):
+        code, target, _ = self._run(mode="rollback", previous="previous")
+        self.assertEqual(code, 0)
+        with open(os.path.join(target, "Contents", "v")) as f:
+            self.assertEqual(f.read(), "new")
         self.assertFalse(os.path.exists(target + ".old"))
+        self.assertFalse(os.path.exists(target + ".old.next"))
 
     def test_failure_restores_old_bundle(self):
         code, target, _ = self._run(fail=True)
@@ -232,8 +276,8 @@ class SwapScriptTests(unittest.TestCase):
 
     def test_script_restores_on_failure(self):
         s = updater.SWAP_SCRIPT
-        self.assertIn('mv "$TARGET" "$TARGET.old"', s)
-        self.assertIn('mv "$TARGET.old" "$TARGET"', s)   # rollback path
+        self.assertIn('mv "$TARGET" "$PREVIOUS"', s)
+        self.assertIn('mv "$PREVIOUS" "$TARGET"', s)   # rollback path
         self.assertIn("xattr -dr com.apple.quarantine", s)
         self.assertIn('kill -0 "$PID"', s)
         # A failed swap reopens the old bundle instead of leaving no app.
