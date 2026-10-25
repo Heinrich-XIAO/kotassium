@@ -103,6 +103,20 @@ function App() {
   const warmedPlaylists = useRef(new Map());
   const [links, setLinks] = useState([]);
   const [view, setView] = useState({ type: 'home' });
+  const [plStuck, setPlStuck] = useState(false);
+  // The playlist header scrolls away under #main; once it is gone, keep a
+  // compact copy of the heading pinned beside the action row.
+  useEffect(() => {
+    const main = document.getElementById('main');
+    if (!main) return undefined;
+    const onScroll = () => {
+      const head = document.getElementById('plhead');
+      setPlStuck(!!head && main.scrollTop >= head.offsetHeight - 8);
+    };
+    main.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => main.removeEventListener('scroll', onScroll);
+  }, [view]);
   const [playlist, setPlaylist] = useState([]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -917,7 +931,7 @@ function App() {
   });
 
   const renderMain = () => {
-    if (view.type === 'playlist')    return <><div id="plhead" style={{ background: `linear-gradient(180deg,hsl(${hue(view.name)},65%,30%),hsl(${(hue(view.name) + 40) % 360},60%,22%) 60%,#12121200)` }}><div id="plx" style={imageStyle(null, view.name)}>{(view.name || '?').charAt(0)}</div><div className="plinfo"><small>Public Playlist</small><h1>{view.name}</h1><p>{playlist.length} song{playlist.length === 1 ? '' : 's'}</p></div></div><div id="plactions"><button id="bigplay" onClick={playList} data-tooltip="Play"><Icon name="play" size={28}/></button><button id="shuf2" className={`aicon ${shuffle ? 'on' : ''}`} onClick={toggleShuffle} data-tooltip="Shuffle"><Icon name="shuffle" size={20}/></button><button id="rb2" className={`aicon ${repeat ? 'on' : ''}`} onClick={toggleRepeat} data-tooltip="Repeat"><Icon name="repeat" size={24}/></button></div><div id="tbl"><div className="tr-head"><span>#</span><span>Title</span><span>Album</span><span style={{ textAlign: 'right', color: '#b3b3b3' }}>Duration</span></div>{trackRows(playlist, 'playlist')}</div></>;
+    if (view.type === 'playlist')    return <><div id="plhead" style={{ background: `linear-gradient(180deg,hsl(${hue(view.name)},65%,30%),hsl(${(hue(view.name) + 40) % 360},60%,22%) 60%,#12121200)` }}><div id="plx" style={imageStyle(null, view.name)}>{(view.name || '?').charAt(0)}</div><div className="plinfo"><small>Public Playlist</small><h1>{view.name}</h1><p>{playlist.length} song{playlist.length === 1 ? '' : 's'}</p></div></div><div id="plactions" className={plStuck ? 'stuck' : ''}><button id="bigplay" onClick={playList} data-tooltip="Play"><Icon name="play" size={28}/></button><b className="plstick">{view.name}</b><button id="shuf2" className={`aicon ${shuffle ? 'on' : ''}`} onClick={toggleShuffle} data-tooltip="Shuffle"><Icon name="shuffle" size={20}/></button><button id="rb2" className={`aicon ${repeat ? 'on' : ''}`} onClick={toggleRepeat} data-tooltip="Repeat"><Icon name="repeat" size={24}/></button></div><div id="tbl"><div className="tr-head"><span>#</span><span>Title</span><span>Album</span><span style={{ textAlign: 'right', color: '#b3b3b3' }}>Duration</span></div>{trackRows(playlist, 'playlist')}</div></>;
     if (view.type === 'search') return <div id="search-results">{searching ? <div id="homeView"><h2>Searching “{view.query}”…</h2></div> : <><div id="homeView"><h2>Results for “{view.query}”</h2></div><div id="tbl" style={{ paddingTop: 0 }}>{results.length ? <><div className="tr-head"><span></span><span>Title</span><span>Source</span><span></span></div>{trackRows(results, 'search')}</> : <div id="empty">No results from any source.</div>}</div></>}</div>;
     return <div id="homeView"><h2>Your playlists</h2>{links.length ? <div className="cardgrid">{links.map((p, i) => <article className="card" key={p.url || p.name} onClick={() => loadPlaylist(i)}><div className="ccover" style={{ background: coverBackground(p.cover || p.tracks?.[0]?.cover, p.name) }} onMouseEnter={() => warmCover(p.cover || p.tracks?.[0]?.cover)}><button id="cardPlay" className="card-play" data-tooltip={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={20}/></button></div><b>{p.name || '?'}</b><small>{p.total || p.count} songs</small></article>)}</div> : <div id="empty">No playlists yet - add one with the + button.</div>}</div>;
   };
