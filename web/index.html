@@ -361,6 +361,49 @@ body{-webkit-tap-highlight-color:transparent}
 body.dfs #dfsQueue{display:flex}
 #toast.visible,#upnext.visible{opacity:1;pointer-events:auto}
 #upnext{top:88px}
+/* settings */
+#settingsBtn{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;color:#a5a5a5;flex:none;transition:color .16s,background .16s}
+#settingsBtn:hover{color:#fff;background:#ffffff12}
+.settings-backdrop{position:fixed;inset:0;z-index:120;background:#000b;backdrop-filter:blur(9px);display:grid;place-items:center;padding:24px;animation:settings-fade .18s ease-out}
+.settings-dialog{width:min(560px,100%);max-height:min(760px,calc(100dvh - 48px));overflow:auto;background:#151515;border:1px solid #ffffff1b;border-radius:18px;box-shadow:0 32px 100px #000d;color:#f5f5f5;animation:settings-rise .24s cubic-bezier(.2,.8,.2,1)}
+@keyframes settings-fade{from{opacity:0}to{opacity:1}}
+@keyframes settings-rise{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+.settings-head{display:flex;align-items:center;justify-content:space-between;padding:28px 30px 22px;border-bottom:1px solid #ffffff12}
+.settings-kicker{font-size:10px;letter-spacing:.19em;font-weight:750;color:#1ed760}
+.settings-head h2{font-size:30px;letter-spacing:-.045em;margin:6px 0 0;font-weight:780}
+.settings-close{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:#aaa;background:#ffffff09}
+.settings-close:hover{color:#fff;background:#ffffff17}
+.settings-content{padding:6px 30px 18px}
+.settings-section{padding:22px 0 8px}
+.settings-section+.settings-section{border-top:1px solid #ffffff12}
+.settings-section-title{display:flex;align-items:flex-start;gap:13px;margin:0 0 12px}
+.settings-index{font-size:10px;letter-spacing:.08em;color:#1ed760;font-variant-numeric:tabular-nums;padding-top:4px}
+.settings-section-title h3{font-size:15px;margin:0;font-weight:700}
+.settings-section-title p{font-size:12px;color:#818181;margin:4px 0 0}
+.setting-row{min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:11px 0 11px 26px;border-top:1px solid #ffffff0c}
+.setting-copy{min-width:0}
+.setting-copy b,.setting-copy small{display:block}
+.setting-copy b{font-size:13px;font-weight:600}
+.setting-copy small{font-size:11px;color:#818181;margin-top:4px;line-height:1.4}
+.setting-switch{width:40px;height:23px;border:1px solid #555;border-radius:20px;background:#303030;padding:2px;flex:none;transition:background .18s,border-color .18s}
+.setting-switch i{display:block;width:17px;height:17px;border-radius:50%;background:#bcbcbc;transition:transform .18s,background .18s}
+.setting-switch.enabled{background:#1ed760;border-color:#1ed760}
+.setting-switch.enabled i{background:#071409;transform:translateX(17px)}
+.setting-switch:focus-visible,.setting-select:focus-visible,.settings-close:focus-visible,.settings-foot button:focus-visible,#settingsBtn:focus-visible{outline:2px solid #1ed760;outline-offset:3px}
+.setting-volume{display:flex;align-items:center;gap:12px;flex:0 1 200px}
+.setting-volume input{appearance:none;-webkit-appearance:none;width:100%;height:4px;border-radius:4px;background:linear-gradient(to right,#1ed760 0 var(--range-progress),#ffffff2b var(--range-progress) 100%);cursor:pointer}
+.setting-volume input::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 5px #0008}
+.setting-volume input::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:#fff;box-shadow:0 1px 5px #0008}
+.setting-volume span{width:35px;text-align:right;color:#aaa;font-size:11px;font-variant-numeric:tabular-nums}
+.setting-select{appearance:none;background:#242424;color:#eee;border:1px solid #ffffff1c;border-radius:7px;padding:8px 30px 8px 10px;font:inherit;font-size:11px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23aaa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center}
+.setting-select option{background:#242424;color:#fff}
+.settings-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 30px 20px;border-top:1px solid #ffffff12}
+.settings-foot span{display:flex;align-items:center;gap:8px;font-size:10px;color:#777}
+.settings-foot span i{width:6px;height:6px;border-radius:50%;background:#1ed760;box-shadow:0 0 10px #1ed76066}
+.settings-foot button{background:#1ed760;color:#061408;font-size:12px;font-weight:750;padding:9px 20px;border-radius:22px;transition:transform .15s,background .15s}
+.settings-foot button:hover{transform:scale(1.04);background:#3be477}
+@media(max-width:820px){#settingsBtn{width:40px;height:40px}#settingsBtn svg{width:19px;height:19px}.settings-backdrop{padding:12px;align-items:end}.settings-dialog{max-height:calc(100dvh - 24px);border-radius:18px 18px 12px 12px}.settings-head{padding:24px 22px 18px}.settings-content{padding:4px 22px 14px}.settings-foot{padding:14px 22px 18px}.setting-row{padding-left:22px}}
+@media(prefers-reduced-motion:reduce){.settings-backdrop,.settings-dialog{animation:none}.setting-switch,.setting-switch i,.settings-foot button{transition:none}}
 </style></head><body>
 <div id="root"></div>
 <script src="/app.js" defer></script>
