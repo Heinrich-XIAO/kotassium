@@ -1,8 +1,8 @@
 name: Auto release
 
 # Every push to main creates a patch release. Apple Silicon and Android build
-# in parallel; whichever finishes first creates the release, and the other
-# publisher attaches its artifact and checksum when its build completes.
+# in parallel with preflight; a failed preflight cancels the workflow, and
+# successful builds publish/attach artifacts as soon as they complete.
 
 on:
   push:
@@ -19,6 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -47,9 +48,20 @@ jobs:
     needs: version
     uses: ./.github/workflows/preflight.yml
 
+  cancel-builds-on-preflight-failure:
+    name: cancel builds when preflight fails
+    needs: preflight
+    if: ${{ needs.preflight.result == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel the workflow run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+
   macos:
     name: build Apple Silicon DMG
-    needs: [version, preflight]
+    needs: version
     uses: ./.github/workflows/build.yml
     with:
       version: ${{ needs.version.outputs.version }}
@@ -59,7 +71,7 @@ jobs:
 
   android:
     name: build Android APK
-    needs: [version, preflight]
+    needs: version
     uses: ./.github/workflows/build.yml
     with:
       version: ${{ needs.version.outputs.version }}

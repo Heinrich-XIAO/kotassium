@@ -1,8 +1,8 @@
 name: Release
 
-# A named release cut: preflight, build Apple Silicon and Android in parallel,
-# and publish each artifact as soon as its platform build succeeds. A manual
-# run is packaging-only and leaves release publication to a tag push.
+# A named release cut: preflight and platform builds start together; a failed
+# preflight cancels the run. Publish each artifact as soon as its build passes.
+# A manual run is packaging-only and leaves release publication to a tag push.
 
 on:
   workflow_dispatch:
@@ -16,6 +16,7 @@ on:
       - "v*"
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -39,9 +40,20 @@ jobs:
     needs: version
     uses: ./.github/workflows/preflight.yml
 
+  cancel-builds-on-preflight-failure:
+    name: cancel builds when preflight fails
+    needs: preflight
+    if: ${{ needs.preflight.result == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel the workflow run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+
   macos:
     name: build Apple Silicon DMG
-    needs: [version, preflight]
+    needs: version
     uses: ./.github/workflows/build.yml
     with:
       version: ${{ needs.version.outputs.version }}
@@ -51,7 +63,7 @@ jobs:
 
   android:
     name: build Android APK
-    needs: [version, preflight]
+    needs: version
     uses: ./.github/workflows/build.yml
     with:
       version: ${{ needs.version.outputs.version }}
