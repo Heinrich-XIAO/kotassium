@@ -27,10 +27,9 @@ android {
         versionName appVersion
         buildConfigField "String", "KOTASSIUM_URL", "\"${serverUrl}\""
 
-        // Chaquopy ships a CPython runtime per ABI. Two is enough: phones are
-        // arm64 and the emulator is x86_64.
+        // Ship the phone ABI only; do not include x86_64 emulator binaries.
         ndk {
-            abiFilters "arm64-v8a", "x86_64"
+            abiFilters "arm64-v8a"
         }
     }
 

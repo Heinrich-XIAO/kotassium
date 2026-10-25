@@ -47,10 +47,8 @@ jobs:
   release:
     name: publish release
     needs: [version, build]
-    # !cancelled() so the best-effort Intel job cannot block a tag: the step
-    # below is what decides whether there is enough to publish. Only a tag
-    # publishes - a manual run just uploads workflow artifacts, which is the
-    # safe way to test packaging changes.
+    # Publish only on a tag; a manual run just uploads workflow artifacts,
+    # which is the safe way to test packaging changes.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     steps:

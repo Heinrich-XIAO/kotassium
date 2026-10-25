@@ -4,13 +4,8 @@ name: build artifacts
 #   - release.yml      a v* tag you push yourself (a cut you name)
 #   - auto-release.yml every push to main (a rolling patch bump)
 #
-# Both hand it a version and get the same DMGs and APK back, so a build
-# cannot drift between the two paths.
-#
-# The caller also picks what to build: auto-release calls this twice, once
-# with the artifacts the release must not wait for (the Intel DMG is best
-# effort on a slow runner) and once with the Intel DMG alone, so the slow
-# leg cannot hold up the release page.
+# Both hand it a version and get the same Apple Silicon DMG and Android APK
+# back, so a build cannot drift between the two paths.
 
 on:
   workflow_call:
@@ -23,7 +18,7 @@ on:
         description: JSON matrix (runner + arch) of the macOS builds
         required: false
         type: string
-        default: '[{"runner":"macos-14","arch":"arm64"},{"runner":"macos-15-intel","arch":"x86_64"}]'
+        default: '[{"runner":"macos-14","arch":"arm64"}]'
       android:
         description: Build the Android APK
         required: false
@@ -76,8 +71,6 @@ jobs:
       matrix:
         include: ${{ fromJson(inputs.macos) }}
     runs-on: ${{ matrix.runner }}
-    # Keep a missing/retired Intel runner from failing the whole release.
-    continue-on-error: ${{ matrix.arch == 'x86_64' }}
     steps:
       - uses: actions/checkout@v4
 
