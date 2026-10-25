@@ -82,6 +82,13 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("window.__kotReactReady?.()", app)
         self.assertIn("useEffect(() => { window.__kotReactReady?.(); }, [])", app)
 
+    def test_update_step_formatter_is_hoisted_before_render_and_effects(self):
+        app = read("web/app.jsx")
+        self.assertLess(app.index("function updateStepsText("), app.index("function App()"))
+        self.assertIn("updateStepsText(st.version, st.latest)", app)
+        self.assertNotIn("[updateState, updateSteps]", app)
+        self.assertIn("updateStepsText(updateState.version, updateState.latest)", app)
+
     def test_http_serves_recovery_outside_the_react_mount(self):
         import serve_web
         old_base = serve_web.BASE
@@ -265,8 +272,8 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("version${count === 1 ? '' : 's'} forward", app)
         self.assertIn("updateState.can_install === false", app)
         self.assertIn("updateCheckManual.current = true", app)
-        self.assertIn("st.available) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateSteps(st.version, st.latest)})", app)
-        self.assertIn("else if (st.available) setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateSteps(st.version, st.latest)})", app)
+        self.assertIn("st.available) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateStepsText(st.version, st.latest)})", app)
+        self.assertIn("else if (st.available) setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateStepsText(st.version, st.latest)})", app)
 
     def test_desktop_queue_scrollbar_is_subtle(self):
         page = read("web/index.html")

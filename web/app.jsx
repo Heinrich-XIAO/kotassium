@@ -86,6 +86,16 @@ function TooltipLayer() {
   return <div className={`app-tooltip ${tooltip.above ? 'above' : 'below'}`} role="tooltip" style={{ left: tooltip.left, top: tooltip.top }}>{tooltip.text}</div>;
 }
 
+function updateStepsText(current, latest) {
+  const from = String(current || '').match(/\\d+/g), to = String(latest || '').match(/\\d+/g);
+  if (!from || !to) return 'a new version';
+  const a = from.slice(0, 3).map(Number), b = to.slice(0, 3).map(Number);
+  while (a.length < 3) a.push(0);
+  while (b.length < 3) b.push(0);
+  const count = a[0] !== b[0] || a[1] !== b[1] ? 1 : Math.max(1, b[2] - a[2]);
+  return `${count} version${count === 1 ? '' : 's'} forward`;
+}
+
 function App() {
   useEffect(() => { window.__kotReactReady?.(); }, []);
   const audioRef = useRef(null);
@@ -166,7 +176,6 @@ function App() {
   const lastUpNextTrack = useRef('');
   const currentTrack = currentIndex >= 0 ? queue[currentIndex] : null;
   const duration = actualDuration || (currentTrack?.ms ? currentTrack.ms / 1000 : 0);
-
   const toast = useCallback((message) => {
     toastGesture.current.dismissed = false;
     setToastDismissed(false);
@@ -631,6 +640,7 @@ function App() {
     };
   }, [desktopPlayer]);
 
+
   useEffect(() => {
     if (!updateState || !['checking', 'downloading', 'installing'].includes(updateState.state)) return;
     const timer = setTimeout(async () => {
@@ -641,7 +651,7 @@ function App() {
       else if (st.state === 'installing') setUpdateMessage('installing update…');
       else if (st.state === 'checking') setUpdateMessage('Checking for updates…');
       else if (st.state === 'error') setUpdateMessage(st.error || 'update failed');
-      else if (st.available) setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateSteps(st.version, st.latest)})${st.can_install === false ? ' — move it to Applications to update' : ''}`);
+      else if (st.available) setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateStepsText(st.version, st.latest)})${st.can_install === false ? ' — move it to Applications to update' : ''}`);
       else if (updateCheckManual.current && !st.error) {
         updateCheckManual.current = false;
         setUpdateMessage(`Kotassium ${st.version || ''} is up to date`);
@@ -652,7 +662,7 @@ function App() {
       }
     }, 700);
     return () => clearTimeout(timer);
-  }, [updateState, updateSteps]);
+  }, [updateState]);
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -934,7 +944,7 @@ function App() {
     const count = a[0] !== b[0] || a[1] !== b[1] ? 1 : Math.max(1, b[2] - a[2]);
     return `${count} version${count === 1 ? '' : 's'} forward`;
   }, []);
-  const checkUpdate = useCallback(async () => { updateCheckManual.current = true; clearTimeout(updateStatusTimer.current); setUpdateBusy(true); setUpdateMessage('Checking for updates…'); try { const st = await postJSON('/api/update/check', {}); setUpdateState(st); if (st.state === 'checking') setUpdateMessage('Checking for updates…'); else if (st.state === 'error') { updateCheckManual.current = false; setUpdateMessage(st.error || 'update failed'); } else if (st.available) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateSteps(st.version, st.latest)})${st.can_install === false ? ' — move it to Applications to update' : ''}`); } else if (!st.error) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.version || ''} is up to date`); updateStatusTimer.current = setTimeout(() => setUpdateMessage(''), 4000); } } catch { updateCheckManual.current = false; toast('could not check for updates'); } finally { setUpdateBusy(false); } }, [toast, updateSteps]);
+  const checkUpdate = useCallback(async () => { updateCheckManual.current = true; clearTimeout(updateStatusTimer.current); setUpdateBusy(true); setUpdateMessage('Checking for updates…'); try { const st = await postJSON('/api/update/check', {}); setUpdateState(st); if (st.state === 'checking') setUpdateMessage('Checking for updates…'); else if (st.state === 'error') { updateCheckManual.current = false; setUpdateMessage(st.error || 'update failed'); } else if (st.available) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateStepsText(st.version, st.latest)})${st.can_install === false ? ' — move it to Applications to update' : ''}`); } else if (!st.error) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.version || ''} is up to date`); updateStatusTimer.current = setTimeout(() => setUpdateMessage(''), 4000); } } catch { updateCheckManual.current = false; toast('could not check for updates'); } finally { setUpdateBusy(false); } }, [toast]);
   const startUpdate = useCallback(async () => { setUpdateBusy(true); try { await postJSON('/api/update', {}); const st = await pollUpdate(); if (st?.state === 'installing' || st?.state === 'downloading') setUpdateMessage(st.state === 'downloading' ? `downloading update ${Math.round(st.pct || 0)}%` : 'installing update…'); } catch { toast('could not start the update'); } finally { setUpdateBusy(false); } }, [pollUpdate, toast]);
 
   const imageStyle = (url, name) => ({ background: url ? resolveCover(url) : gradient(name) });
@@ -991,7 +1001,7 @@ function App() {
   const progress = (full = false) => <div className={full ? 'fs-seek' : ''} id={full ? 'fsSeek' : 'prow'}><span className="ptime" id={full ? 'fsCur' : 'curt'}>{secs(currentTime)}</span><div className={full ? 'fs-progress' : ''} id={full ? 'fsProg' : 'prog'} {...seekHandlers()}><i id={full ? 'fsProgf' : 'progf'} style={{ width: `${duration ? Math.min(100, currentTime / duration * 100) : 0}%` }} /></div><span className="ptime" id={full ? 'fsTot' : 'tott'}>{secs(duration)}</span></div>;
 
   return <>
-    <header id="top"><button id="libBtn" className="top-lib" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={18}/></button><button id="homeBtn" onClick={goHome} data-tooltip="Home"><Icon name="home"/></button><div id="searchwrap" className={query ? 'filled' : ''}><Icon name="search" size={18}/><input id="q" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder="What do you want to play?"/><button id="qClear" onClick={() => { setQuery(''); document.querySelector('#q')?.focus(); }} data-tooltip="Clear search"><Icon name="close" size={14}/></button><span id="qDiv"/><button id="qBrowse" onClick={goHome} data-tooltip="Browse playlists"><Icon name="browse"/></button></div><button id="settingsBtn" onClick={() => setSettingsOpen(true)} data-tooltip="Settings" aria-label="Open settings"><Settings2 size={21} strokeWidth={1.8} aria-hidden="true"/></button>{updateState?.supported && <div id="upd" className={`${updateMessage ? 'on' : 'on icononly'}`}><span id="updtext">{updateMessage || (updateState.available ? `Kotassium ${updateState.latest} is available (${updateSteps(updateState.version, updateState.latest)})${updateState.can_install === false ? ' — move it to Applications to update' : ''}` : '')}</span>{updateState.rollback_available && <button id="rollbackBtn" onClick={async () => { if (!window.confirm('Restore the previous Kotassium version? The app will close and reopen.')) return; try { await postJSON('/api/update/rollback', {}); } catch { toast('could not start rollback'); } }} data-tooltip="Restore previous version" aria-label="Restore previous version"><RotateCw size={14}/></button>}<button id="updbtn" className={updateState.available ? 'go' : ''} onClick={updateState.available ? startUpdate : checkUpdate} disabled={updateBusy} data-tooltip={updateState.available ? 'Restart & Update' : 'Check for updates'} aria-label={updateState.available ? 'Restart and install update' : 'Check for updates'}>{updateState.available ? <Download size={16} strokeWidth={2.2} aria-hidden="true"/> : <RefreshCw size={15} strokeWidth={2} className={updateBusy ? 'lucide-spin' : ''} aria-hidden="true"/>}</button>{updateState.available && <button id="updcheck" onClick={checkUpdate} disabled={updateBusy} data-tooltip="Check again" aria-label="Check for updates again"><RotateCw size={15} strokeWidth={1.9} aria-hidden="true"/></button>}</div>}</header>
+    <header id="top"><button id="libBtn" className="top-lib" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={18}/></button><button id="homeBtn" onClick={goHome} data-tooltip="Home"><Icon name="home"/></button><div id="searchwrap" className={query ? 'filled' : ''}><Icon name="search" size={18}/><input id="q" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder="What do you want to play?"/><button id="qClear" onClick={() => { setQuery(''); document.querySelector('#q')?.focus(); }} data-tooltip="Clear search"><Icon name="close" size={14}/></button><span id="qDiv"/><button id="qBrowse" onClick={goHome} data-tooltip="Browse playlists"><Icon name="browse"/></button></div><button id="settingsBtn" onClick={() => setSettingsOpen(true)} data-tooltip="Settings" aria-label="Open settings"><Settings2 size={21} strokeWidth={1.8} aria-hidden="true"/></button>{updateState?.supported && <div id="upd" className={`${updateMessage ? 'on' : 'on icononly'}`}><span id="updtext">{updateMessage || (updateState.available ? `Kotassium ${updateState.latest} is available (${updateStepsText(updateState.version, updateState.latest)})${updateState.can_install === false ? ' — move it to Applications to update' : ''}` : '')}</span>{updateState.rollback_available && <button id="rollbackBtn" onClick={async () => { if (!window.confirm('Restore the previous Kotassium version? The app will close and reopen.')) return; try { await postJSON('/api/update/rollback', {}); } catch { toast('could not start rollback'); } }} data-tooltip="Restore previous version" aria-label="Restore previous version"><RotateCw size={14}/></button>}<button id="updbtn" className={updateState.available ? 'go' : ''} onClick={updateState.available ? startUpdate : checkUpdate} disabled={updateBusy} data-tooltip={updateState.available ? 'Restart & Update' : 'Check for updates'} aria-label={updateState.available ? 'Restart and install update' : 'Check for updates'}>{updateState.available ? <Download size={16} strokeWidth={2.2} aria-hidden="true"/> : <RefreshCw size={15} strokeWidth={2} className={updateBusy ? 'lucide-spin' : ''} aria-hidden="true"/>}</button>{updateState.available && <button id="updcheck" onClick={checkUpdate} disabled={updateBusy} data-tooltip="Check again" aria-label="Check for updates again"><RotateCw size={15} strokeWidth={1.9} aria-hidden="true"/></button>}</div>}</header>
     {settingsOpen && <div className="settings-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
       <section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
         <header className="settings-head">
