@@ -220,8 +220,12 @@ function App() {
       .sort((a, b) => a._delta - b._delta || a._order - b._order).slice(0, 8);
     if (videos.length) return videos;
     if (track.source === 'newgrounds' && track.id) return [{ ...track, source: 'newgrounds' }];
+    if (track.source === 'soundcloud' && track.id) return [{ ...track, source: 'soundcloud' }];
     const ng = await API(`/api/search?src=newgrounds&q=${encodeURIComponent(q)}&t=${encodeURIComponent(track.t || '')}&a=${encodeURIComponent(track.a || '')}`);
-    return (ng.results || []).filter((r) => r.source === 'newgrounds').slice(0, 6);
+    const newgrounds = (ng.results || []).filter((r) => r.source === 'newgrounds').slice(0, 6);
+    if (newgrounds.length) return newgrounds;
+    const soundcloud = await API(`/api/search?src=soundcloud&q=${encodeURIComponent(q)}`);
+    return (soundcloud.results || []).filter((r) => r.source === 'soundcloud').slice(0, 6);
   }, []);
 
   const startResolvedTrack = useCallback(async (track, candidates, candidateIndex, cacheKey, cached = false, epoch = playbackEpoch.current) => {
@@ -257,7 +261,7 @@ function App() {
     const audio = audioRef.current;
     if (!audio) return;
     audio.pause(); audio.removeAttribute('src'); audio.load();
-    if (track.source === 'youtube' || track.source === 'newgrounds' || !track.source || track.source === 'local') {
+    if (track.source === 'youtube' || track.source === 'newgrounds' || track.source === 'soundcloud' || !track.source || track.source === 'local') {
       const key = trackKey(track);
       const cached = cacheRef.current[key];
       try {
@@ -391,7 +395,7 @@ function App() {
   }, []);
 
   const prefetchTrack = useCallback((track) => {
-    if (!track || (track.source && track.source !== 'youtube' && track.source !== 'newgrounds')) return Promise.resolve();
+    if (!track || (track.source && track.source !== 'youtube' && track.source !== 'newgrounds' && track.source !== 'soundcloud')) return Promise.resolve();
     const key = trackKey(track);
     if (prefetchJobsRef.current.has(key)) return prefetchJobsRef.current.get(key);
     prefetchRef.current.add(key);

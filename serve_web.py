@@ -443,8 +443,170 @@ def dz_search(q):
     except Exception:
         return {"results": []}
 
+# ----------------------------------------------------------- soundcloud lane
+# api-v2 needs the public client_id that ships inside SoundCloud's own JS
+# bundles. It rotates with their app releases, so we scrape it on demand and
+# drop the cached copy the moment the API answers 401 - never hardcode one.
+_SC_HOME = "https://soundcloud.com/"
+_SC_API = "https://api-v2.soundcloud.com"
+_SC_CID = re.compile(r'client_id[=:]["\']?([0-9a-zA-Z]{20,60})["\']?')
+_SC_ASSET = re.compile(r'src="(https://a-v2\.sndcdn\.com/assets/[^"]+\.js)"')
+_sc = {"cid": ""}
+_sc_lock = threading.Lock()
+
+def _sc_page(url):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.read().decode("utf-8", "replace")
+
+def _sc_client_id(force=False):
+    with _sc_lock:
+        if _sc["cid"] and not force:
+            return _sc["cid"]
+    for src in _SC_ASSET.findall(_sc_page(_SC_HOME))[:12]:
+        m = _SC_CID.search(_sc_page(src))
+        if m:
+            with _sc_lock:
+                _sc["cid"] = m.group(1)
+            return m.group(1)
+    raise RuntimeError("soundcloud client_id not found")
+
+def _sc_json(url, tries=2):
+    """GET an api-v2 URL with the client_id attached. A 401/403 means the id
+    we scraped has rotated, so re-scrape it once instead of failing the lane."""
+    err = None
+    for i in range(tries):
+        cid = _sc_client_id(force=bool(i))
+        sep = "&" if "?" in url else "?"
+        req = urllib.request.Request(url + sep + "client_id=" + cid,
+                                     headers={"User-Agent": UA,
+                                              "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.loads(r.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e:
+            err = e
+            if e.code not in (401, 403):
+                raise
+    raise RuntimeError("soundcloud HTTP %s" % (getattr(err, "code", "?")))
+
 def sc_search(q):
-    return {"results": []}
+    """SoundCloud lane. It raises on a transport failure so /api/search can
+    record the reason in `errors` - a silent empty list made this lane look
+    like "no results" even while the API was refusing us."""
+    j = _sc_json(_SC_API + "/search/tracks?limit=25&q=" + urllib.parse.quote(q or ""))
+    out = []
+    for tk in (j.get("collection") or []):
+        if not tk.get("id"):
+            continue
+        out.append({"source": "soundcloud", "id": "sc-" + str(tk["id"]),
+                    "title": tk.get("title") or "",
+                    "artist": (tk.get("user") or {}).get("username") or "",
+                    "dur": int(tk.get("duration") or 0) // 1000,  # api-v2 counts ms
+                    "cover": tk.get("artwork_url") or "",
+                    "full": True})
+    return {"results": out}
+
+def sc_track(tid):
+    mid = re.sub(r"\D", "", tid[3:] if str(tid).startswith("sc-") else str(tid))
+    if not mid:
+        raise RuntimeError("bad soundcloud id")
+    return _sc_json(_SC_API + "/tracks/" + mid)
+
+def sc_media(tid):
+    """(url, protocol) for a track. SoundCloud serves most of the catalogue as
+    HLS and some as progressive mp3; both resolve through the API to a signed
+    URL that must never be cached in the track cache - always resolve anew."""
+    tcs = ((sc_track(tid).get("media") or {}).get("transcodings")) or []
+    def pick(proto):
+        return next((x for x in tcs
+                     if (x.get("format") or {}).get("protocol") == proto), None)
+    tc = pick("progressive") or pick("hls")
+    if not tc:
+        raise RuntimeError("soundcloud has no downloadable stream")
+    return _sc_json(tc["url"]).get("url") or "", \
+           (tc.get("format") or {}).get("protocol") or ""
+
+def _sc_copy(url, out, progress=None):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        total = int(r.headers.get("Content-Length") or 0)
+        got = 0
+        while True:
+            chunk = r.read(1 << 16)
+            if not chunk:
+                break
+            out.write(chunk)
+            got += len(chunk)
+            if progress and total:
+                progress(min(99.0, got * 100.0 / total))
+
+def _sc_hls(m3u8_url, tmp, progress=None):
+    """Assemble an fMP4 playlist into one file: init segment plus every
+    fragment, concatenated. The fragments are self-contained fMP4, so this
+    needs neither ffmpeg nor yt-dlp - the bytes come out identical to yt-dlp's
+    native HLS downloader."""
+    req = urllib.request.Request(m3u8_url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        text = r.read().decode("utf-8", "replace")
+    init, segs = None, []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("#EXT-X-MAP:"):
+            m = re.search(r'URI="([^"]+)"', line)
+            if m:
+                init = m.group(1)
+        elif line and not line.startswith("#"):
+            segs.append(line)
+    if not segs:
+        raise RuntimeError("soundcloud playlist has no segments")
+    def absu(u):
+        return u if u.startswith("http") else urllib.parse.urljoin(m3u8_url, u)
+    try:
+        with open(tmp, "wb") as out:
+            if init:
+                _sc_copy(absu(init), out)
+            for i, s in enumerate(segs):
+                _sc_copy(absu(s), out)
+                if progress:
+                    progress(min(99.0, (i + 1) * 100.0 / len(segs)))
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+def sc_fetch(vid, progress=None):
+    """Download an `sc-<id>` library entry. SoundCloud hands out HLS (or a
+    progressive mp3), never a ready-made file, so this never touches yt-dlp or
+    ffmpeg - _take_download names and registers the result like any other
+    track, and the page plays .m4a straight from /lib/."""
+    if not str(vid).startswith("sc-"):
+        raise RuntimeError("bad soundcloud id")
+    url, proto = sc_media(vid)
+    tmp = os.path.join(LIB, ".yt_" + vid +
+                       (".mp3" if proto == "progressive" else ".m4a"))
+    try:
+        if proto == "progressive":
+            with open(tmp, "wb") as out:
+                _sc_copy(url, out, progress)
+        else:
+            _sc_hls(url, tmp, progress)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    name = _take_download(vid, progress)
+    if not name:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise RuntimeError("soundcloud download failed")
+    return name
 
 def ia_search(q):
     return {"results": []}
@@ -766,15 +928,14 @@ def dl_file(src, tid, url):
         out.write(r.read())
     return f
 
-def sc_resolve(tid):
-    return ""
-
 def _make_preview(out, vid):
     """A 5s clip so playback starts instantly. Needs ffmpeg; without it the
-    /lib/ route redirects the preview to the full track instead."""
+    /lib/ route redirects the preview to the full track instead. The clip is
+    a stream copy, so it keeps the source container - an .m4a preview must not
+    be written out as .mp3."""
     if not FFMPEG:
         return
-    prev = os.path.join(LIB, vid + "_preview.mp3")
+    prev = os.path.join(LIB, vid + "_preview" + (audio_ext(out) or ".mp3"))
     try:
         run_proc([FFMPEG, "-y", "-i", out, "-t", "5", "-c", "copy", prev],
                  timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -850,6 +1011,8 @@ def ytdl(vid, progress=None):
         return os.path.basename(existing)
     if vid.startswith("ng-"):
         return ng_fetch(vid, progress)  # Newgrounds hands out the mp3 itself
+    if vid.startswith("sc-"):
+        return sc_fetch(vid, progress)  # SoundCloud assembles its own HLS
     if YTDLP_INPROC:
         return _ytdl_inproc(vid, progress)
     if not YTDLP:
@@ -989,9 +1152,9 @@ def handle(path, params, hdr):
         q, src = one("q"), one("src", "all")
         out, errs = [], {}
         lanes = []
-        if src not in ("deezer", "archive", "newgrounds"):
+        if src not in ("deezer", "archive", "newgrounds", "soundcloud"):
             lanes.append(("youtube", yt_search))
-        if src not in ("youtube", "archive", "newgrounds"):
+        if src not in ("youtube", "archive", "newgrounds", "soundcloud"):
             lanes.append(("deezer", dz_search))
         if src in ("all", "soundcloud"):
             lanes.append(("soundcloud", sc_search))
@@ -1015,8 +1178,14 @@ def handle(path, params, hdr):
             f = dl_file("deezer", tid, one("preview"))
             return 200, "audio/mpeg", open(f, "rb").read(), None, False
         if src == "soundcloud":
-            f = dl_file("soundcloud", tid, sc_resolve(tid))
-            return 200, "audio/mpeg", open(f, "rb").read(), None, False
+            # HLS has no single URL to redirect to, so fetch into the library
+            # first and hand the player /lib/ - which serves Range requests,
+            # unlike streaming the body back through this route.
+            try:
+                name = sc_fetch(tid)
+            except Exception as e:
+                return 502, "text/plain", str(e)[:200].encode(), None, False
+            return 302, None, b"", {"Location": "/lib/" + urllib.parse.quote(name)}, False
         if src == "archive":
             return 302, None, b"", {"Location": "https://archive.org/download/" + tid + "/" + tid + "_vbr.mp3"}, False
         if src == "newgrounds":
@@ -1128,8 +1297,8 @@ def handle(path, params, hdr):
         base = os.path.basename(urllib.parse.unquote(path[5:]))
         f = os.path.join(LIB, base)
         # on-demand preview clip generation
-        if (not os.path.exists(f)) and base.endswith("_preview.mp3"):
-            vid = base[:-len("_preview.mp3")]
+        if (not os.path.exists(f)) and "_preview." in base:
+            vid = base.split("_preview.", 1)[0]
             src = track_path(vid)
             if src and FFMPEG:
                 try:
@@ -1137,8 +1306,8 @@ def handle(path, params, hdr):
                              timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except Exception:
                     pass
-            elif src:
-                # No ffmpeg (Android): there is no preview clip, so point the
+            if src and not os.path.exists(f):
+                # No ffmpeg (Android), or the clip could not be cut: point the
                 # player straight at the full track instead of a 404.
                 return 302, None, b"", {"Location": "/lib/" + urllib.parse.quote(os.path.basename(src))}, False
         if os.path.exists(f):
