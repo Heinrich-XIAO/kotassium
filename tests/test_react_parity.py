@@ -139,6 +139,10 @@ class ReactParityTests(unittest.TestCase):
         self.assertNotIn("bgQueueRef.current.map", self.app)
         self.assertIn(".link-opt", read("web/index.html"))
 
+    def test_cover_frames_have_even_borders_and_clip_square_artwork(self):
+        css = read("web/index.html")
+        self.assertIn(".pcover,.ccover,#plx,#nowc,.track-cover,#dfsArt,#fsArt{border:1px solid #ffffff18;overflow:hidden;background-clip:padding-box}", css)
+
     def test_reference_css_is_preserved_in_index_shell(self):
         migrated_shell = git_show("8ae5e3e:web/index.html")
         current = read("web/index.html")

@@ -484,6 +484,8 @@ body.dfs #dfsQueue{display:flex}
 .plstick{display:none;flex:1;min-width:0;font-size:20px;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #plactions.stuck .plstick{display:block}
 @media(prefers-reduced-motion:reduce){#plactions{transition:none}}
+/* Keep cover borders evenly inset and clip artwork at the same rounded edge. */
+.pcover,.ccover,#plx,#nowc,.track-cover,#dfsArt,#fsArt{border:1px solid #ffffff18;overflow:hidden;background-clip:padding-box}
 </style></head><body>
 <div id="root"></div>
 <script src="/app.js" defer></script>
