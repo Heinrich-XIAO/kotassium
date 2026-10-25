@@ -169,7 +169,7 @@ class WrapperTests(unittest.TestCase):
         requirements = read("requirements-macos-build.txt")
         self.assertIn("pywebview>=5.4", requirements)
         setup = read("setup-macos.py")
-        self.assertIn('"zipfile": False', setup)
+        self.assertNotIn('"zipfile": False', setup)
         self.assertIn('"packages": ["webview"]', setup)
         bootstrap = read("setup.sh")
         self.assertIn("pywebview>=5.4", bootstrap)

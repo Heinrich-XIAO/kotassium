@@ -21,10 +21,8 @@ DATA_FILES = [
 ]
 OPTIONS = {
     "argv_emulation": False,
-    # Keep pywebview's bridge JS files outside site-packages.zip. Versions
-    # >=5.4 also contain the py2app resource-path fix.
+    # pywebview >=5.4 includes the py2app bridge-resource fix.
     "packages": ["webview"],
-    "zipfile": False,
     "includes": ["serve_web", "spotify_get", "notify", "updater", "titlebar_macos"],
     "iconfile": ICON,
     # Linux-only modules: don't try to bundle PyGObject / MPRIS on macOS.
