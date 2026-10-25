@@ -183,6 +183,8 @@ class WrapperTests(unittest.TestCase):
 
     def test_macos_release_builds_pkgs_with_running_app_confirmation(self):
         builder = read("make-pkg.sh")
+        self.assertTrue(os.stat(os.path.join(ROOT, "make-pkg.sh")).st_mode & 0o111,
+                        "CI invokes make-pkg.sh directly; it must be executable")
         script = read("macos-pkg-scripts/preinstall")
         self.assertIn("pkgbuild", builder)
         self.assertIn("--scripts macos-pkg-scripts", builder)
@@ -209,6 +211,7 @@ class WrapperTests(unittest.TestCase):
         for workflow in (auto_release, tag_release):
             self.assertIn("publish-macos-legacy-dmg:", workflow)
             self.assertIn("arm64.dmg", workflow)
+            self.assertIn('filename: Kotassium-${{ needs.version.outputs.version }}-arm64.pkg', workflow)
         self.assertIn(".pkg", read(".github/release-body.md"))
 
     def test_platform_builds_ship_the_compiled_page_bundle(self):
