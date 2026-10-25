@@ -87,6 +87,7 @@ function TooltipLayer() {
 }
 
 function App() {
+  useEffect(() => { window.__kotReactReady?.(); }, []);
   const audioRef = useRef(null);
   const cacheRef = useRef(null);
   if (!cacheRef.current) {
@@ -1035,11 +1036,28 @@ function App() {
 function QueueRow({ track, active = false, onClick }) { return <div className={`dfsQrow ${active ? 'cur' : ''}`} onClick={onClick}><span className="dfsQcov" style={{ background: track?.cover ? escStyle(track.cover) : gradient(track?.t) }}/><span className="dfsQt"><b>{track?.t}</b><small>{track?.a}</small></span></div>; }
 
 class AppBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { failed: false }; }
+  constructor(props) { super(props); this.state = { failed: false, rollbackError: '' }; }
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch() { window.__kotShowRecovery?.(); }
+  componentDidCatch() { this.showRecovery(); }
+  componentDidUpdate() { if (this.state.failed) this.showRecovery(); }
+  showRecovery() {
+    const panel = document.getElementById('recovery');
+    if (panel) panel.classList.add('visible');
+    window.__kotShowRecovery?.();
+  }
+  rollback = async () => {
+    this.setState({ rollbackError: '' });
+    try {
+      const response = await fetch('/api/update/rollback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const result = await response.json();
+      if (result.error) this.setState({ rollbackError: result.error });
+      else this.setState({ rollbackError: 'Kotassium is closing and restoring the previous version…' });
+    } catch {
+      this.setState({ rollbackError: 'Could not start recovery. Close and reopen the app, then try again.' });
+    }
+  };
   render() {
-    if (this.state.failed) return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#090909', color: '#fff', fontFamily: 'system-ui,sans-serif', textAlign: 'center' }}><div><h1 style={{ fontSize: 22 }}>Kotassium couldn’t start</h1><p style={{ color: '#aaa' }}>The player hit a problem. Restore the previous app version using the recovery panel.</p><button onClick={() => location.reload()} style={{ marginTop: 12, padding: '10px 18px', borderRadius: 24, background: '#1ed760', color: '#07140a', fontWeight: 700 }}>Reload player</button></div></main>;
+    if (this.state.failed) return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#090909', color: '#fff', fontFamily: 'system-ui,sans-serif', textAlign: 'center' }}><div><h1 style={{ fontSize: 22 }}>Kotassium couldn’t start</h1><p style={{ color: '#aaa' }}>The player hit a problem. Reload it, or restore the previous app version if available.</p>{window.__kotRollbackAvailable && <button onClick={this.rollback} style={{ margin: '12px 8px 0', padding: '10px 18px', borderRadius: 24, background: '#1ed760', color: '#07140a', fontWeight: 700 }}>Restore previous version</button>}<button onClick={() => location.reload()} style={{ margin: '12px 8px 0', padding: '10px 18px', borderRadius: 24, background: '#292929', color: '#fff', fontWeight: 700 }}>Reload player</button>{this.state.rollbackError && <p role="status" style={{ color: '#aaa' }}>{this.state.rollbackError}</p>}</div></main>;
     return this.props.children;
   }
 }
@@ -1047,7 +1065,6 @@ class AppBoundary extends React.Component {
 // Touch + pointer gestures work on Android WebView and desktop browsers.
 function bootstrap() {
   createRoot(document.getElementById('root')).render(<AppBoundary><><App/><TooltipLayer/></></AppBoundary>);
-  requestAnimationFrame(() => requestAnimationFrame(() => window.__kotReactReady?.()));
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === '127.0.0.1' || location.hostname === 'localhost')) navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 

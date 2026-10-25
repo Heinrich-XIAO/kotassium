@@ -71,12 +71,16 @@ class WrapperTests(unittest.TestCase):
         self.assertIn('id="recovery"', server)
         self.assertIn("setTimeout(function(){if(!ready)show()},5000)", server)
         self.assertIn("window.__kotReactReady", server)
+        self.assertIn("window.__kotRollbackAvailable", server)
         self.assertIn("/api/update/rollback", server)
         self.assertIn("updater.rollback_available()", server)
         app = read("web/app.jsx")
         self.assertIn("window.__kotShowRecovery?.()", app)
+        self.assertIn("panel.classList.add('visible')", app)
+        self.assertIn("window.__kotRollbackAvailable &&", app)
         self.assertIn("class AppBoundary extends React.Component", app)
         self.assertIn("window.__kotReactReady?.()", app)
+        self.assertIn("useEffect(() => { window.__kotReactReady?.(); }, [])", app)
 
     def test_http_serves_recovery_outside_the_react_mount(self):
         import serve_web
@@ -95,6 +99,7 @@ class WrapperTests(unittest.TestCase):
             self.assertIn("Restore previous version</button>", page)
             self.assertIn(" disabled>", page)
             self.assertIn("setTimeout(function(){if(!ready)show()},5000)", page)
+            self.assertIn("window.__kotRollbackAvailable=false", page)
         finally:
             server.shutdown()
             server.server_close()
