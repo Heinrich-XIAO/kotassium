@@ -287,11 +287,11 @@ def job_start_ytdl(vid):
 
 _now_lock = threading.Lock()
 _now = {"t": "", "a": "", "album": "", "cover": "", "ms": 0, "pos": 0,
-        "state": "stopped", "ts": 0}
+        "state": "stopped", "notify_track_changes": True, "ts": 0}
 
 def set_now(d):
     with _now_lock:
-        for k in ("t", "a", "album", "cover", "ms", "pos", "state"):
+        for k in ("t", "a", "album", "cover", "ms", "pos", "state", "notify_track_changes"):
             if k in d:
                 _now[k] = d[k]
         _now["ts"] = int(time.time())
@@ -1139,7 +1139,8 @@ def handle_post(path, params, raw, hdr):
         return 200, "application/json", b'{"ok":true}', None, False
     if path == "/api/nowplaying":
         try:
-            set_now(json.loads(raw.decode("utf-8", "replace") or "{}"))
+            payload = json.loads(raw.decode("utf-8", "replace") or "{}")
+            set_now(payload)
         except Exception:
             pass
         return 200, "application/json", b'{"ok":true}', None, False

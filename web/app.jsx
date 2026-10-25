@@ -136,6 +136,7 @@ function App() {
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [playingPlaylist, setPlayingPlaylist] = useState('');
   const [radio, setRadio] = useState(false);
+  const [notifyTrackChanges, setNotifyTrackChanges] = useState(() => { try { return localStorage.getItem('kot_notify_track_changes') !== '0'; } catch { return true; } });
   const [shuffle, setShuffle] = useState(() => { try { return localStorage.getItem('kot_shuf') === '1'; } catch { return false; } });
   const [repeat, setRepeat] = useState(() => { try { const value = localStorage.getItem('kot_repeat'); return value === null ? 1 : Number(value); } catch { return 1; } });
   const [shuffleOrder, setShuffleOrder] = useState([]);
@@ -791,13 +792,13 @@ function App() {
     const now = Date.now();
     if (key !== lastNowPlaying.current.key || now - lastNowPlaying.current.at >= 2500 || duration !== lastNowPlaying.current.duration) {
       lastNowPlaying.current = { key, at: now, duration };
-      const payload = { t: currentTrack.t || '', a: currentTrack.a || '', album: currentTrack.album || '', cover: currentTrack.cover || '', ms: Math.round(duration * 1000) || currentTrack.ms || 0, pos: Math.round(currentTime * 1000), state };
+      const payload = { t: currentTrack.t || '', a: currentTrack.a || '', album: currentTrack.album || '', cover: currentTrack.cover || '', ms: Math.round(duration * 1000) || currentTrack.ms || 0, pos: Math.round(currentTime * 1000), state, notify_track_changes: notifyTrackChanges };
       postJSON('/api/nowplaying', payload).catch(() => {});
     }
     if ('mediaSession' in navigator && typeof MediaMetadata !== 'undefined') {
       try { navigator.mediaSession.metadata = new MediaMetadata({ title: currentTrack.t || '?', artist: currentTrack.a || '', album: currentTrack.album || '' }); } catch {}
     }
-  }, [currentTrack, currentTime, duration, paused]);
+  }, [currentTrack, currentTime, duration, paused, notifyTrackChanges]);
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     try {
@@ -1093,6 +1094,7 @@ function App() {
               <div className="setting-row"><div className="setting-copy"><b>Output level</b></div><div className="setting-volume"><input aria-label="Output level" type="range" min="0" max="100" value={Math.round((muted ? 0 : Math.sqrt(volume)) * 100)} style={{ '--range-progress': `${(muted ? 0 : Math.sqrt(volume)) * 100}%` }} onChange={(event) => setVolumePercent(event.target.value)}/><span>{Math.round((muted ? 0 : Math.sqrt(volume)) * 100)}%</span></div></div>
               <div className="setting-row"><div className="setting-copy"><b>Shuffle</b><small>Start playlists in a random order</small></div><button className={`setting-switch ${shuffle ? 'enabled' : ''}`} role="switch" aria-checked={shuffle} aria-label="Shuffle playback" onClick={toggleShuffle}><i/></button></div>
               <div className="setting-row"><div className="setting-copy"><b>Repeat</b><small>What happens at the end of a queue</small></div><div className="setting-seg" role="radiogroup" aria-label="Repeat mode">{[['Off', 0], ['Queue', 1], ['One', 2]].map(([label, value]) => <button key={value} type="button" role="radio" aria-checked={repeat === value} className={repeat === value ? 'on' : ''} onClick={() => { setRepeat(value); try { localStorage.setItem('kot_repeat', String(value)); } catch {} }}>{label}</button>)}</div></div>
+              <div className="setting-row"><div className="setting-copy"><b>Track change notifications</b><small>Show a desktop notification when a new song starts</small></div><button className={`setting-switch ${notifyTrackChanges ? 'enabled' : ''}`} role="switch" aria-checked={notifyTrackChanges} aria-label="Track change notifications" onClick={() => setNotifyTrackChanges((value) => { const next = !value; try { localStorage.setItem('kot_notify_track_changes', next ? '1' : '0'); } catch {} return next; })}><i/></button></div>
             </div>
           </section>
           <section className="settings-group">
