@@ -7,9 +7,18 @@ const trackKey = (t) => `${t?.t || ''}|${t?.a || ''}`;
 const fmt = (ms) => { const n = Math.round((Number(ms) || 0) / 1000); return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`; };
 const secs = (s) => `${Math.floor((Number(s) || 0) / 60)}:${String(Math.round(s || 0) % 60).padStart(2, '0')}`;
 const hue = (name) => { let h = 0; for (const c of String(name || '?')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 360; };
+const shuffledExcept = (length, excluded) => {
+  const order = Array.from({ length }, (_, index) => index).filter((index) => index !== excluded);
+  for (let index = order.length - 1; index > 0; index--) {
+    const other = Math.floor(Math.random() * (index + 1));
+    [order[index], order[other]] = [order[other], order[index]];
+  }
+  return order;
+};
 const gradient = (name) => { const h = hue(name); return `linear-gradient(135deg,hsl(${h},70%,38%),hsl(${(h + 40) % 360},60%,20%))`; };
 const escStyle = (url) => `url("${String(url || '').replace(/["'<>)]/g, (c) => encodeURIComponent(c))}") center/cover no-repeat`;
 function Icon({ name, size = 20, children }) {
+  const viewBox = ['add', 'play', 'pause', 'prev', 'next'].includes(name) ? '0 0 16 16' : '0 0 24 24';
   const p = {
     library: <><path d="M3 3h2.5v18H3zM7 3h2.5v18H7zM11 3.6L21.6 5v14L11 20.4z" fill="currentColor" stroke="none" /></>,
     home: <path d="M12 3l9 8h-2.5v9h-5v-6h-3v6h-5v-9H3z" fill="currentColor" stroke="none" />,
@@ -17,17 +26,18 @@ function Icon({ name, size = 20, children }) {
     close: <><path d="m5 5 14 14M19 5 5 19"/></>,
     browse: <path d="M3 4.5h13v2H3zM3 8.25h13v2H3zM3 12h18v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z" fill="currentColor" stroke="none" />,
     add: <path d="M8 1.5a.75.75 0 0 1 1.5 0v5h5a.75.75 0 0 1 0 1.5h-5v5a.75.75 0 0 1-1.5 0V8H3a.75.75 0 0 1 0-1.5h5v-5z" fill="currentColor" stroke="none" />,
-    play: <path d="M4 2.5 14 8 4 13.5z" fill="currentColor" stroke="none" />,
-    pause: <path d="M5 3h2.5v10H5zM10 3h2.5v10H10z" fill="currentColor" stroke="none" />,
-    prev: <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7z" fill="currentColor" stroke="none" />,
-    next: <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7z" fill="currentColor" stroke="none" />,
+    play: <path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(0.6 0)" fill="currentColor" stroke="none" />,
+    pause: <path d="M4.8 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z" transform="translate(0 -1)" fill="currentColor" stroke="none" />,
+    prev: <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z" fill="currentColor" stroke="none" />,
+    next: <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z" fill="currentColor" stroke="none" />,
     shuffle: <><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>,
     repeat: <><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></>,
     volume: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
     fullscreen: <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>,
+    exitFullscreen: <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.8 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.8-1l-1.7.7-1.4-2.4L7.1 15a8 8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.8-1l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.8 1l1.7-.7 1.4 2.4-1.4 1.1a8 8 0 0 1 0 2Z" transform="translate(-1 -2) scale(1.08)"/></>
   };
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children || p[name]}</svg>;
+  return <svg width={size} height={size} viewBox={viewBox} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children || p[name]}</svg>;
 }
 
 function App() {
@@ -55,7 +65,6 @@ function App() {
   const [playingPlaylist, setPlayingPlaylist] = useState('');
   const [radio, setRadio] = useState(false);
   const [collapsedPlayer, setCollapsedPlayer] = useState(false);
-  const [volumeBeforeMute, setVolumeBeforeMute] = useState(1);
   const [shuffle, setShuffle] = useState(() => { try { return localStorage.getItem('kot_shuf') === '1'; } catch { return false; } });
   const [repeat, setRepeat] = useState(() => { try { const value = localStorage.getItem('kot_repeat'); return value === null ? 1 : Number(value); } catch { return 1; } });
   const [shuffleOrder, setShuffleOrder] = useState([]);
@@ -73,7 +82,9 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [toastText, setToastText] = useState('');
   const [upNext, setUpNext] = useState(false);
+  const upNextGone = useRef(false);
   const [toastDismissed, setToastDismissed] = useState(false);
+  const [upNextDismissed, setUpNextDismissed] = useState(false);
   const [download, setDownload] = useState(null);
   const [mobilePlayer, setMobilePlayer] = useState(false);
   const [desktopPlayer, setDesktopPlayer] = useState(false);
@@ -85,6 +96,9 @@ function App() {
   const toastTimer = useRef(0);
   const toastGesture = useRef({ active: false, startX: 0, startY: 0, deltaX: 0, dismissed: false, previousOpacity: '' });
   const dragStart = useRef(null);
+  const mobileGesture = useRef({ startX: 0, startY: 0, target: null, queueScrollTop: 0, moved: false, openedBySwipe: false, closeTimer: 0 });
+  const suppressTapUntil = useRef(0);
+  const lastUpNextTrack = useRef('');
   const currentTrack = currentIndex >= 0 ? queue[currentIndex] : null;
   const duration = actualDuration || (currentTrack?.ms ? currentTrack.ms / 1000 : 0);
 
@@ -95,24 +109,31 @@ function App() {
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastText(''), 3000);
   }, []);
-  const toastTouchStart = (event) => {
-    const touch = event.touches[0];
-    toastGesture.current = { ...toastGesture.current, active: true, startX: touch.clientX, startY: touch.clientY, deltaX: 0, previousOpacity: '1' };
-    clearTimeout(toastTimer.current);
+  const toastPointerStart = (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const node = event.currentTarget;
+    toastGesture.current = { ...toastGesture.current, active: true, startX: event.clientX, startY: event.clientY, deltaX: 0, dismissed: false, previousOpacity: node.style.opacity || '' };
+    node._drag = true;
+    try { node.setPointerCapture(event.pointerId); } catch {}
+    if (node.id === 'toast') clearTimeout(toastTimer.current);
   };
-  const toastTouchMove = (event) => {
+  const toastPointerMove = (event) => {
     const gesture = toastGesture.current;
     if (!gesture.active) return;
-    const touch = event.touches[0];
-    const dx = touch.clientX - gesture.startX, dy = touch.clientY - gesture.startY;
-    if (dx <= 0 || Math.abs(dx) <= Math.abs(dy)) return;
+    const dx = event.clientX - gesture.startX, dy = event.clientY - gesture.startY;
+    if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+    if (dx <= 0 || Math.abs(dx) <= Math.abs(dy)) {
+      gesture.active = false; event.currentTarget._drag = false;
+      if (event.currentTarget.id === 'toast') toastTimer.current = setTimeout(() => setToastText(''), 3000);
+      return;
+    }
     event.preventDefault();
     gesture.deltaX = dx;
     event.currentTarget.style.transition = 'none';
     event.currentTarget.style.transform = `translateX(${dx}px)`;
     event.currentTarget.style.opacity = String(Math.max(0, 1 - dx / 140));
   };
-  const toastTouchEnd = (event) => {
+  const toastPointerEnd = (event) => {
     const gesture = toastGesture.current;
     if (!gesture.active) return;
     gesture.active = false;
@@ -122,17 +143,23 @@ function App() {
       gesture.dismissed = true;
       node.style.transform = 'translateX(150%)';
       node.style.opacity = '0';
-      setTimeout(() => { node.style.transform = ''; node.style.transition = ''; setToastDismissed(true); }, 250);
+      setTimeout(() => {
+        node.style.transform = ''; node.style.transition = ''; node._drag = false;
+        if (node.id === 'upnext') { upNextGone.current = true; setUpNext(false); }
+        else { setToastDismissed(true); setToastText(''); }
+      }, 250);
     } else {
-      node.style.transform = '';
-      node.style.opacity = gesture.previousOpacity;
-      toastTimer.current = setTimeout(() => setToastText(''), 3000);
+      node.style.transform = ''; node.style.opacity = gesture.previousOpacity; node._drag = false;
+      if (node.id === 'toast') toastTimer.current = setTimeout(() => setToastText(''), 3000);
     }
   };
   const resolveCover = useCallback((url) => {
     if (!url) return '';
-    return coverMap[url] ? escStyle(`/cover/${coverMap[url]}`) : escStyle(url);
-  }, [coverMap]);
+    const key = coverMap[url];
+    if (key) return escStyle(`/cover/${key}`);
+    warmCover(url);
+    return escStyle(url);
+  }, [coverMap, warmCover]);
   const warmCover = useCallback((url) => {
     if (!url || url.startsWith('/cover/') || coverCacheRef.current[url]) return;
     coverCacheRef.current[url] = 'pending';
@@ -144,6 +171,7 @@ function App() {
 
   const loadLinks = useCallback(() => API('/api/links').then((j) => { const rows = j.links || []; setLinks(rows); return rows; }), []);
   const startQueueRef = useRef(null);
+  const shuffleRef = useRef(false);
   const loadPlaylist = useCallback(async (i, play = false, suppliedLinks = links) => {
     const item = suppliedLinks[i];
     if (!item) return;
@@ -179,10 +207,7 @@ function App() {
   const chooseNext = useCallback((q = queue, index = currentIndex, shuf = shuffle, order = shuffleOrder, pos = shufflePos) => {
     if (index < 0 || !q.length) return -1;
     if (repeat === 2) return index;
-    if (shuf && q.length > 1) {
-      if (pos < order.length) return order[pos];
-      return -1;
-    }
+    if (shuf && q.length > 1) return pos < order.length ? order[pos] : -1;
     if (index + 1 < q.length) return index + 1;
     return repeat === 1 ? 0 : -1;
   }, [queue, currentIndex, shuffle, shuffleOrder, shufflePos, repeat]);
@@ -259,6 +284,8 @@ function App() {
 
   const playTrack = useCallback(async (track) => {
     if (!track) return;
+    upNextGone.current = false;
+    setUpNextDismissed(false);
     const epoch = ++playbackEpoch.current;
     setCurrentTime(0); setActualDuration(0); setPaused(true);
     const audio = audioRef.current;
@@ -294,16 +321,22 @@ function App() {
   const startQueue = useCallback((tracks, name = '', index = 0) => {
     if (!tracks?.length || index < 0) return;
     const nextQueue = tracks.slice();
-    const order = shuffle ? nextQueue.map((_, i) => i).filter((i) => i !== index).sort(() => Math.random() - 0.5) : [];
+    shuffleRef.current = shuffle;
+    const order = shuffle ? shuffledExcept(nextQueue.length, index) : [];
     setQueue(nextQueue); setPlayingPlaylist(name); setCurrentIndex(index); setShuffleOrder(order); setShufflePos(0);
     playTrack(nextQueue[index]);
   }, [shuffle, playTrack]);
   startQueueRef.current = startQueue;
 
-  const playIndex = useCallback((i, sourceQueue = queue, name = playingPlaylist, advanceShuffle = false) => {
+  const playIndex = useCallback((i, sourceQueue = queue, name = playingPlaylist, advanceShuffle = false, shufflePass = null) => {
     if (!sourceQueue[i]) return;
-    const order = shuffle ? sourceQueue.map((_, n) => n).filter((n) => n !== i).sort(() => Math.random() - 0.5) : [];
-    setQueue(sourceQueue); setPlayingPlaylist(name); setCurrentIndex(i); setShuffleOrder(advanceShuffle ? shuffleOrder : order); setShufflePos(advanceShuffle ? shufflePos + 1 : 0);
+    upNextGone.current = false;
+    setUpNextDismissed(false);
+    const order = shuffle ? shuffledExcept(sourceQueue.length, i) : [];
+    shuffleRef.current = shuffle;
+    const nextOrder = shufflePass || (advanceShuffle ? shuffleOrder : order);
+    const nextPos = shufflePass ? 1 : advanceShuffle ? shufflePos + 1 : 0;
+    setQueue(sourceQueue); setPlayingPlaylist(name); setCurrentIndex(i); setShuffleOrder(nextOrder); setShufflePos(nextPos);
     playTrack(sourceQueue[i]);
   }, [queue, playingPlaylist, shuffle, shuffleOrder, shufflePos, playTrack]);
 
@@ -312,19 +345,23 @@ function App() {
     const link = links.find((item) => item.name === view.name);
     const key = link?.url || link?.name || '';
     const warmup = key && warmedPlaylists.current.get(key);
-    const full = warmup ? await warmup : null;
-    const choiceIndex = full?.choice ? playlist.findIndex((track) => trackKey(track) === trackKey(full.choice)) : -1;
-    if (key && choiceIndex >= 0) {
-      const warmed = prefetchJobsRef.current.get(trackKey(full.choice));
-      if (warmed && await warmed === false) prefetchJobsRef.current.delete(trackKey(full.choice));
+    if (warmup) {
+      const full = await warmup;
+      if (full?.choice) {
+        const choiceIndex = playlist.findIndex((track) => trackKey(track) === trackKey(full.choice));
+        if (choiceIndex >= 0) { startQueue(playlist, view.name || '', choiceIndex); return; }
+      }
     }
-    const index = choiceIndex >= 0 ? choiceIndex : (shuffle ? Math.floor(Math.random() * playlist.length) : 0);
+    const index = shuffle ? Math.floor(Math.random() * playlist.length) : 0;
     startQueue(playlist, view.name || '', index);
   }, [playlist, view, shuffle, startQueue, links]);
 
+  const radioLoadingRef = useRef(false);
   const fetchRadio = useCallback(async () => {
+    if (radioLoadingRef.current) return;
     const seed = queue[currentIndex];
     if (!seed) return;
+    radioLoadingRef.current = true;
     try {
       const endpoint = `/api/recommend${seed.source === 'youtube' && seed.id ? `?seed=${encodeURIComponent(seed.id)}` : `?artist=${encodeURIComponent(seed.a || seed.t || '')}`}`;
       const response = await API(endpoint);
@@ -333,24 +370,29 @@ function App() {
       const fresh = additions.filter((track) => !seen.has(trackKey(track)) && seen.add(trackKey(track)));
       if (fresh.length) {
         toast(`radio: +${fresh.length} tracks`);
-      const first = queue.length;
-      const extendedQueue = [...queue, ...fresh];
-      setQueue(extendedQueue); setRadio(false); setCurrentIndex(first);
+        const first = queue.length;
+        const extendedQueue = [...queue, ...fresh];
+        setQueue(extendedQueue); setCurrentIndex(first);
         setPlayingPlaylist(playingPlaylist);
         playTrack(fresh[0]);
       } else setRadio(false);
-    } catch { toast('radio failed'); setRadio(false); }
-  }, [queue, currentIndex, toast, playingPlaylist, shuffle, playTrack]);
+    } catch { toast('radio failed'); }
+    finally { radioLoadingRef.current = false; }
+  }, [queue, currentIndex, toast, playingPlaylist, playTrack]);
   const next = useCallback(() => {
     if (!queue.length) return;
-    let n = chooseNext();
-    if (shuffle && repeat !== 2 && shufflePos < shuffleOrder.length) {
-      playIndex(n, queue, playingPlaylist, true);
-      return;
+    if (repeat === 2) { playIndex(currentIndex); return; }
+    if (shuffle && queue.length > 1 && shufflePos >= shuffleOrder.length) {
+      const order = shuffledExcept(queue.length, currentIndex);
+      if (order.length) {
+        playIndex(order[0], queue, playingPlaylist, false, order);
+        return;
+      }
     }
-    if (n >= 0 && (n !== currentIndex || !radio || repeat === 2)) { playIndex(n); return; }
-    if (radio) fetchRadio();
-  }, [queue, chooseNext, shuffle, repeat, shufflePos, shuffleOrder, playingPlaylist, playIndex, currentIndex, radio, fetchRadio]);
+    const n = chooseNext();
+    if (n >= 0) playIndex(n, queue, playingPlaylist, shuffle && queue.length > 1);
+    else if (radio) fetchRadio();
+  }, [queue, chooseNext, repeat, playingPlaylist, playIndex, currentIndex, shuffle, shufflePos, shuffleOrder, radio, fetchRadio]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -365,35 +407,34 @@ function App() {
     setShuffle(nextShuffle);
     try { localStorage.setItem('kot_shuf', nextShuffle ? '1' : '0'); } catch {}
     if (nextShuffle && currentIndex >= 0) {
-      setShuffleOrder(queue.map((_, i) => i).filter((i) => i !== currentIndex).sort(() => Math.random() - 0.5)); setShufflePos(0);
+      setShuffleOrder(shuffledExcept(queue.length, currentIndex)); setShufflePos(0);
     } else { setShuffleOrder([]); setShufflePos(0); }
+    shuffleRef.current = nextShuffle;
+    if (audioRef.current?.src && !audioRef.current.paused) {
+      const next = nextShuffle ? shuffledExcept(queue.length, currentIndex)[0] : currentIndex + 1;
+      if (next >= 0 && queue[next]) prefetchTrackRef.current?.(queue[next]);
+    }
   }, [shuffle, queue, currentIndex]);
-  const toggleRepeat = useCallback(() => setRepeat((r) => { const v = (r + 1) % 3; try { localStorage.setItem('kot_repeat', String(v)); } catch {} return v; }), []);
+  const toggleRepeat = useCallback(() => setRepeat((r) => { const v = (r + 1) % 3; try { localStorage.setItem('kot_repeat', String(v)); } catch {} toast(`repeat ${v === 0 ? 'off' : v === 1 ? 'all' : 'one'}`); return v; }), [toast]);
   const toggleRadio = useCallback(() => setRadio((value) => !value), []);
   const previous = useCallback(() => {
-    if (currentTime > 3) { if (audioRef.current) audioRef.current.currentTime = 0; return; }
     if (currentIndex > 0) playIndex(currentIndex - 1);
-    else if (repeat === 1 && queue.length > 1) playIndex(queue.length - 1);
-  }, [currentTime, currentIndex, repeat, queue.length, playIndex]);
+  }, [currentIndex, playIndex]);
   const setVolumePercent = useCallback((percent) => {
     const value = Math.max(0, Math.min(1, Number(percent) / 100));
-    setVolume(value * value); setVolumeBeforeMute(value * value); setMuted(false);
+    setVolume(value * value); setMuted(false);
     try { localStorage.setItem('kot_vol', String(value)); } catch {}
   }, []);
   const toggleVolume = useCallback(() => setMuted((wasMuted) => {
-    if (!wasMuted) {
-      setVolumeBeforeMute(volume);
-      if (volume === 0) setVolume(1);
-      return true;
-    }
-    if (volume === 0) setVolume(volumeBeforeMute || 1);
-    return false;
-  }), [volume, volumeBeforeMute]);
+    const nextMuted = !wasMuted;
+    if (audioRef.current) audioRef.current.muted = nextMuted;
+    return nextMuted;
+  }), []);
   const setVolumeAt = useCallback((element, event) => {
     const rect = element.getBoundingClientRect();
     const clientX = event.clientX;
     const value = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    setVolume(value * value); setVolumeBeforeMute(value * value); setMuted(false);
+    setVolume(value * value); setMuted(false);
     try { localStorage.setItem('kot_vol', String(value)); } catch {}
   }, []);
   const seekAt = useCallback((element, event) => {
@@ -430,16 +471,22 @@ function App() {
   const nextIndex = chooseNext();
   const nextTrack = nextIndex >= 0 && nextIndex !== currentIndex ? queue[nextIndex] : null;
   const displayNextTrack = nextTrack || (radio && currentIndex >= 0 ? queue[currentIndex] : null);
+  const radioSearching = radio && !nextTrack;
   useEffect(() => { if (nextTrack) prefetchTrack(nextTrack); }, [nextTrack, prefetchTrack]);
   useEffect(() => {
-    if (shuffle && repeat === 1 && queue.length > 1 && currentIndex >= 0 && shufflePos >= shuffleOrder.length) {
-      setShuffleOrder(queue.map((_, i) => i).filter((i) => i !== currentIndex).sort(() => Math.random() - 0.5));
-      setShufflePos(0);
+    const key = trackKey(currentTrack);
+    if (key !== lastUpNextTrack.current) {
+      lastUpNextTrack.current = key;
+      upNextGone.current = false;
+      setUpNextDismissed(false);
     }
-  }, [shuffle, repeat, queue, currentIndex, shufflePos, shuffleOrder.length]);
-  useEffect(() => {
-    setUpNext(!!(duration && currentTime > 0 && duration - currentTime <= 30 && nextTrack));
-  }, [duration, currentTime, nextTrack]);
+    const shouldShow = !!(actualDuration && currentTime > 0 && actualDuration - currentTime <= 30 && (nextTrack || radio));
+    if (!shouldShow) {
+      setUpNextDismissed(false); upNextGone.current = false; setUpNext(false);
+    } else if (!upNextGone.current) {
+      setUpNext(true);
+    }
+  }, [actualDuration, currentTime, nextTrack, currentTrack, radio]);
 
   useEffect(() => {
     let alive = true;
@@ -456,7 +503,7 @@ function App() {
   }, [loadLinks]);
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = muted ? 0 : volume;
+    if (audioRef.current) { audioRef.current.volume = volume; audioRef.current.muted = muted; }
   }, [volume, muted]);
 
   useEffect(() => {
@@ -466,9 +513,10 @@ function App() {
       const warmup = API(`/api/links/get?url=${encodeURIComponent(link.url || '')}`).then((full) => {
         const tracks = (full?.tracks || []).filter((t) => t?.t);
         if (!tracks.length) return null;
-        const choice = shuffle ? tracks[Math.floor(Math.random() * tracks.length)] : tracks[0];
-        const result = { ...full, tracks, choice };
-        warmedPlaylists.current.set(key, Promise.resolve(result));
+        const choiceIndex = shuffle ? Math.floor(Math.random() * tracks.length) : 0;
+        const choice = tracks[choiceIndex];
+        const result = { ...full, tracks, choice, choiceIndex };
+        warmedPlaylists.current.set(key, result);
         prefetchTrackRef.current?.(choice);
         return result;
       }).catch(() => null);
@@ -491,11 +539,19 @@ function App() {
     let timer = 0;
     const wake = () => { setDesktopIdle(false); clearTimeout(timer); timer = setTimeout(() => setDesktopIdle(true), 10000); };
     const blur = () => { clearTimeout(timer); setDesktopIdle(true); };
-    wake(); window.addEventListener('mousemove', wake); window.addEventListener('keydown', wake);
-    window.addEventListener('pointerdown', wake); window.addEventListener('blur', blur);
+    const resize = () => { if (window.innerWidth <= 820) setDesktopPlayer(false); };
+    const visibility = () => { if (document.hidden) blur(); };
     const escape = (event) => { if (event.key === 'Escape') setDesktopPlayer(false); };
-    window.addEventListener('keydown', escape);
-    return () => { clearTimeout(timer); window.removeEventListener('mousemove', wake); window.removeEventListener('keydown', wake); window.removeEventListener('pointerdown', wake); window.removeEventListener('blur', blur); window.removeEventListener('keydown', escape); };
+    wake();
+    for (const event of ['mousemove', 'keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart']) window.addEventListener(event, wake, { passive: true });
+    window.addEventListener('blur', blur); window.addEventListener('resize', resize); window.addEventListener('keydown', escape);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      clearTimeout(timer);
+      for (const event of ['mousemove', 'keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart']) window.removeEventListener(event, wake);
+      window.removeEventListener('blur', blur); window.removeEventListener('resize', resize); window.removeEventListener('keydown', escape);
+      document.removeEventListener('visibilitychange', visibility);
+    };
   }, [desktopPlayer]);
 
   useEffect(() => {
@@ -548,12 +604,16 @@ function App() {
       setActualDuration(actual);
       setQueue((q) => q.map((t, i) => i === currentIndex ? { ...t, ms: Math.round(actual * 1000) } : t));
     };
-    const onEnded = () => { if (repeat === 2) { audio.currentTime = 0; audio.play(); } else next(); };
+    const onEnded = () => {
+      if (repeat === 2) { audio.currentTime = 0; audio.play(); return; }
+      if (radio && currentIndex === queue.length - 1 && repeat !== 1) { fetchRadio(); return; }
+      next();
+    };
     const onError = () => { if (audio.currentSrc) toast('Audio source could not be played'); };
     audio.addEventListener('timeupdate', onTime); audio.addEventListener('play', onPlay); audio.addEventListener('pause', onPause);
     audio.addEventListener('loadedmetadata', onMeta); audio.addEventListener('ended', onEnded); audio.addEventListener('error', onError);
     return () => { audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('play', onPlay); audio.removeEventListener('pause', onPause); audio.removeEventListener('loadedmetadata', onMeta); audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError); };
-  }, [queue, currentIndex, repeat, next, playTrack, startResolvedTrack]);
+  }, [queue, currentIndex, repeat, next, playTrack, startResolvedTrack, radio, fetchRadio, shufflePos, shuffleOrder]);
 
   useEffect(() => {
     if (!currentTrack) return;
@@ -576,12 +636,22 @@ function App() {
       navigator.mediaSession.setActionHandler('nexttrack', () => next()); navigator.mediaSession.setActionHandler('previoustrack', () => previous());
     } catch {}
   }, [togglePlay, next, previous]);
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.code === 'Space' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) {
+        event.preventDefault(); togglePlay();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [togglePlay]);
 
   const search = useCallback(async () => {
     const q = query.trim(); if (!q) return;
-    setView({ type: 'search', query: q }); setResults([]);
-    try { const j = await API(`/api/search?q=${encodeURIComponent(q)}`); setResults((j.results || []).map((t) => ({ t: t.title, a: t.artist, source: t.source, id: t.id, preview: t.preview, ms: (t.dur || 0) * 1000, cover: t.cover || '', album: '' }))); }
+    setView({ type: 'search', query: q }); setResults([]); setSearching(true);
+    try { const j = await API(`/api/search?q=${encodeURIComponent(q)}`); setResults((j.results || []).map((t) => ({ t: t.title, a: t.artist, source: t.source, id: t.id, preview: t.preview, full: t.full, ms: (t.dur || 0) * 1000, cover: t.cover || '', album: '' }))); }
     catch { toast('Search failed'); }
+    finally { setSearching(false); }
   }, [query, toast]);
 
   const addLink = useCallback(async () => {
@@ -603,11 +673,131 @@ function App() {
 
   const goHome = useCallback(() => { setQuery(''); setView({ type: 'home' }); }, []);
   const togglePlayerBar = useCallback(() => setCollapsedPlayer((value) => !value), []);
+  useEffect(() => {
+    if (linkOpen) document.getElementById('plink')?.focus();
+  }, [linkOpen]);
+
   const toggleSide = useCallback(() => {
-    if (window.matchMedia('(max-width:820px)').matches) setDrawerOpen((x) => !x);
-    else setCollapsed((x) => { const v = !x; try { localStorage.setItem('kot_side_collapsed', v ? '1' : '0'); } catch {} return v; });
+    if (window.matchMedia('(max-width:820px)').matches) {
+      const side = document.getElementById('side');
+      if (side) { side.style.transition = ''; side.style.transform = ''; }
+      setCollapsed(false);
+      setDrawerOpen((x) => !x);
+    } else setCollapsed((x) => { const v = !x; try { localStorage.setItem('kot_side_collapsed', v ? '1' : '0'); } catch {} return v; });
   }, []);
-  const toggleDesktop = useCallback(() => { setDesktopPlayer((v) => !v); setDesktopIdle(false); }, []);
+  const mobileOpen = useCallback(() => {
+    if (!window.matchMedia('(max-width:820px)').matches) return;
+    const fs = document.getElementById('fs');
+    if (!fs) return;
+    if (mobileGesture.current.closeTimer) {
+      clearTimeout(mobileGesture.current.closeTimer);
+      mobileGesture.current.closeTimer = 0;
+      fs.style.transition = 'transform .3s cubic-bezier(.2,.8,.2,1)';
+      fs.style.transform = 'translateY(0)';
+      setMobilePlayer(true);
+      return;
+    }
+    if (fs.classList.contains('on')) return;
+    fs.style.transition = 'none'; fs.style.transform = 'translateY(100%)';
+    fs.classList.add('on');
+    void fs.offsetHeight;
+    setMobilePlayer(true);
+    const list = document.getElementById('fsQueue'); if (list) list.scrollTop = 0;
+    requestAnimationFrame(() => { fs.style.transition = 'transform .3s cubic-bezier(.2,.8,.2,1)'; fs.style.transform = 'translateY(0)'; });
+  }, []);
+  const mobileClose = useCallback(() => {
+    const fs = document.getElementById('fs');
+    if (!fs || !fs.classList.contains('on')) { setMobilePlayer(false); return; }
+    fs.style.transition = 'transform .25s cubic-bezier(.2,.8,.2,1)'; fs.style.transform = 'translateY(100%)';
+    clearTimeout(mobileGesture.current.closeTimer);
+    mobileGesture.current.closeTimer = setTimeout(() => {
+      fs.classList.remove('on'); fs.style.transition = 'none'; fs.style.transform = '';
+      mobileGesture.current.closeTimer = 0;
+      setMobilePlayer(false);
+    }, 300);
+  }, []);
+  const gestureStart = (event, owner) => {
+    if (!window.matchMedia('(max-width:820px)').matches) return;
+    const target = event.target;
+    if (owner === 'bar' && target.closest?.('#prog,#vol,#rside')) return;
+    if (owner === 'fs' && target.closest?.('#fsProg,#fsVolBar')) return;
+    if (owner === 'side' && (target.closest?.('input') || !drawerOpen)) return;
+    const touch = event.touches[0];
+    const queue = owner === 'fs' && target.closest?.('#fsQueue');
+    mobileGesture.current = {
+      ...mobileGesture.current, owner, startX: touch.clientX, startY: touch.clientY,
+      lastX: touch.clientX, lastY: touch.clientY, lastAt: Date.now(), moved: false,
+      dragging: owner === 'fs' && !queue, inQueue: !!queue,
+      baseY: owner === 'fs' ? 0 : window.innerHeight, queueScrollTop: queue?.scrollTop || 0,
+    };
+  };
+  const gestureMove = (event, owner) => {
+    const g = mobileGesture.current;
+    if (g.owner !== owner) return;
+    const touch = event.touches[0], dx = touch.clientX - g.startX, dy = touch.clientY - g.startY;
+    g.lastX = touch.clientX; g.lastY = touch.clientY; g.lastAt = Date.now();
+    if (!g.dragging) {
+      if (owner === 'bar' && (dy >= -6 || Math.abs(dx) >= Math.abs(dy))) return;
+      if (owner === 'side' && (dx >= -6 || Math.abs(dy) >= Math.abs(dx))) return;
+      if (owner === 'fs') {
+        if (!g.inQueue || dy < 6 || Math.abs(dx) >= Math.abs(dy)) return;
+        const list = document.getElementById('fsQueue');
+        if (list && list.scrollTop > 0) return;
+      }
+      g.dragging = true; g.moved = true;
+      if (owner === 'bar') {
+        const fs = document.getElementById('fs');
+        if (!fs) return;
+        fs.style.transition = 'none'; fs.style.transform = `translateY(${g.baseY}px)`;
+        fs.classList.add('on'); setMobilePlayer(true);
+      }
+      if (owner === 'side') {
+        const side = document.getElementById('side'); if (side) side.style.transition = 'none';
+      }
+    }
+    event.preventDefault();
+    g.moved = Math.abs(dx) > 6 || Math.abs(dy) > 6;
+    if (owner === 'bar' || owner === 'fs') {
+      const fs = document.getElementById('fs'); if (!fs) return;
+      const y = Math.max(0, Math.min(window.innerHeight, g.baseY + dy));
+      fs.style.transform = `translateY(${y}px)`; g.positionY = y;
+    } else {
+      const side = document.getElementById('side'); if (side) side.style.transform = `translateX(${Math.min(0, dx)}px)`;
+    }
+  };
+  const gestureEnd = (event, owner) => {
+    const g = mobileGesture.current;
+    if (g.owner !== owner) return;
+    const touch = event.changedTouches[0], dx = touch.clientX - g.startX, dy = touch.clientY - g.startY;
+    const elapsed = Math.max(1, Date.now() - g.lastAt);
+    const vx = (touch.clientX - g.lastX) / elapsed, vy = (touch.clientY - g.lastY) / elapsed;
+    if (g.dragging && g.moved) suppressTapUntil.current = Date.now() + 400;
+    if (owner === 'bar' && g.dragging) {
+      const fs = document.getElementById('fs');
+      if (fs && (g.positionY < window.innerHeight * 0.5 || vy < -0.6)) {
+        fs.style.transition = 'transform .3s cubic-bezier(.2,.8,.2,1)'; fs.style.transform = 'translateY(0)';
+        const list = document.getElementById('fsQueue'); if (list) list.scrollTop = 0;
+      } else mobileClose();
+    } else if (owner === 'fs' && g.dragging) {
+      if (Math.max(0, g.baseY + dy) > 90) mobileClose();
+      else { const fs = document.getElementById('fs'); if (fs) { fs.style.transition = 'transform .25s cubic-bezier(.2,.8,.2,1)'; fs.style.transform = 'translateY(0)'; } }
+    } else if (owner === 'side' && g.dragging) {
+      const side = document.getElementById('side');
+      if (side && (dx < -(side.getBoundingClientRect().width || 280) * 0.4 || vx < -0.5)) {
+        side.style.transition = 'transform .25s cubic-bezier(.2,.8,.2,1)'; side.style.transform = 'translateX(-100%)';
+        setTimeout(() => { if (side.style.transform === 'translateX(-100%)') { side.style.transition = ''; side.style.transform = ''; setDrawerOpen(false); } }, 250);
+      } else if (side) { side.style.transition = 'transform .25s cubic-bezier(.2,.8,.2,1)'; side.style.transform = 'translateX(0)'; setTimeout(() => { side.style.transition = ''; side.style.transform = ''; }, 250); }
+    }
+    mobileGesture.current.owner = null;
+  };
+  const suppressGestureClick = (event) => {
+    if (Date.now() < suppressTapUntil.current) { event.preventDefault(); event.stopPropagation(); }
+  };
+  const toggleDesktop = useCallback(() => {
+    if (!desktopPlayer && (window.innerWidth <= 820 || !currentTrack)) return;
+    setDesktopPlayer((value) => !value);
+    setDesktopIdle(false);
+  }, [desktopPlayer, currentTrack]);
   const pollUpdate = useCallback(() => API('/api/update').then((st) => { setUpdateState(st); if (st.supported) setUpdateMessage(st.available ? `Kotassium ${st.latest} is available` : ''); return st; }).catch(() => {}), []);
   const updateSteps = useCallback((current, latest) => {
     const from = String(current || '').match(/\d+/g), to = String(latest || '').match(/\d+/g);
@@ -623,7 +813,7 @@ function App() {
 
   const imageStyle = (url, name) => ({ background: url ? resolveCover(url) : gradient(name) });
   const coverBackground = (url, name) => url ? (coverMap[url] ? `url("/cover/${encodeURIComponent(coverMap[url])}") center/cover no-repeat` : escStyle(url)) : gradient(name);
-  const volumeIcon = <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>{muted || volume === 0 ? <><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></> : volume < 0.25 ? <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/> : <><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></>}</>;
+  const volumeIcon = <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>{muted ? <><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></> : volume <= 0.01 ? null : volume < 0.5 ? <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/> : <><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></>}</>;
   const icon = (name, size = 20) => <Icon name={name} size={size}>{name === 'volume' ? volumeIcon : null}</Icon>;
   const seekHandlers = () => ({
     onPointerDown: (event) => { event.currentTarget.setPointerCapture(event.pointerId); seekAt(event.currentTarget, event); },
@@ -638,41 +828,50 @@ function App() {
     onTouchMove: (event) => { if (event.touches.length) setVolumeAt(event.currentTarget, event.touches[0]); },
   });
   const upcoming = useMemo(() => {
-    if (currentIndex < 0) return queue.map((_, i) => i);
-    if (repeat === 2) return [];
-    const out = [];
-    if (shuffle && shuffleOrder.length) out.push(...shuffleOrder.slice(shufflePos));
-    else for (let i = currentIndex + 1; i < queue.length; i++) out.push(i);
-    if (repeat === 1 && !shuffle && currentIndex === queue.length - 1) for (let i = 0; i < currentIndex; i++) out.push(i);
-    return [...new Set(out)].filter((i) => i !== currentIndex);
+    const out = [], seen = new Set();
+    const add = (index) => {
+      if (index < 0 || index >= queue.length || index === currentIndex || seen.has(index)) return;
+      seen.add(index); out.push(index);
+    };
+    if (currentIndex < 0) { queue.forEach((_, index) => add(index)); return out; }
+    if (repeat === 2) return out;
+    if (shuffle && queue.length > 1) {
+      for (let pos = shufflePos; pos < shuffleOrder.length; pos++) add(shuffleOrder[pos]);
+      return out;
+    }
+    for (let index = currentIndex + 1; index < queue.length; index++) add(index);
+    if (repeat === 1 && currentIndex === queue.length - 1) {
+      for (let index = 0; index < currentIndex; index++) add(index);
+    }
+    return out;
   }, [queue, currentIndex, shuffle, shuffleOrder, shufflePos, repeat]);
 
   const trackRows = (tracks, mode) => tracks.map((track, i) => {
     const active = queue[currentIndex] && trackKey(queue[currentIndex]) === trackKey(track) && (mode === 'search' || playingPlaylist === view.name);
     return <div className={`${mode === 'search' ? 'srow' : 'row'}${active ? ' playing' : ''}`} key={`${trackKey(track)}-${i}`} onClick={() => mode === 'search' ? playIndex(i, tracks, '') : playIndex(i, tracks, view.name)}>
-      {mode === 'search' ? <><button className="rbtn" title="Play"><Icon name="play" size={15}/></button><div className="rtxt" style={{ flex: 1 }}><b>{track.t}</b><small>{track.a}</small></div><span className="stag">{track.source}</span>{track.source === 'deezer' && <span className="stream-only">preview</span>}</> : <><div><span className="trnum">{active ? '♫' : i + 1}</span></div><div className="rt"><div className="track-cover" style={{ background: coverBackground(track.cover, track.album || track.t) }} onMouseEnter={() => warmCover(track.cover)}></div><div className="rtxt"><b>{track.t}</b><small>{track.a}</small></div></div><div className="ralb">{track.album || ''}</div><div className="rdura">{fmt(track.ms)}</div></>}
+      {mode === 'search' ? <><button className="rbtn" title="Play"><Icon name="play" size={15}/></button><div className="rtxt" style={{ flex: 1 }}><b>{track.t}</b><small>{track.a}</small></div><span className="stag">{track.source}</span>{track.full === false ? <span className="stream-only">stream only</span> : <span/>}<span/><span/></> : <><div><span className="trnum">{active ? <span className="bars"><i/><i/><i/><i/></span> : i + 1}</span></div><div className="rt"><div className="track-cover" style={{ background: coverBackground(track.cover, track.album || track.t) }} onMouseEnter={() => warmCover(track.cover)}></div><div className="rtxt"><b>{track.t}</b><small>{track.a}</small></div></div><div className="ralb">{track.album || ''}</div><div className="rdura">{fmt(track.ms)}</div></>}
     </div>;
   });
 
   const renderMain = () => {
-    if (view.type === 'playlist')    return <><div id="plhead" style={{ background: `linear-gradient(180deg,hsl(${hue(view.name)},65%,30%),hsl(${(hue(view.name) + 40) % 360},60%,22%) 60%,#12121200)` }}><div id="plx" style={imageStyle(null, view.name)}>{(view.name || '?').charAt(0)}</div><div className="plinfo"><small>Public Playlist</small><h1>{view.name}</h1><p>{playlist.length} songs</p></div></div><div id="plactions"><button id="bigplay" onClick={playList} title="Play"><Icon name="play" size={28}/></button><button className={`aicon ${shuffle ? 'on' : ''}`} onClick={toggleShuffle} title="Shuffle"><Icon name="shuffle"/></button><button className={`aicon ${repeat ? 'on' : ''}`} onClick={toggleRepeat} title="Repeat"><Icon name="repeat" size={24}/>{repeat === 2 && <small className="repeat-one">1</small>}</button></div><div id="tbl"><div className="tr-head"><span>#</span><span>Title</span><span>Album</span><span>Duration</span></div>{trackRows(playlist, 'playlist')}</div></>;
-    if (view.type === 'search') return <div id="search-results"><div id="homeView"><h2>Results for “{view.query}”</h2></div><div id="tbl"><div className="tr-head search-head"><span></span><span>Title</span><span>Source</span></div>{results.length ? trackRows(results, 'search') : <div id="empty">No results from any source.</div>}</div></div>;
-    return <div id="homeView"><h2>Your playlists</h2>{links.length ? <div className="cardgrid">{links.map((p, i) => <article className="card" key={p.url || p.name} onClick={() => loadPlaylist(i)}><div className="ccover" style={{ background: coverBackground(p.cover, p.name) }} onMouseEnter={() => warmCover(p.cover)}><button id="cardPlay" className="card-play" title={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={20}/></button></div><b>{p.name || '?'}</b><small>{p.total || p.count} songs{p.partial ? ' (partial)' : ''}</small></article>)}</div> : <div id="empty">No playlists yet - add one with the + button.</div>}</div>;
+    if (view.type === 'playlist')    return <><div id="plhead" style={{ background: `linear-gradient(180deg,hsl(${hue(view.name)},65%,30%),hsl(${(hue(view.name) + 40) % 360},60%,22%) 60%,#12121200)` }}><div id="plx" style={imageStyle(null, view.name)}>{(view.name || '?').charAt(0)}</div><div className="plinfo"><small>Public Playlist</small><h1>{view.name}</h1><p>{playlist.length} song{playlist.length === 1 ? '' : 's'}</p></div></div><div id="plactions"><button id="bigplay" onClick={playList} title="Play"><Icon name="play" size={28}/></button><button id="shuf2" className={`aicon ${shuffle ? 'on' : ''}`} onClick={toggleShuffle} title="Shuffle"><Icon name="shuffle" size={20}/></button><button id="rb2" className={`aicon ${repeat ? 'on' : ''}`} onClick={toggleRepeat} title="Repeat"><Icon name="repeat" size={24}/></button></div><div id="tbl"><div className="tr-head"><span>#</span><span>Title</span><span>Album</span><span style={{ textAlign: 'right', color: '#b3b3b3' }}>Duration</span></div>{trackRows(playlist, 'playlist')}</div></>;
+    if (view.type === 'search') return <div id="search-results">{searching ? <div id="homeView"><h2>Searching “{view.query}”…</h2></div> : <><div id="homeView"><h2>Results for “{view.query}”</h2></div><div id="tbl" style={{ paddingTop: 0 }}>{results.length ? <><div className="tr-head"><span></span><span>Title</span><span>Source</span><span></span></div>{trackRows(results, 'search')}</> : <div id="empty">No results from any source.</div>}</div></>}</div>;
+    return <div id="homeView"><h2>Your playlists</h2>{links.length ? <div className="cardgrid">{links.map((p, i) => <article className="card" key={p.url || p.name} onClick={() => loadPlaylist(i)}><div className="ccover" style={{ background: coverBackground(p.cover || p.tracks?.[0]?.cover, p.name) }} onMouseEnter={() => warmCover(p.cover || p.tracks?.[0]?.cover)}><button id="cardPlay" className="card-play" title={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={20}/></button></div><b>{p.name || '?'}</b><small>{p.total || p.count} songs</small></article>)}</div> : <div id="empty">No playlists yet - add one with the + button.</div>}</div>;
   };
 
-  const repeatButton = (fullscreen = false) => <button id={fullscreen ? 'fsRepeat' : 'repeatb'} className={`aicon ${repeat ? 'on' : ''}`} onClick={toggleRepeat} title={repeat === 2 ? 'Repeat one' : 'Repeat'}><Icon name="repeat" size={22}/>{repeat === 2 && <small className="repeat-one">1</small>}</button>;
-  const controls = (fullscreen = false) => <div className={fullscreen ? 'fs-controls' : ''} id={fullscreen ? 'fsBtns' : 'btns'}><button id={fullscreen ? 'fsShuf' : 'shufb'} className={`aicon ${shuffle ? 'on' : ''}`} onClick={toggleShuffle} title="Shuffle"><Icon name="shuffle" size={19}/></button><button id={fullscreen ? 'fsprev' : 'prevb'} className="aicon" onClick={previous} disabled={!currentTrack || (currentIndex <= 0 && !(repeat === 1 && queue.length > 1))} title="Previous"><Icon name="prev" size={17}/></button><button id={fullscreen ? 'fsPlay' : 'playb'} className={fullscreen ? 'fs-play' : ''} onClick={togglePlay} disabled={!currentTrack} title={paused ? 'Play' : 'Pause'}><Icon name={paused ? 'play' : 'pause'} size={fullscreen ? 26 : 17}/></button><button id={fullscreen ? 'fsnext' : 'nextb'} className="aicon" onClick={next} title="Next" disabled={!currentTrack || (nextIndex < 0 && !radio)}><Icon name="next" size={17}/></button>{repeatButton(fullscreen)}{!fullscreen && <><button className={`aicon ${radio ? 'on' : ''}`} onClick={toggleRadio} title={radio ? 'Turn radio off' : 'Start radio'} aria-label="Radio"><Icon name="browse" size={18}/></button><button className="aicon" onClick={togglePlayerBar} title={collapsedPlayer ? 'Expand player' : 'Collapse player'} aria-label={collapsedPlayer ? 'Expand player' : 'Collapse player'}><Icon name={collapsedPlayer ? 'play' : 'next'} size={14}/></button></>}</div>;
-  const volumeRow = (full = false) => <div id={full ? 'fsVol' : undefined} className={full ? 'fs-volume' : 'volume-row'}><button className="aicon" onClick={toggleVolume} title="Volume"><span id={full ? 'volIcon2' : 'volIcon'}>{icon('volume', full ? 23 : 19)}</span></button><div className={full ? 'fs-volume-bar' : ''} id={full ? 'fsVolBar' : 'vol'} {...volumeHandlers()}><i id={full ? 'fsVolFill' : 'volf'} style={{ width: `${(muted ? 0 : Math.sqrt(volume)) * 100}%` }} /></div></div>;
+  const repeatButton = (fullscreen = false) => <button id={fullscreen ? 'fsRepeat' : 'repeatb'} className={`aicon ${repeat ? 'on' : ''}`} onClick={toggleRepeat} title="Repeat"><Icon name="repeat" size={fullscreen ? 24 : 18}/></button>;
+  const controls = (fullscreen = false) => <div className={fullscreen ? 'fs-controls' : ''} id={fullscreen ? 'fsBtns' : 'btns'}><button id={fullscreen ? 'fsShuf' : 'shufb'} className={`aicon ${shuffle ? 'on' : ''}`} onClick={toggleShuffle} title="Shuffle"><Icon name="shuffle" size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsprev' : 'prevb'} className="aicon" onClick={previous} disabled={!currentTrack || (currentIndex <= 0 && !(repeat === 1 && queue.length > 1))} title="Previous"><Icon name="prev" size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsPlay' : 'playb'} className={fullscreen ? 'fs-play' : ''} onClick={togglePlay} disabled={!currentTrack} title={paused ? 'Play' : 'Pause'}><Icon name={paused ? 'play' : 'pause'} size={fullscreen ? 26 : 20}/></button><button id={fullscreen ? 'fsnext' : 'nextb'} className="aicon" onClick={next} title="Next" disabled={!currentTrack || (nextIndex < 0 && !radio)}><Icon name="next" size={fullscreen ? 24 : 20}/></button>{repeatButton(fullscreen)}{!fullscreen && <><button className={`aicon ${radio ? 'on' : ''}`} onClick={toggleRadio} title={radio ? 'Turn radio off' : 'Start radio'} aria-label="Radio"><Icon name="browse" size={18}/></button><button className="aicon" onClick={togglePlayerBar} title={collapsedPlayer ? 'Expand player' : 'Collapse player'} aria-label={collapsedPlayer ? 'Expand player' : 'Collapse player'}><Icon name={collapsedPlayer ? 'play' : 'next'} size={14}/></button></>}</div>;
+  const volumeRow = (full = false) => <div id={full ? 'fsVol' : undefined} className={full ? 'fs-volume' : 'volume-row'}><button className="aicon" onClick={toggleVolume} title="Volume"><span id={full ? 'volIcon2' : 'volIcon'}>{icon('volume', full ? 24 : 20)}</span></button><div className={full ? 'fs-volume-bar' : ''} id={full ? 'fsVolBar' : 'vol'} {...volumeHandlers()}><i id={full ? 'fsVolFill' : 'volf'} style={{ width: `${(muted ? 0 : Math.sqrt(volume)) * 100}%` }} /></div></div>;
   const progress = (full = false) => <div className={full ? 'fs-seek' : ''} id={full ? 'fsSeek' : 'prow'}><span className="ptime" id={full ? 'fsCur' : 'curt'}>{secs(currentTime)}</span><div className={full ? 'fs-progress' : ''} id={full ? 'fsProg' : 'prog'} {...seekHandlers()}><i id={full ? 'fsProgf' : 'progf'} style={{ width: `${duration ? Math.min(100, currentTime / duration * 100) : 0}%` }} /></div><span className="ptime" id={full ? 'fsTot' : 'tott'}>{secs(duration)}</span></div>;
 
   return <>
-    <header id="top"><button id="libBtn" className="top-lib" onClick={toggleSide} title={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library"/></button><button id="homeBtn" onClick={goHome} title="Home"><Icon name="home"/></button><div id="searchwrap" className={query ? 'filled' : ''}><Icon name="search" size={18}/><input id="q" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder="What do you want to play?"/><button id="qClear" onClick={() => { setQuery(''); document.querySelector('#q')?.focus(); }} title="Clear search"><Icon name="close" size={14}/></button><span id="qDiv"/><button id="qBrowse" onClick={goHome} title="Browse playlists"><Icon name="browse"/></button></div><button id="settingsBtn" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Open settings"><Icon name="settings"/></button>{updateState?.supported && <div id="upd" className={`${updateMessage ? 'on' : 'on icononly'}`}><span id="updtext">{updateMessage || (updateState.available ? `Kotassium ${updateState.latest} is available (${updateSteps(updateState.version, updateState.latest)})${updateState.can_install === false ? ' — move it to Applications to update' : ''}` : '')}</span><button id="updbtn" className={updateState.available ? 'go' : ''} onClick={updateState.available ? startUpdate : checkUpdate} disabled={updateBusy} title={updateState.available ? 'Restart & Update' : 'Check for updates'}>{updateState.available ? '↓' : '⟳'}</button>{updateState.available && <button id="updcheck" onClick={checkUpdate} disabled={updateBusy} title="Check again">↻</button>}</div>}</header>
-    {settingsOpen && <div className="settings-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}><section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle"><header className="settings-head"><div><span className="settings-kicker">KOTASSIUM / PREFERENCES</span><h2 id="settingsTitle">Settings</h2></div><button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><Icon name="close" size={18}/></button></header><div className="settings-content"><section className="settings-section"><div className="settings-section-title"><span className="settings-index">01</span><div><h3>Playback</h3><p>Fine-tune your listening session.</p></div></div><div className="setting-row"><div className="setting-copy"><b>Output level</b><small>Saved on this device</small></div><div className="setting-volume"><input aria-label="Output level" type="range" min="0" max="100" value={Math.round((muted ? 0 : Math.sqrt(volume)) * 100)} style={{ '--range-progress': `${(muted ? 0 : Math.sqrt(volume)) * 100}%` }} onChange={(event) => setVolumePercent(event.target.value)}/><span>{Math.round((muted ? 0 : Math.sqrt(volume)) * 100)}%</span></div></div><div className="setting-row"><div className="setting-copy"><b>Shuffle</b><small>Start playlists in a random order</small></div><button className={`setting-switch ${shuffle ? 'enabled' : ''}`} role="switch" aria-checked={shuffle} aria-label="Shuffle playback" onClick={toggleShuffle}><i/></button></div><div className="setting-row"><div className="setting-copy"><b>Repeat</b><small>Choose what happens at the end of a queue</small></div><select className="setting-select" aria-label="Repeat mode" value={repeat} onChange={(event) => { const value = Number(event.target.value); setRepeat(value); try { localStorage.setItem('kot_repeat', String(value)); } catch {} }}><option value="0">Off</option><option value="1">Queue</option><option value="2">Current track</option></select></div></section><section className="settings-section"><div className="settings-section-title"><span className="settings-index">02</span><div><h3>Workspace</h3><p>Make room for what matters.</p></div></div><div className="setting-row"><div className="setting-copy"><b>Compact library</b><small>Show playlist covers only in the sidebar</small></div><button className={`setting-switch ${collapsed ? 'enabled' : ''}`} role="switch" aria-checked={collapsed} aria-label="Compact library" onClick={() => setCollapsed((value) => { const next = !value; try { localStorage.setItem('kot_side_collapsed', next ? '1' : '0'); } catch {} return next; })}><i/></button></div></section></div><footer className="settings-foot"><span><i/> Preferences are stored locally on this device</span><button onClick={() => setSettingsOpen(false)}>Done</button></footer></section></div>}
-    <div id="mid"><aside id="side" className={`${collapsed ? 'collapsed' : ''} ${drawerOpen ? 'open' : ''}`}><div id="sideHead"><b><Icon name="library" size={18}/>Your Library</b><button id="addBtn" onClick={() => setLinkOpen((v) => !v)} title="Add Spotify link"><Icon name="add" size={17}/></button></div><div id="sideList">{links.length ? links.map((p, i) => <div className={`pitem ${view.type === 'playlist' && view.name === p.name ? 'active' : ''}`} key={p.url || p.name} title={p.name} onClick={() => loadPlaylist(i)}><div className="pcover" title={p.name || '?'} style={{ background: coverBackground(p.cover, p.name) }} onMouseEnter={() => warmCover(p.cover)}><button className="pcoverPlay" title={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={18}/></button></div><div className="pmeta"><b>{p.name || '?'}</b><small>{typeof p.total === 'number' && p.total > p.count ? `${p.count} of ${p.total} songs${p.partial ? ' (partial)' : ''}` : `${p.count} songs${p.partial ? ' (partial)' : ''}`}</small></div></div>) : <div id="empty"><h3>Your library is empty</h3><p>Click + above and paste a Spotify link.</p></div>}</div>{linkOpen && <div id="addBox"><input value={linkValue} onChange={(e) => setLinkValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addLink()} placeholder="Paste a Spotify playlist, album or track link"/><button onClick={addLink} disabled={busy}>Add</button></div>}</aside><main id="main">{renderMain()}</main></div>
-    <footer id="bar" className={collapsedPlayer ? 'collapsed' : ''} onTouchStart={(e) => { dragStart.current = e.touches[0].clientY; }} onTouchEnd={(e) => { if (dragStart.current - e.changedTouches[0].clientY > 45 && window.matchMedia('(max-width:820px)').matches) setMobilePlayer(true); dragStart.current = null; }}><div id="thumbstrip">{collapsedPlayer && <button className="collbtn" title="Expand player" onClick={togglePlayerBar}>⌃</button>}{collapsedPlayer && queue.map((track, index) => <button key={`${trackKey(track)}-${index}`} className={`thumb ${currentIndex === index ? 'cur' : ''}`} title={`${track.t} — ${track.a}`} onClick={() => playIndex(index)} style={imageStyle(track.cover, track.t)} />)}</div><div className="barfull" style={{ display: 'contents' }}><div id="nowp"><button id="nowc" onClick={() => setMobilePlayer(true)} title="Open player" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)} /><div id="nowt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div></div><div id="ctr">{controls()}{progress()}</div><div id="rside">{volumeRow()}<button id="dfsBtn" disabled={!currentTrack} className="aicon desktop-fullscreen" onClick={toggleDesktop} title="Full screen"><Icon name="fullscreen"/></button></div></div></footer>
-    <div id="fs" className={mobilePlayer ? 'on' : ''} onTouchStart={(e) => { dragStart.current = e.touches[0].clientY; }} onTouchEnd={(e) => { if (e.changedTouches[0].clientY - (dragStart.current || 0) > 80) setMobilePlayer(false); dragStart.current = null; }}><div id="fsGrip" onClick={() => setMobilePlayer(false)}/><div id="fsHead"><span id="fsPl">{playingPlaylist || 'Now playing'}</span></div><div id="fsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)}/><div id="fsTxt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div><div id="fsQueue"><div id="fsQhead"><b>Up next</b><span id="fsQcount">{upcoming.length} {upcoming.length === 1 ? 'track' : 'tracks'}</span></div>{upcoming.map((i, n) => <div className="fsQrow" key={`${trackKey(queue[i])}-${i}`} onClick={() => playIndex(i)}><span className="fsQn">{n + 1}</span><span className="fsQcov" style={{ background: coverBackground(queue[i]?.cover, queue[i]?.t) }}/><span className="fsQt"><b>{queue[i]?.t}</b><small>{queue[i]?.a}</small></span><span className="fsQtime">{fmt(queue[i]?.ms)}</span></div>)}</div><div id="fsIsland">{progress(true)}{controls(true)}{volumeRow(true)}</div></div>
-    {desktopPlayer && <div id="dfs" className={`open ${desktopIdle ? 'idle' : ''}`} onMouseMove={() => setDesktopIdle(false)}><div id="dfsMain"><div id="dfsTop"><span id="dfsTopTitle">{playingPlaylist || 'Now playing'}</span><button id="dfsExit" onClick={() => setDesktopPlayer(false)} title="Exit full screen">×</button></div><div id="dfsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }}/><div id="dfsInfo"><b id="dfsTitle">{currentTrack?.t}</b><small id="dfsArtist">{currentTrack?.a}</small></div></div><div id="dfsQueue"><div id="dfsQhead"><b>Queue</b><span id="dfsQcount">{queue.length} tracks</span></div><div id="dfsQrows">{currentTrack && <div className="dfsQsect">Now playing</div>}{currentTrack && <QueueRow track={currentTrack} active onClick={() => playIndex(currentIndex)} />}{upcoming.map((i) => <QueueRow key={`${trackKey(queue[i])}-${i}`} track={queue[i]} onClick={() => playIndex(i)}/>)}</div></div></div>}
-    <div id="toast" className={toastText && !toastDismissed ? 'visible' : ''} onTouchStart={toastTouchStart} onTouchMove={toastTouchMove} onTouchEnd={toastTouchEnd} onClick={() => { if (!toastGesture.current.dismissed) { setToastDismissed(true); } }}>{toastText}</div>{upNext && currentTrack && <div id="upnext" className={`tcard ${upNext && !toastDismissed ? 'visible' : ''}`} onTouchStart={toastTouchStart} onTouchMove={toastTouchMove} onTouchEnd={toastTouchEnd} onClick={() => { if (!toastGesture.current.dismissed) { setToastDismissed(true); } }}><span className="upnext-label">Up next</span><span className="upnext-art" style={{ background: coverBackground(displayNextTrack?.cover, displayNextTrack?.t) }}/><span className="upnext-copy"><b>{radio && !nextTrack ? 'Finding radio tracks…' : displayNextTrack?.t}</b><small>{radio && !nextTrack ? 'Radio' : displayNextTrack?.a}</small></span></div>}{download && <div id="dl" className="on"><span id="dllabel">{download.status === 'done' ? 'ready' : 'downloading'} {download.label}</span><div id="dlbar"><i id="dlfill" style={{ width: `${download.pct}%` }}/></div><span id="dlpct">{Math.round(download.pct)}%</span></div>}<audio ref={audioRef} preload="auto" />
+    <header id="top"><button id="libBtn" className="top-lib" onClick={toggleSide} title={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={18}/></button><button id="homeBtn" onClick={goHome} title="Home"><Icon name="home"/></button><div id="searchwrap" className={query ? 'filled' : ''}><Icon name="search" size={18}/><input id="q" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder="What do you want to play?"/><button id="qClear" onClick={() => { setQuery(''); document.querySelector('#q')?.focus(); }} title="Clear search"><Icon name="close" size={14}/></button><span id="qDiv"/><button id="qBrowse" onClick={goHome} title="Browse playlists"><Icon name="browse"/></button></div><button id="settingsBtn" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Open settings"><Icon name="settings"/></button>{updateState?.supported && <div id="upd" className={`${updateMessage ? 'on' : 'on icononly'}`}><span id="updtext">{updateMessage || (updateState.available ? `Kotassium ${updateState.latest} is available (${updateSteps(updateState.version, updateState.latest)})${updateState.can_install === false ? ' — move it to Applications to update' : ''}` : '')}</span><button id="updbtn" className={updateState.available ? 'go' : ''} onClick={updateState.available ? startUpdate : checkUpdate} disabled={updateBusy} title={updateState.available ? 'Restart & Update' : 'Check for updates'}>{updateState.available ? '↓' : '⟳'}</button>{updateState.available && <button id="updcheck" onClick={checkUpdate} disabled={updateBusy} title="Check again">↻</button>}</div>}</header>
+    {settingsOpen && <div className="settings-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}><section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle"><header className="settings-head"><div><span className="settings-kicker">KOTASSIUM / PREFERENCES</span><h2 id="settingsTitle">Settings</h2></div><button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><Icon name="close" size={18}/></button></header><div className="settings-content"><section className="settings-section"><div className="settings-section-title"><span className="settings-index">01</span><div><h3>Playback</h3><p>Fine-tune your listening session.</p></div></div>        <div className="setting-row"><div className="setting-copy"><b>Output level</b><small>Saved on this device</small></div><div className="setting-volume"><input aria-label="Output level" type="range" min="0" max="100" value={Math.round((muted ? 0 : Math.sqrt(volume)) * 100)} style={{ '--range-progress': `${(muted ? 0 : Math.sqrt(volume)) * 100}%` }} onChange={(event) => setVolumePercent(event.target.value)}/><span>{Math.round((muted ? 0 : Math.sqrt(volume)) * 100)}%</span></div></div><div className="setting-row"><div className="setting-copy"><b>Shuffle</b><small>Start playlists in a random order</small></div><button className={`setting-switch ${shuffle ? 'enabled' : ''}`} role="switch" aria-checked={shuffle} aria-label="Shuffle playback" onClick={toggleShuffle}><i/></button></div><div className="setting-row"><div className="setting-copy"><b>Repeat</b><small>Choose what happens at the end of a queue</small></div><select className="setting-select" aria-label="Repeat mode" value={repeat} onChange={(event) => { const value = Number(event.target.value); setRepeat(value); try { localStorage.setItem('kot_repeat', String(value)); } catch {} }}><option value="0">Off</option><option value="1">Queue</option><option value="2">Current track</option></select></div></section><section className="settings-section"><div className="settings-section-title"><span className="settings-index">02</span><div><h3>Workspace</h3><p>Make room for what matters.</p></div></div><div className="setting-row"><div className="setting-copy"><b>Compact library</b><small>Show playlist covers only in the sidebar</small></div><button className={`setting-switch ${collapsed ? 'enabled' : ''}`} role="switch" aria-checked={collapsed} aria-label="Compact library" onClick={() => setCollapsed((value) => { const next = !value; try { localStorage.setItem('kot_side_collapsed', next ? '1' : '0'); } catch {} return next; })}><i/></button></div></section></div><footer className="settings-foot"><span><i/> Preferences are stored locally on this device</span><button onClick={() => setSettingsOpen(false)}>Done</button></footer></section></div>}
+    <div id="mid"><aside id="side" className={`${collapsed ? 'collapsed' : ''} ${drawerOpen ? 'open' : ''}`} onTouchStart={(e) => gestureStart(e, 'side')} onTouchMove={(e) => gestureMove(e, 'side')} onTouchEnd={(e) => gestureEnd(e, 'side')} onTouchCancel={(e) => gestureEnd(e, 'side')} onClickCapture={suppressGestureClick}><div id="sideHead"><b><Icon name="library" size={18}/>Your Library</b><button id="addBtn" onClick={() => setLinkOpen((v) => !v)} title="Add Spotify link"><Icon name="add" size={17}/></button></div><div id="sideList">{links.length ? links.map((p, i) => <div className={`pitem ${view.type === 'playlist' && view.name === p.name ? 'active' : ''}`} key={p.url || p.name} title={p.name} onClick={() => loadPlaylist(i)}><div className="pcover" title={p.name || '?'} style={{ background: coverBackground(p.cover || p.tracks?.[0]?.cover, p.name) }} onMouseEnter={() => warmCover(p.cover || p.tracks?.[0]?.cover)} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><button className="pcoverPlay" title={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={18}/></button></div><div className="pmeta"><b>{p.name || '?'}</b><small>{typeof p.total === 'number' && p.total > p.count ? `${p.count} of ${p.total} songs` : `${p.count} songs${p.partial ? ' (partial)' : ''}`}</small></div></div>) : <div id="empty"><h3>Your library is empty</h3><p>Click + above and paste a Spotify link.</p></div>}</div>{linkOpen && <div id="addBox"><input id="plink" value={linkValue} onChange={(e) => setLinkValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addLink()} placeholder="Paste a Spotify playlist, album or track link"/><button onClick={addLink} disabled={busy}>Add</button></div>}</aside><main id="main">{renderMain()}</main></div>
+    <footer id="bar" className={collapsedPlayer ? 'collapsed' : ''} onTouchStart={(e) => gestureStart(e, 'bar')} onTouchMove={(e) => gestureMove(e, 'bar')} onTouchEnd={(e) => gestureEnd(e, 'bar')} onTouchCancel={(e) => gestureEnd(e, 'bar')} onClickCapture={suppressGestureClick}><div id="thumbstrip">{collapsedPlayer && <button className="collbtn" title="Expand player" onClick={togglePlayerBar}>⌃</button>}{collapsedPlayer && queue.map((track, index) => <button key={`${trackKey(track)}-${index}`} className={`thumb ${currentIndex === index ? 'cur' : ''}`} title={`${track.t} — ${track.a}`} onClick={() => playIndex(index)} style={imageStyle(track.cover, track.t)} />)}</div><div className="barfull" style={{ display: 'contents' }}><div id="nowp"><button id="nowc" onClick={mobileOpen} title="Open player" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)} /><div id="nowt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div></div><div id="ctr">{controls()}{progress()}</div><div id="rside">{volumeRow()}<button id="dfsBtn" disabled={!currentTrack} className="aicon desktop-fullscreen" onClick={toggleDesktop} title="Full screen"><Icon name="fullscreen"/></button></div></div></footer>
+    <div id="fs" className={mobilePlayer ? 'on' : ''} onTouchStart={(e) => gestureStart(e, 'fs')} onTouchMove={(e) => gestureMove(e, 'fs')} onTouchEnd={(e) => gestureEnd(e, 'fs')} onTouchCancel={(e) => gestureEnd(e, 'fs')} onClickCapture={suppressGestureClick}><div id="fsGrip" onClick={mobileClose}/><div id="fsHead"><span id="fsPl">{playingPlaylist || 'Now playing'}</span></div><div id="fsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)}/><div id="fsTxt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div><div id="fsQueue" style={{ display: upcoming.length ? '' : 'none' }}><div id="fsQhead"><b>Up next</b><span id="fsQcount">{upcoming.length} {upcoming.length === 1 ? 'track' : 'tracks'}</span></div><div id="fsQrows">{upcoming.map((i, n) => <div className="fsQrow" key={`${trackKey(queue[i])}-${i}`} onClick={() => playIndex(i)}><span className="fsQn">{n + 1}</span><span className="fsQcov" style={{ background: coverBackground(queue[i]?.cover, queue[i]?.t) }}/><span className="fsQt"><b>{queue[i]?.t}</b><small>{queue[i]?.a}</small></span><span className="fsQtime">{fmt(queue[i]?.ms)}</span></div>)}</div></div><div id="fsIsland">{progress(true)}{controls(true)}{volumeRow(true)}</div></div>
+    {desktopPlayer && <div id="dfs" className={`open ${desktopIdle ? 'idle' : ''}`} onMouseMove={() => setDesktopIdle(false)}><div id="dfsMain"><div id="dfsTop"><span id="dfsTopTitle">{playingPlaylist || 'Now playing'}</span><button id="dfsExit" onClick={() => setDesktopPlayer(false)} title="Exit full screen"><Icon name="exitFullscreen" size={18}/></button></div><div id="dfsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }}/><div id="dfsInfo"><b id="dfsTitle">{currentTrack?.t || 'Choose a playlist to listen'}</b><small id="dfsArtist">{currentTrack?.a || 'nothing playing'}</small></div></div><div id="dfsQueue" style={{ display: queue.length ? '' : 'none' }}><div id="dfsQhead"><b>Queue</b><span id="dfsQcount">{queue.length} {queue.length === 1 ? 'track' : 'tracks'}</span></div><div id="dfsQrows">{currentTrack ? <><div className="dfsQsect">Now playing</div><QueueRow track={currentTrack} active onClick={() => playIndex(currentIndex)} />{upcoming.length > 0 && <div className="dfsQsect">Next up</div>}{upcoming.map((i) => <QueueRow key={`${trackKey(queue[i])}-${i}`} track={queue[i]} onClick={() => playIndex(i)}/>)}</> : queue.map((track, index) => <QueueRow key={`${trackKey(track)}-${index}`} track={track} onClick={() => playIndex(index)}/>)}</div></div></div>}
+    <div id="toast" className={toastText && !toastDismissed ? 'visible' : ''} onPointerDown={toastPointerStart} onPointerMove={toastPointerMove} onPointerUp={toastPointerEnd} onPointerCancel={toastPointerEnd}>{toastText}</div>{(upNext || (radio && !nextTrack && currentTrack)) && currentTrack && <div id="upnext" className={`tcard ${(upNext || (radio && !nextTrack)) && !upNextDismissed ? 'visible' : ''}`} onPointerDown={toastPointerStart} onPointerMove={toastPointerMove} onPointerUp={toastPointerEnd} onPointerCancel={toastPointerEnd}><span className="upnext-label">Up next</span><span className="upnext-art" style={{ background: coverBackground(displayNextTrack?.cover, displayNextTrack?.t) }}/><span className="upnext-copy"><b>{radioSearching ? 'Finding radio tracks…' : displayNextTrack?.t}</b><small>{radioSearching ? 'Radio' : displayNextTrack?.a}</small></span></div>}{download && <div id="dl" className="on"><span id="dllabel">{download.status === 'done' ? 'ready' : 'downloading'} {download.label}</span><div id="dlbar"><i id="dlfill" style={{ width: `${download.pct}%` }}/></div><span id="dlpct">{Math.round(download.pct)}%</span></div>}<audio ref={audioRef} preload="auto" />
 
   </>;
 }
