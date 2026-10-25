@@ -116,17 +116,6 @@ svg{display:block}
 
 /* --- Bottom bar --- */
 #bar{height:76px;flex:none;background:#000;display:grid;grid-template-columns:1fr 1.4fr 1fr;align-items:center;padding:0 16px;gap:12px;transition:height .2s}
-#bar.collapsed{height:52px;display:flex;align-items:center;gap:8px;padding:8px 12px;overflow:hidden}
-#bar.collapsed #thumbstrip{min-width:0}
-#bar.collapsed .barfull{display:none}
-#bar .collbtn{width:32px;height:32px;border-radius:50%;background:#1f1f1f;color:#fff;display:grid;place-items:center;flex:none}
-#thumbstrip{display:none;gap:6px;overflow-x:auto;flex:1;align-items:center}
-#bar.collapsed #thumbstrip{display:flex}
-#bar.collapsed .collbtn{display:grid}
-.thumb{width:36px;height:36px;border-radius:4px;flex:none;background:#282828;cursor:pointer;position:relative}
-.thumb.cur{outline:2px solid #1ed760}
-.thumb:hover{transform:scale(1.06)}
-
 #nowp{display:flex;align-items:center;gap:12px;min-width:0}
 #nowc{width:52px;height:52px;border-radius:6px;background:#282828;flex:none}
 #nowt{min-width:0}
@@ -277,7 +266,7 @@ body{-webkit-tap-highlight-color:transparent}
 #btns{gap:8px}
 #btns button{padding:4px}
 #btns .aicon svg{width:17px;height:17px}
-#btns button[aria-label="Radio"],#btns button[aria-label="Collapse player"]{display:none}
+#btns button[aria-label="Radio"]{display:none}
 #playb{width:36px;height:36px;display:flex;align-items:center;justify-content:center}
 #prow{max-width:none}
 .ptime{min-width:28px;font-size:10px}

@@ -69,6 +69,13 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("No results from any source.", self.app)
         self.assertIn('track.full === false ? <span className="stream-only">stream only</span>', self.app)
 
+    def test_bottom_player_has_no_collapse_feature(self):
+        self.assertNotIn("collapsedPlayer", self.app)
+        self.assertNotIn("togglePlayerBar", self.app)
+        self.assertNotIn("collbtn", self.app)
+        self.assertNotIn("#bar.collapsed", read("web/index.html"))
+        self.assertNotIn("#thumbstrip", read("web/index.html"))
+
     def test_add_link_submits_with_enter_without_a_redundant_button(self):
         self.assertIn("onKeyDown={(e) => e.key === 'Enter' && !busy && addLink()}", self.app)
         self.assertNotIn("<button onClick={addLink} disabled={busy}>Add</button>", self.app)
@@ -83,7 +90,7 @@ class ReactParityTests(unittest.TestCase):
         original_ids = set(re.findall(r'''\bid=["']?([A-Za-z][\w-]*)''', original_body))
         app_ids = set(re.findall(r'''\bid=["']([A-Za-z][\w-]*)["']''', self.app))
         dynamic_ids = set(re.findall(r"\bid=\{[^}]*?['\"]([A-Za-z][\w-]*)['\"]", self.app))
-        dynamic_control_ids = {"btns", "shufb", "prevb", "playb", "nextb", "repeatb", "prow", "curt", "prog", "progf", "tott", "volIcon", "vol", "volf", "fsBtns", "fsShuf", "fsprev", "fsPlay", "fsPlayIcon", "fsnext", "fsRepeat", "fsSeek", "fsCur", "fsProg", "fsProgf", "fsTot", "fsVol", "volIcon2", "fsVolBar", "fsVolFill"}
+        dynamic_control_ids = {"btns", "shufb", "prevb", "playb", "nextb", "repeatb", "prow", "curt", "prog", "progf", "tott", "volIcon", "vol", "volf", "thumbstrip", "fsBtns", "fsShuf", "fsprev", "fsPlay", "fsPlayIcon", "fsnext", "fsRepeat", "fsSeek", "fsCur", "fsProg", "fsProgf", "fsTot", "fsVol", "volIcon2", "fsVolBar", "fsVolFill"}
         intentional_replacements = {"pbIcon", "fsPlayIcon", "repeatIcon", "fsTitle", "fsArtist", "au"}
         self.assertEqual(set(), original_ids - app_ids - dynamic_ids - dynamic_control_ids - intentional_replacements)
 
@@ -105,9 +112,14 @@ class ReactParityTests(unittest.TestCase):
         current_css = current_css[:update_start] + current_css[update_end:]
         reference_css = "\n".join(line for line in reference_css.splitlines() if "#upnext" not in line) + "\n"
         current_css = "\n".join(line for line in current_css.splitlines() if "#upnext" not in line) + "\n"
+        collapsed_player_css = ("#bar.collapsed", "#bar .collbtn", "#thumbstrip", ".thumb")
+        reference_css = "\n".join(line for line in reference_css.splitlines() if not any(selector in line for selector in collapsed_player_css)) + "\n"
         settings_start = current_css.index("/* settings */")
         current_css = current_css[:settings_start]
         current_css = current_css.replace("#root{flex:1;min-height:0;display:flex;flex-direction:column}\n", "", 1)
+        reference_css = reference_css.replace('#btns button[aria-label="Radio"],#btns button[aria-label="Collapse player"]{display:none}', '#btns button[aria-label="Radio"]{display:none}')
+        reference_css = re.sub(r"\n{2,}", "\n", reference_css)
+        current_css = re.sub(r"\n{2,}", "\n", current_css)
         self.assertEqual(reference_css, current_css)
         self.assertIn('<div id="root"></div>', current)
         self.assertIn('<script src="/app.js" defer></script>', current)
