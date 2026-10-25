@@ -282,6 +282,15 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("#dfsQueue #dfsQrows::-webkit-scrollbar-track{background:transparent}", page)
         self.assertIn("#dfsQueue #dfsQrows::-webkit-scrollbar-thumb{background:#ffffff18;border-radius:6px}", page)
 
+    def test_library_and_main_scrollbars_stay_hidden_on_webkit(self):
+        # Safari/WKWebView ignore width:0 on ::-webkit-scrollbar and do not
+        # implement scrollbar-width before 18.2, so without display:none the
+        # dark lists kept a bright white native bar down their right edge.
+        page = read("web/index.html")
+        self.assertIn("#main,#sideList{scrollbar-width:none}", page)
+        self.assertIn("#main::-webkit-scrollbar,#sideList::-webkit-scrollbar{width:0}", page)
+        self.assertIn("#main::-webkit-scrollbar,#sideList::-webkit-scrollbar{display:none}", page)
+
     def test_up_next_toast_places_white_heading_above_track_details(self):
         app = read("web/app.jsx")
         page = read("web/index.html")

@@ -364,6 +364,11 @@ body.dfs #dfsQueue{display:flex}
 #toast.visible,#upnext.visible{opacity:1;pointer-events:auto}
 #upnext{top:88px}
 /* settings */
+/* Safari/WKWebView ignore width:0 on ::-webkit-scrollbar and only obey
+   display:none, so without this the dark lists kept a bright white native
+   bar down their right edge. The rules above stay for engines that do honor
+   width:0 / scrollbar-width:none. */
+#main::-webkit-scrollbar,#sideList::-webkit-scrollbar{display:none}
 /* Keep the desktop queue scrollbar subtle on macOS WebKit and other engines. */
 #dfsQueue #dfsQrows{scrollbar-width:thin;scrollbar-color:#ffffff18 transparent}
 #dfsQueue #dfsQrows::-webkit-scrollbar{width:6px}
