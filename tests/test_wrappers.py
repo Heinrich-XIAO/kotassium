@@ -218,6 +218,9 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("match(/\\d+/g)", app)
         self.assertIn("version${count === 1 ? '' : 's'} forward", app)
         self.assertIn("updateState.can_install === false", app)
+        self.assertIn("updateCheckManual.current = true", app)
+        self.assertIn("st.available) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateSteps(st.version, st.latest)})", app)
+        self.assertIn("else if (st.available) setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateSteps(st.version, st.latest)})", app)
 
     def test_desktop_queue_scrollbar_is_subtle(self):
         page = read("web/index.html")
