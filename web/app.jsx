@@ -362,7 +362,14 @@ function App() {
         let candidates;
         if (track.source === 'newgrounds' && track.id) candidates = [{ ...track, source: 'newgrounds' }];
         else if (track.source === 'youtube' && track.id) candidates = [{ ...track }];
-        else candidates = await findCandidates(track);
+        else if (cached && !track.source) {
+          // The id that worked last time is remembered, and the file it wrote
+          // is keyed by that id, so ytdl's existence check answers locally:
+          // skip source discovery entirely. Every way this can be wrong -
+          // deleted file, dead video, wrong duration - clears this cache and
+          // re-enters playTrack, which falls through to findCandidates below.
+          candidates = [{ source: 'youtube', id: cached, dur: 0 }];
+        } else candidates = await findCandidates(track);
         if (epoch !== playbackEpoch.current) return;
         if (!candidates.length) { toast(`No source found for ${track.t || 'track'}`); return; }
         const cachedIndex = cached ? candidates.findIndex((c) => c.id === cached) : -1;
@@ -514,7 +521,12 @@ function App() {
     prefetchRef.current.add(key);
     const pending = (async () => {
       try {
-        const candidates = track.id && track.source === 'youtube' ? [track] : await findCandidates(track);
+        const knownId = track.id && (track.source === 'youtube' || track.source === 'newgrounds' || track.source === 'soundcloud');
+        const cachedId = !track.source && cacheRef.current[key];
+        // Prefetching must not be the thing that pays for source discovery:
+        // an id the track already carries needs no search, and a remembered
+        // one names a file ytdl can answer locally.
+        const candidates = knownId ? [track] : cachedId ? [{ source: 'youtube', id: cachedId, dur: 0 }] : await findCandidates(track);
         if (!candidates[0]?.id) { prefetchRef.current.delete(key); return; }
         cacheRef.current[key] = candidates[0].id;
         try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {}

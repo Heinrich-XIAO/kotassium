@@ -107,6 +107,15 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("upNextGone.current = false", self.app)
         self.assertIn("const displayNextTrack = nextTrack || (radio && currentIndex >= 0 ? queue[currentIndex] : null)", self.app)
 
+    def test_replayed_tracks_reuse_the_cached_source_without_searching(self):
+        # Source discovery is the only network cost left when replaying a track
+        # that is already in the library, so a remembered id has to short-
+        # circuit it - both when playing and when prefetching the next track.
+        self.assertIn("else if (cached && !track.source)", self.app)
+        self.assertIn("candidates = [{ source: 'youtube', id: cached, dur: 0 }]", self.app)
+        self.assertIn("const cachedId = !track.source && cacheRef.current[key]", self.app)
+        self.assertIn("knownId ? [track] : cachedId ?", self.app)
+
     def test_reference_css_is_preserved_in_index_shell(self):
         migrated_shell = git_show("8ae5e3e:web/index.html")
         current = read("web/index.html")
