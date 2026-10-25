@@ -1,0 +1,71 @@
+name: Publish release artifact
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Release version without the v prefix
+        required: true
+        type: string
+      artifact:
+        description: Actions artifact name to publish
+        required: true
+        type: string
+      filename:
+        description: Final release asset filename
+        required: true
+        type: string
+
+concurrency:
+  group: publish-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: incoming
+
+      - name: Prepare artifact and checksum
+        env:
+          FILENAME: ${{ inputs.filename }}
+        run: |
+          mkdir -p upload
+          FILE=$(find incoming -maxdepth 1 -type f -print -quit)
+          test -n "$FILE"
+          cp "$FILE" "upload/$FILENAME"
+          cd upload
+          sha256sum "$FILENAME" > new-checksum
+
+      - name: Create release or attach artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          FILENAME: ${{ inputs.filename }}
+          TARGET: ${{ github.sha }}
+        run: |
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            mkdir -p existing
+            if gh release download "$TAG" --pattern SHA256SUMS --dir existing; then
+              awk -v name="$FILENAME" '$2 != name { print }' existing/SHA256SUMS > upload/SHA256SUMS
+            else
+              : > upload/SHA256SUMS
+            fi
+            cat upload/new-checksum >> upload/SHA256SUMS
+            gh release upload "$TAG" "upload/$FILENAME" upload/SHA256SUMS --clobber
+          else
+            mv upload/new-checksum upload/SHA256SUMS
+            gh release create "$TAG" "upload/$FILENAME" upload/SHA256SUMS \
+              --title "$TAG" \
+              --notes-file .github/release-body.md \
+              --target "$TARGET"
+          fi

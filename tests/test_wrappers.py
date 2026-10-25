@@ -174,6 +174,28 @@ class WrapperTests(unittest.TestCase):
         bootstrap = read("setup.sh")
         self.assertIn("pywebview>=5.4", bootstrap)
 
+    def test_release_builds_publish_each_platform_as_soon_as_it_finishes(self):
+        auto = read(".github/workflows/auto-release.yml")
+        manual = read(".github/workflows/release.yml")
+        build = read(".github/workflows/build.yml")
+        preflight = read(".github/workflows/preflight.yml")
+        publisher = read(".github/workflows/publish-artifact.yml")
+        for workflow in (auto, manual):
+            self.assertIn("uses: ./.github/workflows/preflight.yml", workflow)
+            self.assertIn("needs: [version, preflight]", workflow)
+            self.assertIn("needs: [version, preflight, macos]", workflow)
+            self.assertIn("needs: [version, preflight, android]", workflow)
+            self.assertNotIn("needs: [version, build]", workflow)
+            self.assertIn("uses: ./.github/workflows/publish-artifact.yml", workflow)
+        self.assertIn("inputs.platform == 'macos'", build)
+        self.assertIn("inputs.platform == 'android'", build)
+        self.assertNotIn("npm ci", preflight)
+        self.assertIn("needs: [version, preflight, macos]", auto)
+        self.assertIn("needs: [version, preflight, android]", auto)
+        self.assertIn("concurrency:", publisher)
+        self.assertIn("gh release upload", publisher)
+        self.assertIn("sha256sum", publisher)
+
     def test_update_button_keeps_manual_recheck_separate_from_install(self):
         app = read("web/app.jsx")
         self.assertIn("Check again", app)

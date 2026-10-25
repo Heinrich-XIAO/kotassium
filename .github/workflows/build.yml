@@ -11,7 +11,11 @@ on:
   workflow_call:
     inputs:
       version:
-        description: Version stamped into the app bundles
+        description: Version stamped into the app bundle
+        required: true
+        type: string
+      platform:
+        description: Which platform artifact to build
         required: true
         type: string
       macos:
@@ -19,11 +23,6 @@ on:
         required: false
         type: string
         default: '[{"runner":"macos-14","arch":"arm64"}]'
-      android:
-        description: Build the Android APK
-        required: false
-        type: boolean
-        default: true
     secrets:
       ANDROID_KEYSTORE_B64:
         required: false
@@ -36,35 +35,8 @@ permissions:
   contents: read
 
 jobs:
-  preflight:
-    name: Agent preflight
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # The React parity tests inspect the pre-migration source revision.
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install test dependency
-        run: python -m pip install --disable-pip-version-check yt-dlp
-
-      - name: Install web build dependencies
-        run: npm ci
-
-      - name: Run agent preflight
-        run: tools/agent-preflight.sh
-
   macos:
-    needs: preflight
+    if: ${{ inputs.platform == 'macos' }}
     name: macOS (${{ matrix.arch }})
     strategy:
       fail-fast: false
@@ -174,8 +146,7 @@ jobs:
 
   android:
     name: Android APK
-    needs: preflight
-    if: ${{ inputs.android }}
+    if: ${{ inputs.platform == 'android' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,10 +1,8 @@
 name: Release
 
-# A release you name yourself: push a v* tag and the macOS DMGs and the
-# Android APK for that commit are published under that tag. Use this for a
-# cut you want to call something; use auto-release.yml for the everyday
-# "every push ships" path. Both build through build.yml, so the two cannot
-# drift apart.
+# A named release cut: preflight, build Apple Silicon and Android in parallel,
+# and publish each artifact as soon as its platform build succeeds. A manual
+# run is packaging-only and leaves release publication to a tag push.
 
 on:
   workflow_dispatch:
@@ -36,45 +34,48 @@ jobs:
             echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           fi
 
-  build:
-    name: build
+  preflight:
+    name: preflight
     needs: version
+    uses: ./.github/workflows/preflight.yml
+
+  macos:
+    name: build Apple Silicon DMG
+    needs: [version, preflight]
     uses: ./.github/workflows/build.yml
     with:
       version: ${{ needs.version.outputs.version }}
+      platform: macos
+      macos: '[{"runner":"macos-14","arch":"arm64"}]'
     secrets: inherit
 
-  release:
-    name: publish release
-    needs: [version, build]
-    # Publish only on a tag; a manual run just uploads workflow artifacts,
-    # which is the safe way to test packaging changes.
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  android:
+    name: build Android APK
+    needs: [version, preflight]
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      platform: android
+    secrets: inherit
 
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
+  publish-macos:
+    name: publish or attach Apple Silicon DMG
+    needs: [version, preflight, macos]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.macos.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
+    uses: ./.github/workflows/publish-artifact.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      artifact: Kotassium-arm64
+      filename: Kotassium-${{ needs.version.outputs.version }}-arm64.dmg
+    secrets: inherit
 
-      - name: Require the Apple Silicon DMG and the APK
-        run: |
-          ls -l artifacts
-          test -f artifacts/Kotassium-*-arm64.dmg
-          test -f artifacts/Kotassium-*.apk
-
-      - name: Checksums
-        # The desktop app verifies its DMG against this file before installing.
-        run: cd artifacts && sha256sum *.dmg *.apk | tee SHA256SUMS
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.version.outputs.version }}
-          files: |
-            artifacts/*.dmg
-            artifacts/*.apk
-            artifacts/SHA256SUMS
-          generate_release_notes: true
-          body_path: .github/release-body.md
+  publish-android:
+    name: publish or attach Android APK
+    needs: [version, preflight, android]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.android.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
+    uses: ./.github/workflows/publish-artifact.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      artifact: Kotassium-apk
+      filename: Kotassium-${{ needs.version.outputs.version }}.apk
+    secrets: inherit
