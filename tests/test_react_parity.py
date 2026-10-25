@@ -99,7 +99,7 @@ class ReactParityTests(unittest.TestCase):
         app_ids = set(re.findall(r'''\bid=["']([A-Za-z][\w-]*)["']''', self.app))
         dynamic_ids = set(re.findall(r"\bid=\{[^}]*?['\"]([A-Za-z][\w-]*)['\"]", self.app))
         dynamic_control_ids = {"btns", "shufb", "prevb", "playb", "nextb", "repeatb", "prow", "curt", "prog", "progf", "tott", "volIcon", "vol", "volf", "thumbstrip", "fsBtns", "fsShuf", "fsprev", "fsPlay", "fsPlayIcon", "fsnext", "fsRepeat", "fsSeek", "fsCur", "fsProg", "fsProgf", "fsTot", "fsVol", "volIcon2", "fsVolBar", "fsVolFill"}
-        intentional_replacements = {"pbIcon", "fsPlayIcon", "repeatIcon", "fsTitle", "fsArtist", "au", "addBox"}
+        intentional_replacements = {"pbIcon", "fsPlayIcon", "repeatIcon", "fsTitle", "fsArtist", "au", "addBox", "qBrowse", "qDiv"}
         self.assertEqual(set(), original_ids - app_ids - dynamic_ids - dynamic_control_ids - intentional_replacements)
 
     def test_swiping_up_next_dismisses_until_track_or_notice_changes(self):
@@ -173,7 +173,11 @@ class ReactParityTests(unittest.TestCase):
         settings_start = current_css.index("/* settings */")
         current_css = current_css[:settings_start]
         current_css = current_css.replace("#root{flex:1;min-height:0;display:flex;flex-direction:column}\n", "", 1)
+        reference_css = reference_css.replace("#qBrowse{width:32px;height:32px;border-radius:6px;color:#b3b3b3;display:grid;place-items:center;flex:none}\n#qBrowse:hover{color:#fff;background:#ffffff14}\n", "", 1)
+        reference_css = reference_css.replace("#qDiv{width:1px;height:24px;background:#ffffff26;flex:none;margin:0 4px 0 6px}\n", "", 1)
         current_css = current_css.replace(':root{--font-ui:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--font-size-body:14px;--font-size-title:22px;--font-size-section:12px;--font-weight-regular:400;--font-weight-medium:500;--font-weight-semibold:600;--font-weight-bold:700;--font-weight-heavy:800}\nh1,h2,h3{font-family:var(--font-ui);font-weight:var(--font-weight-bold);letter-spacing:-.02em}\nh2{font-size:var(--font-size-title)}\nh3{font-size:16px}\n', "", 1)
+        reference_css = reference_css.replace("#qDiv{width:1px;height:24px;background:#ffffff26;flex:none;margin:0 4px 0 6px}\\n", "", 1)
+        reference_css = reference_css.replace("#qDiv,#qBrowse{display:none}", "", 1)
         current_css = current_css.replace('body{background:#000;color:#fff;font-family:var(--font-ui);font-size:var(--font-size-body);font-weight:var(--font-weight-regular);', 'body{background:#000;color:#fff;font-family:system-ui,sans-serif;', 1)
         current_css = current_css.replace('#homeView h2{margin:0 0 16px}', '#homeView h2{font-size:22px;margin:0 0 16px}', 1)
         current_css = current_css.replace('.settings-head h2,.link-dialog-copy h2{font-size:var(--font-size-title);font-weight:var(--font-weight-bold);letter-spacing:-.02em}', '.settings-head h2{font-size:28px;font-weight:820;letter-spacing:-.035em}.link-dialog-copy h2{font-size:27px;font-weight:790;letter-spacing:-.045em}', 1)

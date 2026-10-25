@@ -53,6 +53,8 @@ class WrapperTests(unittest.TestCase):
         self.assertIn('<script src="/app.js" defer></script>', page)
         self.assertNotIn("<script>\nvar AU", page)
         self.assertIn("function App()", app)
+        self.assertNotIn('id="qBrowse"', app)
+        self.assertNotIn("#qBrowse", page)
         self.assertIn("const prefetchTrackRef = useRef(null)", app)
         self.assertIn("const nextTrack = nextIndex >= 0 && nextIndex !== currentIndex ? queue[nextIndex] : null", app)
         self.assertIn("const [notifyTrackChanges, setNotifyTrackChanges] = useState(() => { try { return localStorage.getItem('kot_notify_track_changes') !== '0'; } catch { return true; } })", app)
