@@ -53,6 +53,7 @@ class WrapperTests(unittest.TestCase):
         self.assertIn('<script src="/app.js" defer></script>', page)
         self.assertNotIn("<script>\nvar AU", page)
         self.assertIn("function App()", app)
+        self.assertIn("const prefetchTrackRef = useRef(null)", app)
         self.assertIn("const nextTrack = nextIndex >= 0 && nextIndex !== currentIndex ? queue[nextIndex] : null", app)
         self.assertIn("useEffect(() => { if (nextTrack) prefetchTrack(nextTrack); }, [nextTrack, prefetchTrack])", app)
         self.assertIn("audio.addEventListener('loadedmetadata', onMeta)", app)

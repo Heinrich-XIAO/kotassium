@@ -40,6 +40,7 @@ function App() {
   const jobsRef = useRef(new Map());
   const prefetchRef = useRef(new Set());
   const prefetchJobsRef = useRef(new Map());
+  const prefetchTrackRef = useRef(null);
   const requestRef = useRef(0);
   const playbackEpoch = useRef(0);
   const lastNowPlaying = useRef({ key: '', at: 0, duration: 0 });
