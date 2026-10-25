@@ -30,6 +30,11 @@ svg{display:block}
 #qBrowse:hover{color:#fff;background:#ffffff14}
 #mid{flex:1;display:flex;min-height:0;background:#121212;padding:8px;gap:8px}
 #side{flex:0 0 262px;background:#121212;border-radius:8px;display:flex;flex-direction:column;min-height:0;transition:flex-basis .2s}
+#mid.resizing #side{transition:none}
+#sideResize{position:relative;z-index:2;width:8px;flex:none;margin:0 -8px;cursor:col-resize;touch-action:none}
+#sideResize:after{content:"";position:absolute;left:3px;top:8px;bottom:8px;width:2px;border-radius:2px;background:transparent;transition:background .15s,transform .15s}
+#sideResize:hover:after,#sideResize:focus-visible:after,#mid.resizing #sideResize:after{background:#1ed760;transform:scaleX(1.5)}
+#sideResize:focus-visible{outline:none}
 #main{flex:1;background:#121212;border-radius:8px;overflow-y:auto;position:relative}
 #main,#sideList{scrollbar-width:none}
 #main::-webkit-scrollbar,#sideList::-webkit-scrollbar{width:0}
@@ -244,6 +249,7 @@ body{-webkit-tap-highlight-color:transparent}
 .top-lib{display:grid!important}
 #mid{position:relative;padding:4px}
 #side{position:absolute;z-index:30;left:4px;top:4px;bottom:4px;width:280px;display:none;background:#181818;border-radius:8px;box-shadow:0 12px 32px #000d;flex:none;touch-action:pan-y pinch-zoom}
+#sideResize{display:none}
 #side.open{display:flex}
 #side.collapsed{left:auto;right:auto;width:68px;flex:none}
 #homeView{padding:16px}

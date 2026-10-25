@@ -114,6 +114,7 @@ class ReactParityTests(unittest.TestCase):
         current_css = "\n".join(line for line in current_css.splitlines() if "#upnext" not in line) + "\n"
         collapsed_player_css = ("#bar.collapsed", "#bar .collbtn", "#thumbstrip", ".thumb")
         reference_css = "\n".join(line for line in reference_css.splitlines() if not any(selector in line for selector in collapsed_player_css)) + "\n"
+        current_css = "\n".join(line for line in current_css.splitlines() if not any(selector in line for selector in ("#mid.resizing #side", "#sideResize"))) + "\n"
         settings_start = current_css.index("/* settings */")
         current_css = current_css[:settings_start]
         current_css = current_css.replace("#root{flex:1;min-height:0;display:flex;flex-direction:column}\n", "", 1)

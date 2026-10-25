@@ -84,6 +84,12 @@ class WrapperTests(unittest.TestCase):
     def test_legacy_web_ui_regressions_are_covered_by_react_state_and_handlers(self):
         app = read("web/app.jsx")
         self.assertIn("localStorage.setItem('kot_side_collapsed'", app)
+        self.assertIn("const startSidebarResize = useCallback", app)
+        self.assertIn("setPointerCapture(event.pointerId)", app)
+        self.assertIn("saveSidebarCollapsed(width < 165)", app)
+        self.assertIn('id="sideResize" role="separator"', app)
+        self.assertIn("#mid.resizing #side{transition:none}", read("web/index.html"))
+        self.assertIn("#sideResize{display:none}", read("web/index.html"))
         self.assertIn("// Touch + pointer gestures work on Android WebView and desktop browsers", app)
         self.assertIn("window.matchMedia('(max-width:820px)').matches", app)
         self.assertIn("const toggleRadio", app)
