@@ -198,7 +198,14 @@ class WrapperTests(unittest.TestCase):
         build = read(".github/workflows/build.yml")
         self.assertIn("./make-pkg.sh", build)
         self.assertIn("Kotassium-*.pkg", build)
-        self.assertNotIn("./make-dmg.sh", build)
+        self.assertIn("./make-dmg.sh", build)
+        self.assertIn("Kotassium-*.dmg", build)
+        self.assertIn("legacy-dmg", build)
+        auto_release = read(".github/workflows/auto-release.yml")
+        tag_release = read(".github/workflows/release.yml")
+        for workflow in (auto_release, tag_release):
+            self.assertIn("publish-macos-legacy-dmg:", workflow)
+            self.assertIn("arm64.dmg", workflow)
         self.assertIn(".pkg", read(".github/release-body.md"))
 
     def test_platform_builds_ship_the_compiled_page_bundle(self):
