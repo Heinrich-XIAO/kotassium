@@ -338,8 +338,11 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("#upnext .upnext-label{grid-column:1/-1", page)
         self.assertIn("<span className=\"upnext-label\">Up next</span>", app)
         self.assertNotIn("text-transform:uppercase", re.sub(r"\.link-eyebrow\{[^}]*\}", "", page))
-        self.assertIn(".dfsQsect{font-size:11px;color:#8a8a8a", page)
-        self.assertIn(".settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;color:#8f8f8f}", page)
+        self.assertIn(".dfsQsect{font-size:var(--font-size-section);color:#8a8a8a;font-weight:var(--font-weight-bold)", page)
+        self.assertIn(".settings-label{margin:0 0 8px 2px;font-size:var(--font-size-section);font-weight:var(--font-weight-bold);color:#8f8f8f}", page)
+        self.assertIn('h1,h2,h3{font-family:var(--font-ui);font-weight:var(--font-weight-bold);letter-spacing:-.02em}', page)
+        self.assertIn('body{background:#000;color:#fff;font-family:var(--font-ui);font-size:var(--font-size-body);font-weight:var(--font-weight-regular);', page)
+        self.assertIn('.settings-head h2,.link-dialog-copy h2{font-size:var(--font-size-title);font-weight:var(--font-weight-bold);letter-spacing:-.02em}', page)
         self.assertIn("#upnext .upnext-art{grid-column:1;grid-row:2", page)
         self.assertIn("#upnext .upnext-copy{grid-column:2;grid-row:2", page)
 
