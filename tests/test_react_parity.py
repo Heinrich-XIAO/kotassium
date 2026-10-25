@@ -116,6 +116,29 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("const cachedId = !track.source && cacheRef.current[key]", self.app)
         self.assertIn("knownId ? [track] : cachedId ?", self.app)
 
+    def test_background_download_is_opt_in_and_yields_to_playback(self):
+        # The whole-playlist download is a per-add choice: an unchecked box
+        # in the add-link dialog, reset every time the dialog reopens, and it
+        # only ever fires after a resolve that actually saved.
+        self.assertIn('className="link-opt" htmlFor="bgdl"', self.app)
+        self.assertIn('type="checkbox" checked={bgDownload}', self.app)
+        self.assertIn("setLinkOpen(true);\n    setBgDownload(false);", self.app)
+        self.assertIn("if (bgDownload) startBackgroundDownload(j.tracks || [], j.name || '');", self.app)
+        # Priority: playback and prefetch mark every search/download they
+        # start, and the background lane only starts an item when nothing is
+        # in flight - so prefetch (and anything you press play on) wins.
+        self.assertIn("while (interactiveRef.current > 0)", self.app)
+        self.assertIn("asInteractive(() => findCandidates(track))", self.app)
+        self.assertIn("asInteractive(() => downloadId(candidate.id, track.t, false))", self.app)
+        self.assertIn("const pending = asInteractive((async () => {", self.app)
+        # Pacing: strictly one background item at a time with seconds of air
+        # between items, so this lane can never burst the search/download
+        # queues into rate-limit territory.
+        self.assertIn("4000 + Math.random() * 6000", self.app)
+        self.assertIn("bgQueueRef.current.shift()", self.app)
+        self.assertNotIn("bgQueueRef.current.map", self.app)
+        self.assertIn(".link-opt", read("web/index.html"))
+
     def test_reference_css_is_preserved_in_index_shell(self):
         migrated_shell = git_show("8ae5e3e:web/index.html")
         current = read("web/index.html")
