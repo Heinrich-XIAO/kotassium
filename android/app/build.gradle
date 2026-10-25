@@ -102,8 +102,16 @@ def stageServer = tasks.register("stageServer", Sync) {
     into genPython
 }
 
+def buildReactWeb = tasks.register("buildReactWeb", Exec) {
+    workingDir repoRoot
+    commandLine "npm", "run", "build"
+}
+
 def stageWeb = tasks.register("stageWeb", Sync) {
+    dependsOn buildReactWeb
     from(new File(repoRoot, "web")) {
+        include "**/*"
+        exclude "app.jsx"
         into "web"
     }
     into genAssets

@@ -155,10 +155,10 @@ class BrokenNative:
 
 class GeometryTests(unittest.TestCase):
     def test_app_controls_precede_home_and_search(self):
-        page = read("web/index.html")
-        top = page.index('<div id=top>')
-        home = page.index('<button id=homeBtn', top)
-        search = page.index('<div id=searchwrap', top)
+        app = read("web/app.jsx")
+        top = app.index('<header id="top">')
+        home = app.index('<button id="homeBtn"', top)
+        search = app.index('<div id="searchwrap"', top)
         self.assertLess(home, search)
 
     def test_custom_titlebar_helpers_are_retired_noops(self):

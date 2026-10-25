@@ -8,14 +8,12 @@ PYTHON=${PYTHON:-python3}
 "$PYTHON" -m unittest discover -s tests -v
 "$PYTHON" -m py_compile desktop.py mpris_linux.py notify.py serve_web.py spotify_get.py titlebar_macos.py updater.py
 
-if command -v node >/dev/null 2>&1; then
-    "$PYTHON" - <<'PY' | node --check
-from pathlib import Path
-page = Path("web/index.html").read_text(encoding="utf-8")
-print(page.rsplit("<script>", 1)[1].split("</script>", 1)[0])
-PY
+if command -v npm >/dev/null 2>&1; then
+    npm ci
+    npm run build
+    node --check web/app.js
 else
-    echo "node not installed; skipped JavaScript syntax check" >&2
+    echo "npm not installed; skipped React build and JavaScript syntax check" >&2
 fi
 
 echo "Preflight passed."

@@ -13,7 +13,7 @@ VERSION = os.environ.get("KOTASSIUM_VERSION", "2.1.0").lstrip("v")
 APP = ["desktop.py"]
 ICON = "web/icons/kotassium.icns"
 DATA_FILES = [
-    ("web", ["web/index.html", "web/manifest.webmanifest", "web/sw.js"]),
+    ("web", ["web/index.html", "web/app.js", "web/manifest.webmanifest", "web/sw.js"]),
     ("web/icons", ["web/icons/icon-192.png", "web/icons/icon-512.png",
                    "web/icons/icon-maskable-512.png",
                    "web/icons/apple-touch-icon.png"]),

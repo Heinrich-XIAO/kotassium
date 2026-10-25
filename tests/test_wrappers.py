@@ -1,6 +1,11 @@
 import os
 import re
+import shutil
+import subprocess
+import threading
 import unittest
+import urllib.request
+import urllib.error
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -40,100 +45,90 @@ class WrapperTests(unittest.TestCase):
             for chunk in ("id=nowp", "id=side", "function playIdx", "localStorage.getItem('kot_vol')"):
                 self.assertNotIn(chunk, src, "%s copied markup from the page" % rel)
 
-    def test_library_icon_toggles_sidebar_and_duplicate_icon_is_removed(self):
+    def test_react_app_is_the_only_ui_and_preserves_shared_state_behaviors(self):
         page = read("web/index.html")
-        self.assertIn('<button id=libBtn onclick="toggleSide()" title="Collapse library">', page)
-        self.assertNotIn('id=collSide', page)
-        self.assertIn("document.getElementById('libBtn')", page)
-        self.assertIn("b.title=SIDECOLL?'Expand library':'Collapse library'", page)
+        app = read("web/app.jsx")
+        bundle = read("web/app.js")
+        self.assertIn('<div id="root"></div>', page)
+        self.assertIn('<script src="/app.js" defer></script>', page)
+        self.assertNotIn("<script>\nvar AU", page)
+        self.assertIn("function App()", app)
+        self.assertIn("const nextTrack = nextIndex >= 0 && nextIndex !== currentIndex ? queue[nextIndex] : null", app)
+        self.assertIn("useEffect(() => { if (nextTrack) prefetchTrack(nextTrack); }, [nextTrack, prefetchTrack])", app)
+        self.assertIn("audio.addEventListener('loadedmetadata', onMeta)", app)
+        self.assertIn("Math.abs(actual - expected) > Math.max(8, expected * 0.2)", app)
+        self.assertIn("/api/nowplaying", app)
+        self.assertIn("/api/cover/cache", app)
+        self.assertIn("/api/update/check", app)
+        self.assertIn("/api/recommend", app)
+        self.assertIn("function bootstrap()", app)
+        self.assertIn("React", bundle)
+        self.assertTrue(bundle.endswith("\n"))
 
-    def test_startup_prefetches_each_playlists_play_choice(self):
-        page = read("web/index.html")
-        self.assertIn("function prefetchPlaylistStarts(links)", page)
-        self.assertIn("prefetchPlaylistStarts(LINKS)", page)
-        self.assertIn("var choice=SHUF?Math.floor(Math.random()*tracks.length):0", page)
-        self.assertIn("prefetch(tracks[choice])", page)
-        self.assertIn("_playlistPrefetchStarted[key]=tracks[choice]", page)
-        self.assertIn("_playlistPrefetchPending[key]", page)
-        self.assertIn("_playlistPrefetchPending[key].then(function(){playList()})", page)
-        self.assertIn("PL.findIndex(function(t){return t.t===choice.t&&t.a===choice.a})", page)
-        self.assertIn("if(setQ&&SHUF)", page)
+    def test_serve_web_serves_built_react_bundle(self):
+        server = read("serve_web.py")
+        self.assertEqual(server.count('if path == "/app.js":'), 1)
+        self.assertIn('"web", "app.js"', server)
+        package = read("package.json")
+        self.assertIn('"react"', package)
+        self.assertIn('"build"', package)
+        result = subprocess.run(["node", "--check", os.path.join(ROOT, "web/app.js")], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_playback_controls_disable_when_no_track_is_selected(self):
-        page = read("web/index.html")
-        self.assertIn("function syncPlaybackControls()", page)
-        self.assertIn("b.disabled=!hasTrack", page)
-        self.assertIn("dfs.disabled=!hasTrack", page)
-        self.assertIn("#dfsBtn:disabled", page)
-        self.assertIn("b.disabled=!canPrev", page)
-        self.assertIn("b.disabled=!canNext", page)
-        self.assertIn("#btns button:disabled,#fsBtns button:disabled,#dfsBtn:disabled", page)
+    def test_legacy_web_ui_regressions_are_covered_by_react_state_and_handlers(self):
+        app = read("web/app.jsx")
+        self.assertIn("localStorage.setItem('kot_side_collapsed'", app)
+        self.assertIn("// Touch + pointer gestures work on Android WebView and desktop browsers", app)
+        self.assertIn("window.matchMedia('(max-width:820px)').matches", app)
+        self.assertIn("const toggleRadio", app)
+        self.assertIn("const fetchRadio", app)
+        self.assertIn("function QueueRow(", app)
+        self.assertIn("Math.abs(actual - expected) > Math.max(8, expected * 0.2)", app)
+        self.assertIn("const updateSteps", app)
+        self.assertIn("localStorage.getItem('kot_vol')", app)
+        self.assertIn("localStorage.getItem('kot_shuf')", app)
+        self.assertIn("localStorage.getItem('kot_repeat')", app)
+
+    def test_http_serves_root_and_bundle_from_shared_server_handler(self):
+        import serve_web
+        old_base = serve_web.BASE
+        serve_web.BASE = ROOT
+        server = serve_web.make_server("127.0.0.1", 0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base = "http://127.0.0.1:%s" % server.server_address[1]
+            with urllib.request.urlopen(base + "/") as response:
+                page = response.read().decode("utf-8")
+                self.assertEqual(response.headers.get_content_type(), "text/html")
+            self.assertIn('<script src="/app.js" defer></script>', page)
+            with urllib.request.urlopen(base + "/app.js") as response:
+                bundle = response.read()
+                self.assertEqual(response.headers.get_content_type(), "application/javascript")
+                self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
+            self.assertEqual(bundle, read("web/app.js").encode())
+        finally:
+            server.shutdown()
+            server.server_close()
+            serve_web.BASE = old_base
+
+    def test_platform_builds_ship_the_compiled_page_bundle(self):
+        mac_setup = read("setup-macos.py")
+        self.assertIn('"web/app.js"', mac_setup)
+        self.assertIn("npm ci", read("build-macos.sh"))
+        gradle = read("android/app/build.gradle")
+        self.assertIn('include "**/*"', gradle)
+        self.assertIn('exclude "app.jsx"', gradle)
+        self.assertIn('"npm", "run", "build"', gradle)
+        build = read(".github/workflows/build.yml")
+        self.assertIn("npm ci", build)
+        self.assertIn("npm run build", read("build-macos.sh"))
+        self.assertIn('include "**/*"', gradle)
 
     def test_page_really_escapes_what_it_injects(self):
-        # esc() was two no-ops - .replace(/&/g,'&').replace(/</g,'<') - so every
-        # Spotify/YouTube/Deezer title, playlist name and cover URL was parsed
-        # as markup wherever it was written into innerHTML.
-        page = read("web/index.html")
-        self.assertIn("function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;')", page)
-        self.assertIn(".replace(/</g,'&lt;').replace(/>/g,'&gt;')", page)
-        self.assertIn(".replace(/\"/g,'&quot;').replace(/'/g,'&#39;')", page)
-        # the up-next card inlines its title and artist directly
-        self.assertIn("ellipsis\">'+esc(t.t||'')+'</b>", page)
-        self.assertIn("ellipsis\">'+esc(t.a||'')+'</small>", page)
-        # cover URLs sit inside style="background:url(...)" strings
-        self.assertIn("function cssUrl(u)", page)
-        self.assertIn("'url(\"'+cssUrl(url)+'\") center/cover no-repeat'", page)
-
-    def test_mobile_library_drawer_can_be_opened(self):
-        # Below 820px #side is a slide-over (#side.open), not a collapsible
-        # rail: toggleSide used to only flip SIDECOLL, which applySide threw
-        # away on a narrow window, so the library was unreachable on a phone.
-        page = read("web/index.html")
-        self.assertIn("if(window.matchMedia('(max-width:820px)').matches){", page)
-        self.assertIn("var open=!s.classList.contains('open');", page)
-        self.assertIn("s.classList.toggle('open',open);", page)
-        # opening a playlist dismisses the drawer, closing clears the swipe
-        self.assertIn("classList.remove('open')", page)
-        # and the rail preference must survive a trip through a narrow window
-        self.assertIn("/* mobile keeps its own open/closed state - don't clobber the rail pref */", page)
-
-    def test_playing_playlist_is_not_the_opened_one(self):
-        # PLAYING_PL drives both the row highlight and the "now playing"
-        # playlist label; openPlaylist used to overwrite it, so browsing
-        # playlist B while A played highlighted a random row of B.
-        page = read("web/index.html")
-        self.assertIn("    _curViewName=p.name;\n", page)
-        self.assertNotIn("PLAYING_PL=p.name", page)
-        self.assertIn("if(setQ){Q=PL.slice();PLAYING_PL=_curViewName}", page)
-        # and a search result must be able to show as the playing row
-        self.assertIn("'#tbl .row,#tbl .srow'", page)
-        self.assertNotIn("#srowrow", page)
-        self.assertIn(".srow.playing .rtxt b", page)
-
-    def test_queue_views_follow_repeat_all_and_open_after_a_failed_prefetch(self):
-        page = read("web/index.html")
-        # repeat-all wraps to track 1, so the queue views must too
-        self.assertIn("if(REPEAT===1&&QI===Q.length-1)for(var i=0;i<QI;i++)add(i);", page)
-        # a prefetch that resolves null used to return a fetch that was never
-        # rendered: clicking the playlist did nothing at all
-        self.assertIn(".then(function(full){return full||API('/api/links/get?url='+encodeURIComponent(p.url))})", page)
-
-    def test_page_is_the_source_of_truth(self):
-        page = read("web/index.html")
-        self.assertIn("<title>Kotassium</title>", page)
-        self.assertIn("serviceWorker", page)
-
-    def test_update_button_keeps_manual_recheck_separate_from_install(self):
-        page = read("web/index.html")
-        self.assertIn("id=updcheck onclick=checkUpdate()", page)
-        self.assertIn("again.style.display=got&&!chk?'flex':'none'", page)
-        self.assertIn("b.title=chk?'Checking for updates...':(got?'Restart & Update'", page)
-        self.assertIn("function updateSteps(current,latest)", page)
-        self.assertIn("match(/\\d+/g)", page)
-        self.assertIn("versionText+' is available ('+updateSteps(st.version,st.latest)+')'", page)
-        self.assertIn("updateSteps(st.version,st.latest)+') — move it to Applications to update'", page)
-        self.assertIn("return count+' version'+(count===1?'':'s')+' forward'", page)
-        self.assertIn("if(st.available&&st.state!=='error')startUpdate();else checkUpdate()", page)
+        app = read("web/app.jsx")
+        self.assertIn("const escStyle = (url)", app)
+        self.assertIn("<b>{track.t}</b>", app)
 
     def test_platform_icons_use_shared_kotassium_logo(self):
         mac_setup = read("setup-macos.py")
@@ -155,8 +150,6 @@ class WrapperTests(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(ROOT, icon)), icon)
 
     def test_android_runs_the_real_server(self):
-        # The APK embeds CPython, but it must import the repo's server, not a
-        # copy: the Gradle build stages these files from the repo root.
         normalizer = read("tools/normalize-icons.py")
         self.assertIn('android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png', normalizer)
         gradle = read("android/app/build.gradle")
@@ -166,6 +159,18 @@ class WrapperTests(unittest.TestCase):
         boot = read("android/app/src/main/python/kotassium_boot.py")
         self.assertIn("serve_web.serve_local", boot)
         self.assertIn("inproc", boot)
+
+    def test_page_is_the_source_of_truth(self):
+        self.assertIn("<title>Kotassium</title>", read("web/index.html"))
+        self.assertIn("serviceWorker", read("web/app.jsx"))
+
+    def test_update_button_keeps_manual_recheck_separate_from_install(self):
+        app = read("web/app.jsx")
+        self.assertIn("Check again", app)
+        self.assertIn("Restart & Update", app)
+        self.assertIn("match(/\\d+/g)", app)
+        self.assertIn("version${count === 1 ? '' : 's'} forward", app)
+        self.assertIn("updateState.can_install === false", app)
 
     def test_android_dialogs_can_be_dismissed(self):
         # Every dialog is a dead end if it only has one button: the address

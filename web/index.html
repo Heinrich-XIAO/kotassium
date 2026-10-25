@@ -33,6 +33,9 @@ svg{display:block}
 #main,#sideList{scrollbar-width:none}
 #main::-webkit-scrollbar,#sideList::-webkit-scrollbar{width:0}
 #sideHead{padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+#sideHead #libBtn{display:grid;width:28px;height:28px;border-radius:50%;background:transparent;color:#b3b3b3;flex:none;padding:4px}
+#sideHead #libBtn:hover{color:#fff;background:#ffffff14}
+.top-lib{display:none!important}
 #sideHead b{color:#b3b3b3;display:flex;align-items:center;gap:6px}
 #addBtn{width:26px;height:26px;color:#b3b3b3;display:grid;place-items:center;cursor:pointer}
 #addBtn:hover{color:#fff}
@@ -40,6 +43,7 @@ svg{display:block}
 #collSide:hover{color:#fff}
 #side.collapsed{flex:0 0 68px}
 #side.collapsed #sideHead{justify-content:center;padding:12px 0}
+#side.collapsed #sideHead #libBtn{display:grid!important}
 #side.collapsed #sideHead b,#side.collapsed #addBtn{display:none}
 #side.collapsed .pitem{justify-content:center;padding:6px 0;gap:0}
 #side.collapsed .pmeta{display:none}
@@ -70,8 +74,8 @@ svg{display:block}
 .ccover{width:100%;aspect-ratio:1;border-radius:6px;position:relative}
 .card b{display:block;font-size:15px;margin:10px 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card small{color:#b3b3b3;font-size:12px;display:block}
-#cardPlay{position:absolute;right:10px;bottom:10px;width:44px;height:44px;border-radius:50%;background:#1ed760;color:#000;display:grid;place-items:center;transition:transform .2s;box-shadow:0 6px 16px #0008}
-#cardPlay:hover{transform:scale(1.06)}
+#cardPlay,.card-play{position:absolute;right:10px;bottom:10px;width:44px;height:44px;border-radius:50%;background:#1ed760;color:#000;display:grid;place-items:center;transition:transform .2s;box-shadow:0 6px 16px #0008}
+#cardPlay:hover,.card-play:hover{transform:scale(1.06)}
 #plhead{padding:64px 32px 24px;display:flex;align-items:flex-end;gap:24px}
 #plx{width:210px;height:210px;border-radius:6px;flex:none;display:grid;place-items:center;font-size:56px;font-weight:800;color:#ffffffd9;box-shadow:0 8px 24px #0006}
 .plinfo small{display:block;font-size:13px;font-weight:700}
@@ -112,10 +116,12 @@ svg{display:block}
 /* --- Bottom bar --- */
 #bar{height:76px;flex:none;background:#000;display:grid;grid-template-columns:1fr 1.4fr 1fr;align-items:center;padding:0 16px;gap:12px;transition:height .2s}
 #bar.collapsed{height:52px;display:flex;align-items:center;gap:8px;padding:8px 12px;overflow:hidden}
+#bar.collapsed #thumbstrip{min-width:0}
 #bar.collapsed .barfull{display:none}
 #bar .collbtn{width:32px;height:32px;border-radius:50%;background:#1f1f1f;color:#fff;display:grid;place-items:center;flex:none}
 #thumbstrip{display:none;gap:6px;overflow-x:auto;flex:1;align-items:center}
 #bar.collapsed #thumbstrip{display:flex}
+#bar.collapsed .collbtn{display:grid}
 .thumb{width:36px;height:36px;border-radius:4px;flex:none;background:#282828;cursor:pointer;position:relative}
 .thumb.cur{outline:2px solid #1ed760}
 .thumb:hover{transform:scale(1.06)}
@@ -141,11 +147,24 @@ svg{display:block}
 #volf{position:absolute;left:0;top:6px;bottom:6px;background:#fff;border-radius:2px}
 #vol.dragging #volf{background:#1ed760}
 #fs{display:none}
+#dfsArt,#fsArt,#nowc{background-size:cover!important;background-position:center!important}
+.track-cover{width:40px;height:40px;border-radius:4px;flex:none;background-size:cover!important;background-position:center!important}
+.rside,.volume-row{display:flex;align-items:center;justify-content:flex-end;gap:10px;color:#b3b3b3}
+.volume-row{width:90px}
+#vol{width:100%;height:16px}
+.stream-only{font-size:10px;color:#b3b3b3}
 /* toasts: one card style for every notification (modelled on "up next"),
    each dismissible by swiping it to the right */
 .tcard{position:fixed;right:20px;background:#181818;color:#fff;padding:10px 14px;border-radius:6px;font-size:13px;box-shadow:0 8px 24px #0009;border:1px solid #ffffff1f;opacity:0;pointer-events:none;transition:opacity .3s;z-index:99;max-width:280px;touch-action:none;user-select:none;-webkit-user-select:none}
 #toast{bottom:88px;font-weight:600}
-#upnext{top:88px}
+#upnext{top:88px;display:flex;align-items:center;gap:8px}
+#upnext .upnext-label{font-size:11px;color:#b3b3b3;flex:none}
+#upnext .upnext-art{width:36px;height:36px;border-radius:4px;flex:none;background-size:cover;background-position:center}
+#upnext .upnext-copy{min-width:0}
+#upnext .upnext-copy b,#upnext .upnext-copy small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#upnext .upnext-copy b{font-size:13px}#upnext .upnext-copy small{font-size:11px;color:#b3b3b3}
+#upnext:not(.visible){opacity:0;pointer-events:none}
+#upnext.visible{opacity:1;pointer-events:auto}
 #dl{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:#181818;border:1px solid #ffffff1f;color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;display:none;align-items:center;gap:10px;z-index:99;min-width:280px;max-width:420px}
 #dl.on{display:flex}
 #dllabel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
@@ -173,6 +192,12 @@ svg{display:block}
 #dfsBtn{display:grid;place-items:center}
 #dfs{display:none}
 body.dfs #dfs{display:flex;position:fixed;left:0;top:0;right:0;bottom:0;z-index:90;background:linear-gradient(180deg,#1c1c1c,#0a0a0a 60%)}
+#dfs.open{display:flex;position:fixed;inset:0;z-index:90;background:linear-gradient(180deg,#1c1c1c,#0a0a0a 60%)}
+#dfs.open #dfsQueue{width:340px;flex:none;border-left:1px solid #ffffff14;background:#111;display:flex;flex-direction:column;min-height:0;overflow:auto}
+#dfs.open #dfsArt{width:min(52vh,40vw);aspect-ratio:1;border-radius:8px;background:#282828;box-shadow:0 30px 80px #000c;flex:none}
+#dfs.open #dfsMain{position:relative;flex:1;min-width:0;display:flex;align-items:center;justify-content:center}
+body.dfs.dfsidle #dfsTop{opacity:0;pointer-events:none}
+body.dfs.dfsidle #dfsInfo{opacity:1}
 body.dfs #bar{position:fixed;left:0;right:0;bottom:0;z-index:95;transition:opacity .3s}
 body.dfs.dfsidle #bar{opacity:0;pointer-events:none}
 #dfsMain{position:relative;flex:1;min-width:0;display:flex;align-items:center;justify-content:center}
@@ -184,9 +209,16 @@ body.dfs.dfsidle #dfsTop{opacity:0;pointer-events:none}
 #dfsExit:hover{background:#ffffff26;color:#fff}
 #dfsInfo{position:absolute;left:32px;bottom:32px;max-width:60%;opacity:0;transition:opacity .3s}
 body.dfs.dfsidle #dfsInfo{opacity:1}
+#dfsExit{width:40px;height:40px;border-radius:50%;background:#ffffff14;color:#e5e5e5;display:grid;place-items:center;flex:none;border:0;cursor:pointer}
+#dfsTop{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:18px 24px}
+#dfsTopTitle{flex:1;min-width:0;font-size:14px;font-weight:700;color:#b3b3b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#dfsInfo{position:absolute;left:32px;bottom:32px;max-width:60%;opacity:0;transition:opacity .3s}
 #dfsInfo b{display:block;font-size:30px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #dfsInfo small{display:block;font-size:17px;color:#b3b3b3;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#dfsExit{width:40px;height:40px;border-radius:50%;background:#ffffff14;color:#e5e5e5;display:grid;place-items:center;flex:none;border:0;cursor:pointer}
+#dfsExit:hover{background:#ffffff26;color:#fff}
 #dfsQueue{width:340px;flex:none;border-left:1px solid #ffffff14;background:#111;display:flex;flex-direction:column;min-height:0}
+#dfsQueue #dfsQrows{display:block!important;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-bottom:96px}
 #dfsQhead{display:flex;align-items:baseline;justify-content:space-between;padding:20px 20px 4px}
 #dfsQhead b{font-size:16px;font-weight:800}
 #dfsQhead span{font-size:12px;color:#8a8a8a}
@@ -199,8 +231,11 @@ body.dfs.dfsidle #dfsInfo{opacity:1}
 .dfsQt b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dfsQt small{display:block;font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #dfsQrows{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-bottom:96px}
+#dfsQueue #dfsQrows{display:block!important}
 /* mobile */
 #libBtn{display:none;width:48px;height:48px;border-radius:50%;background:#1f1f1f;flex:none;place-items:center}
+.top-lib{display:grid!important}
+#sideHead #libBtn{display:none!important}
 @media(max-width:820px){
 body{-webkit-tap-highlight-color:transparent}
 #libBtn{display:grid}
@@ -208,6 +243,8 @@ body{-webkit-tap-highlight-color:transparent}
 #collSide{display:none}
 #searchwrap{flex:1 1 auto;min-width:0}
 #qDiv,#qBrowse{display:none}
+#sideHead #libBtn{display:none!important}
+.top-lib{display:grid!important}
 #mid{position:relative;padding:4px}
 #side{position:absolute;z-index:30;left:4px;top:4px;bottom:4px;width:280px;display:none;background:#181818;border-radius:8px;box-shadow:0 12px 32px #000d;flex:none;touch-action:pan-y pinch-zoom}
 #side.open{display:flex}
@@ -223,10 +260,16 @@ body{-webkit-tap-highlight-color:transparent}
 .row .ralb{display:none}
 #bar{grid-template-columns:1fr auto 1fr;padding:0 8px;gap:8px}
 #rside{justify-content:center}
+#rside .volume-row{width:auto}
+#rside .volume-row .aicon,#rside .volume-row #vol{display:none}
+#rside #dfsBtn{display:none}
 #nowp{min-width:0}
 #nowc{width:40px;height:40px}
 #nowt b{font-size:13px}#nowt small{font-size:11px}
-#btns{gap:10px}
+#btns{gap:8px}
+#btns button{padding:4px}
+#btns .aicon svg{width:17px;height:17px}
+#btns button[aria-label="Radio"],#btns button[aria-label="Collapse player"]{display:none}
 #playb{width:36px;height:36px;display:flex;align-items:center;justify-content:center}
 #prow{max-width:none}
 .ptime{min-width:28px;font-size:10px}
@@ -246,6 +289,7 @@ body{-webkit-tap-highlight-color:transparent}
 #fsSeek .ptime{font-size:12px;min-width:38px;color:#b3b3b3;font-variant-numeric:tabular-nums}
 #fsProg{flex:1;height:28px;position:relative;cursor:pointer;touch-action:none}
 #fsProg::before{content:'';position:absolute;left:0;right:0;top:calc(50% - 3px);height:6px;background:#ffffff33;border-radius:3px}
+#fsProg i{position:absolute;left:0;top:calc(50% - 3px);height:6px;background:#fff;border-radius:3px}
 #fsProgf{position:absolute;left:0;top:calc(50% - 3px);height:6px;background:#fff;border-radius:3px;width:0}
 #fsProg:active #fsProgf{background:#1ed760}
 #fsBtns{display:flex;align-items:center;justify-content:center;gap:22px;flex:none}
@@ -257,8 +301,22 @@ body{-webkit-tap-highlight-color:transparent}
 #fsVol .aicon svg{width:24px;height:24px}
 #fsVolBar{flex:1;height:28px;position:relative;cursor:pointer;touch-action:none}
 #fsVolBar::before{content:'';position:absolute;left:0;right:0;top:calc(50% - 3px);height:6px;background:#ffffff33;border-radius:3px}
+#fsVolBar i{position:absolute;left:0;top:calc(50% - 3px);height:6px;background:#fff;border-radius:3px}
 #fsVolFill{position:absolute;left:0;top:calc(50% - 3px);height:6px;background:#fff;border-radius:3px;width:0}
 #fsVolBar:active #fsVolFill{background:#1ed760}
+.fs-seek{display:flex;align-items:center;gap:12px;flex:none;touch-action:none}
+.fs-seek .ptime{font-size:12px;min-width:38px}
+.fs-progress{flex:1;height:28px;position:relative;cursor:pointer;touch-action:none}
+.fs-progress:before{content:'';position:absolute;left:0;right:0;top:calc(50% - 3px);height:6px;background:#ffffff33;border-radius:3px}
+.fs-progress i{position:absolute;left:0;top:calc(50% - 3px);height:6px;background:#fff;border-radius:3px}
+#fsBtns{display:flex;align-items:center;justify-content:center;gap:22px;flex:none}
+#fsBtns .aicon{flex:none}
+#fsBtns .aicon svg{width:26px;height:26px}
+#fsPlay{width:60px;height:60px;flex:none;border-radius:50%;background:#fff;color:#000;display:grid;place-items:center}
+#fsVol{display:flex;align-items:center;gap:12px;flex:none;touch-action:none}
+#fsVolBar{flex:1;height:28px;position:relative;cursor:pointer;touch-action:none}
+#fsVolBar:before{content:'';position:absolute;left:0;right:0;top:calc(50% - 3px);height:6px;background:#ffffff33;border-radius:3px}
+#fsVolBar i{position:absolute;left:0;top:calc(50% - 3px);height:6px;background:#fff;border-radius:3px}
 /* variant F: scrollable up-next queue above a docked glass control island */
 #fsQueue{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin-top:2px}
 #fsQhead{display:flex;align-items:baseline;justify-content:space-between;padding:6px 4px}
@@ -273,1155 +331,37 @@ body{-webkit-tap-highlight-color:transparent}
 .fsQt small{display:block;font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fsQtime{font-size:12px;color:#6f6f6f;flex:none;font-variant-numeric:tabular-nums}
 #fsIsland{flex:none;margin-top:auto;background:#1c1c1cf2;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid #ffffff1f;border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:16px;box-shadow:0 18px 44px #0009}
+.fs-controls{display:flex;align-items:center;justify-content:center;gap:22px;flex:none}
+.fs-play{width:60px;height:60px;border-radius:50%;background:#fff;color:#000;display:grid;place-items:center;flex:none}
+.fs-volume{display:flex;align-items:center;gap:12px;flex:none;touch-action:none}
+.fs-volume-bar{flex:1;height:28px;position:relative;cursor:pointer;touch-action:none}
+.fs-volume-bar:before{content:'';position:absolute;left:0;right:0;top:calc(50% - 3px);height:6px;background:#ffffff33;border-radius:3px}
+.fs-volume-bar i{position:absolute;left:0;top:calc(50% - 3px);height:6px;background:#fff;border-radius:3px}
+.repeat-one{font-size:9px;position:absolute;margin-left:-7px;margin-top:8px;color:currentColor}
+.dfsQsect{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8a8a8a;font-weight:700;padding:16px 20px 6px}
+.dfsQrow{display:flex;align-items:center;gap:12px;padding:8px 20px;cursor:pointer}
+.dfsQcov{width:40px;height:40px;border-radius:4px;flex:none;background:#282828;background-size:cover;background-position:center}
+.dfsQt{min-width:0;flex:1}.dfsQt b,.dfsQt small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dfsQt b{font-size:14px;font-weight:600}.dfsQt small{font-size:12px;color:#8a8a8a}
+#fsQueue{padding:6px 4px}
+#fsQhead{display:flex;justify-content:space-between;padding-bottom:4px;color:#b3b3b3}
+#fsQhead span{font-size:12px;color:#8a8a8a}
+.fsQrow{display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:10px;cursor:pointer}
+.fsQn{width:18px;color:#6f6f6f;text-align:center;flex:none}
+.fsQcov{width:40px;height:40px;border-radius:6px;flex:none;background-size:cover;background-position:center}
+.fsQt{min-width:0;flex:1}.fsQt b,.fsQt small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fsQt small{color:#8a8a8a}.fsQtime{font-size:12px;color:#6f6f6f}
 #fsProgf::after{content:'';position:absolute;right:-7px;top:50%;width:14px;height:14px;border-radius:50%;background:#fff;transform:translateY(-50%);box-shadow:0 2px 6px #0007}}
 /* the control buttons are flex:none so they never squash into an ellipse;
    on the narrowest phones the gap shrinks instead to keep the row inside */
 @media(max-width:360px){#fsBtns{gap:16px}}
+#fsQueue{display:none}
+#dfsQueue{display:none}
+@media(max-width:820px){#fsQueue{display:block}#dfsQueue{display:flex}}
+body.dfs #dfsQueue{display:flex}
+#toast.visible,#upnext.visible{opacity:1;pointer-events:auto}
+#upnext{top:88px}
 </style></head><body>
-<div id=top>
-<button id=libBtn onclick="toggleSide()" title="Collapse library"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M3 3h2.5v18H3zM7 3h2.5v18H7zM11 3.6L21.6 5v14L11 20.4z"/></svg></button>
-<button id=homeBtn onclick=goHome() title="Home"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 3l9 8h-2.5v9h-5v-6h-3v6h-5v-9H3z"/></svg></button>
-<div id=searchwrap><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b3b3b3" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id=q placeholder="What do you want to play?" oninput="document.getElementById('searchwrap').classList.toggle('filled',!!this.value)" onkeydown="if(event.key==='Enter')doSearch()"><button id=qClear onclick="var i=document.getElementById('q');i.value='';document.getElementById('searchwrap').classList.remove('filled');i.focus()" title="Clear search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button><span id=qDiv></span><button id=qBrowse onclick=goHome() title="Browse your playlists"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4.5h13v2H3zM3 8.25h13v2H3zM3 12h18v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z"/></svg></button></div>
-<div id=upd><span id=updtext></span><button id=updcheck onclick=checkUpdate() title="Check again for updates"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 21 10 17 10"/><polyline points="1 20 7 14 7 20"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button><button id=updbtn onclick=updAction() title="Check for updates"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div>
-</div>
-<div id=mid>
-<aside id=side>
-<div id=sideHead><b><svg width="18" height="18" viewBox="0 0 24 24" fill="#b3b3b3"><path d="M3 3h2.5v18H3zM7 3h2.5v18H7zM11 3.6L21.6 5v14L11 20.4z"/></svg>Your Library</b>
-<span id=addBtn title="Add Spotify link" onclick=abox()><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a.75.75 0 011.5 0v5h5a.75.75 0 010 1.5h-5v5a.75.75 0 01-1.5 0V8H3a.75.75 0 010-1.5h5v-5z"/></svg></span></div>
-<div id=sideList></div>
-<div id=addBox style="display:none"><input id=plink placeholder="Paste a Spotify playlist, album or track link" onkeydown="if(event.key==='Enter')addLink()"></div>
-</aside>
-<main id=main></main>
-</div>
-<div id=bar>
-<div id=thumbstrip></div>
-<div class=barfull style="display:contents">
-<div id=nowp><div id=nowc onclick=openFs() title="Open fullscreen player"></div><div id=nowt><b>Choose a playlist to listen</b><small>nothing playing</small></div></div>
-<div id=ctr>
-<div id=btns>
-<button class=aicon id=shufb onclick=toggleShuffle() title="Shuffle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>
-<button class=aicon id=prevb onclick=pv() title="Previous"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg></button>
-<button id=playb onclick=toggle() title="Play"><svg id=pbIcon width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(0.6 0)"/></svg></button>
-<button class=aicon id=nextb onclick=nx() title="Next"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg></button>
-<button class=aicon id=repeatb onclick=toggleRepeat() title="Repeat"><svg id=repeatIcon width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
-</div>
-<div id=prow><span class=ptime id=curt>0:00</span><div id=prog><div id=progf></div></div><span class=ptime id=tott>0:00</span></div>
-</div>
-<div id=rside>
-<button class=aicon title="Volume" onclick=muteVol()><svg id=volIcon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
-<div id=vol><div id=volf style="width:80%"></div></div>
-<button class=aicon id=dfsBtn onclick=toggleDfs() title="Full screen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
-</div>
-</div>
-</div>
-<div id=fs>
-<div id=fsGrip></div>
-<!-- collapsing is a swipe down (or the grip); no collapse button -->
-<div id=fsHead><span id=fsPl></span></div>
-<div id=fsArt></div>
-<div id=fsTxt><b id=fsTitle>Choose a playlist to listen</b><small id=fsArtist>nothing playing</small></div>
-<div id=fsQueue><div id=fsQhead><b>Up next</b><span id=fsQcount></span></div><div id=fsQrows></div></div>
-<div id=fsIsland>
-<div id=fsSeek><span class=ptime id=fsCur>0:00</span><div id=fsProg><div id=fsProgf></div></div><span class=ptime id=fsTot>0:00</span></div>
-<div id=fsBtns>
-<button class=aicon id=fsShuf onclick=toggleShuffle() title="Shuffle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>
-<button class=aicon id=fsprev onclick=pv() title="Previous"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg></button>
-<button id=fsPlay onclick=toggle() title="Play"><svg id=fsPlayIcon width="26" height="26" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(0.6 0)"/></svg></button>
-<button class=aicon id=fsnext onclick=nx() title="Next"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg></button>
-<button class=aicon id=fsRepeat onclick=toggleRepeat() title="Repeat"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
-</div>
-<div id=fsVol><button class=aicon title="Volume" onclick=muteVol()><svg id=volIcon2 width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button><div id=fsVolBar><div id=fsVolFill></div></div></div>
-</div>
-</div>
-<div id=dfs>
-<div id=dfsMain>
-<div id=dfsTop><span id=dfsTopTitle></span><button id=dfsExit onclick=exitDfs() title="Exit full screen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></div>
-<div id=dfsArt></div>
-<div id=dfsInfo><b id=dfsTitle>Choose a playlist to listen</b><small id=dfsArtist>nothing playing</small></div>
-</div>
-<div id=dfsQueue><div id=dfsQhead><b>Queue</b><span id=dfsQcount></span></div><div id=dfsQrows></div></div>
-</div>
-<div id=toast class=tcard></div>
-<div id=upnext class=tcard></div>
-<div id=dl><span id=dllabel>fetching</span><div id=dlbar><i id=dlfill></i></div><span id=dlpct>0%</span></div>
-<audio id=au preload=auto></audio>
-<script>
-var AU=document.getElementById('au');
-var Q=[],SHUF=false,REPEAT=1,RADIO=false;
-var LINKS=[],PL=null,PLAYING_PL=null;
-var _playlistPrefetchStarted={},_playlistPrefetchPending={};
-var API=function(u){return fetch(u).then(function(r){return r.json()})};
-/* esc() is the only thing between a Spotify/YouTube/Deezer title and
-   innerHTML, so it has to really escape. The old body replaced & with & and
-   < with < - both no-ops - so every title, playlist name, artist and
-   cover URL was parsed as markup wherever it was shown, and a track called
-   '<img src=x onerror=alert(1)>' ran as code. */
-function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
-function fmt(ms){ms=Number(ms)||0;var s=Math.round(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
-function secs(s){s=Number(s)||0;return Math.floor(s/60)+':'+String(Math.round(s)%60).padStart(2,'0')}
-var toast=(function(){var t=document.getElementById('toast'),h=0;
-  function hide(){clearTimeout(h);h=0;t.style.opacity=0;t.style.pointerEvents='none'}
-  function show(m){t.textContent=m;t.style.opacity=1;t.style.pointerEvents='auto';clearTimeout(h);h=setTimeout(hide,3000)}
-  /* swipe-dismiss hooks: pause the auto-hide while a drag is on, resume if it springs back */
-  t._pause=function(){if(h){clearTimeout(h);h=0}};
-  t._resume=function(){clearTimeout(h);h=setTimeout(hide,3000)};
-  swipeDismiss(t,hide);
-  return show})();
-/* toast cards follow the finger to the right and slide off past 70px;
-   pointer events cover touch and mouse in one path */
-function swipeDismiss(el,done){
-  var sx=0,sy=0,dx=0,go=false,dir=null,pre='';
-  el.addEventListener('pointerdown',function(e){
-    if(e.pointerType==='mouse'&&(e.button||0)!==0)return;
-    go=true;dir=null;dx=0;sx=e.clientX;sy=e.clientY;
-    el._drag=true;pre=el.style.opacity||'';
-    el.style.transition='none';
-    if(el._pause)el._pause();
-    try{el.setPointerCapture(e.pointerId)}catch(_){}
-  });
-  el.addEventListener('pointermove',function(e){
-    if(!go)return;
-    var mx=e.clientX-sx,my=e.clientY-sy;
-    if(dir===null){
-      if(Math.abs(mx)<5&&Math.abs(my)<5)return;
-      /* only a rightward gesture owns the drag; left/up lets the page behave */
-      if(mx<=0||Math.abs(mx)<=Math.abs(my)){go=false;el._drag=false;if(el._resume)el._resume();return}
-      dir=1}
-    dx=mx;
-    el.style.transform='translateX('+dx+'px)';
-    el.style.opacity=String(Math.max(0,1-dx/140));
-  });
-  function end(){
-    if(!go)return;go=false;
-    el.style.transition='transform .25s cubic-bezier(.2,.8,.2,1),opacity .25s';
-    if(dx>70){ /* far enough: slide off the right edge, then finish */
-      el.style.transform='translateX(150%)';el.style.opacity='0';
-      setTimeout(function(){el.style.transition='';el.style.transform='';el._drag=false;done()},250);
-    }else{ /* not far enough: spring back to where it was */
-      el.style.transform='';el.style.opacity=pre;
-      el._drag=false;
-      if(el._resume)el._resume();
-    }
-  }
-  el.addEventListener('pointerup',end);
-  el.addEventListener('pointercancel',end);
-}
-function upnextVis(on){var un=document.getElementById('upnext');if(un._drag)return;if(on&&un._gone)return;un.style.opacity=on?1:0;un.style.pointerEvents=on?'auto':'none'}
-(function(){var un=document.getElementById('upnext');swipeDismiss(un,function(){un._gone=true;upnextVis(false)})})();
-function hue(name){var h=0;name=String(name||'?');for(var i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))>>>0;return h%360}
-function gcss(name){if(!name)return 'linear-gradient(135deg,#333,#555)';
-  var h=hue(name);return 'linear-gradient(135deg,hsl('+h+',70%,38%),hsl('+((h+40)%360)+',60%,20%))'}
-/* cover caching: client fetches image, POSTs to server, rewrites UI */
-var _coverCache={};
-function postJSON(u,o){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}).then(function(r){return r.json()})}
-/* ---------------- download jobs ---------------- */
-function showDl(label,pct,status){
-  var d=document.getElementById('dl');if(!d)return;
-  d.classList.add('on');
-  document.getElementById('dllabel').textContent=(status==='done'?'ready: ':status==='error'?'failed: ':'downloading ')+(label||'');
-  document.getElementById('dlpct').textContent=Math.round(pct||0)+'%';
-  document.getElementById('dlfill').style.width=Math.max(0,Math.min(100,pct||0))+'%';
-}
-function hideDl(){var d=document.getElementById('dl');if(d)d.classList.remove('on')}
-var _dlActive=null;
-function dlJob(id,label,quiet){
-  return API('/api/ytdl?id='+encodeURIComponent(id)).then(function(j){
-    if(j.error)throw new Error(j.error);
-    if(j.file)return j;
-    if(!j.job)throw new Error('no job');
-    var mine=j.job;
-    function done(){if(!quiet&&_dlActive===mine){_dlActive=null;hideDl()}}
-    return new Promise(function(res,rej){
-      (function tick(){
-        API('/api/job?id='+j.job).then(function(s){
-          if(!s||s.error){done();return rej(new Error('job lost'))}
-          if(!quiet){
-            if(_dlActive===null)_dlActive=mine;
-            if(_dlActive===mine&&s.status!=='done'&&s.status!=='error')
-              showDl(label||s.label,s.pct,s.status);
-          }
-          if(s.status==='done'){done();res({file:s.file})}
-          else if(s.status==='error'){done();rej(new Error(s.error||'download failed'))}
-          else setTimeout(tick,350);
-        },function(){setTimeout(tick,800)});
-      })();
-    });
-  });
-}
-/* ---------------- now playing (desktop MPRIS / notifications) ---------------- */
-var _npKey='',_npAt=0;
-function reportNow(state,tr){
-  tr=tr||Q[QI];if(!tr)return;
-  state=state||(AU.paused?'paused':'playing');
-  var now=Date.now(),key=[tr.t,tr.a,state].join('|');
-  if(key===_npKey&&now-_npAt<2500)return;
-  _npKey=key;_npAt=now;
-  postJSON('/api/nowplaying',{t:tr.t||'',a:tr.a||'',album:tr.album||'',cover:tr.cover||'',
-    ms:tr.ms||0,pos:Math.round((AU.currentTime||0)*1000),state:state}).catch(function(){});
-}
-function cacheCover(url){
-  if(!url||url.indexOf('/cover/')===0){return Promise.resolve(null)}
-  if(_coverCache[url]==='pending')return Promise.resolve(null);
-  if(_coverCache[url])return Promise.resolve(_coverCache[url]);
-  _coverCache[url]='pending';
-  return fetch(url,{mode:'cors'}).then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.blob()})
-    .then(function(b){return new Promise(function(res,rej){var rd=new FileReader();rd.onload=function(){res(rd.result.split(',')[1])};rd.onerror=rej;rd.readAsDataURL(b)})})
-    .then(function(b64){return postJSON('/api/cover/cache',{url:url,data:b64})})
-    .then(function(j){if(j&&j.file){_coverCache[url]=j.file;rewriteCover(url,j.file)};return j&&j.file})
-    .catch(function(e){_coverCache[url]=null;return null});
-}
-function rewriteCover(url,key){
-  document.querySelectorAll('[data-cover-url]').forEach(function(el){
-    if(el.getAttribute('data-cover-url')===url){
-      el.style.background='url("/cover/'+key+'") center/cover no-repeat';
-      el.removeAttribute('data-cover-url')}})}
-/* The server owns the durable url -> filename map (covers.json); _coverCache
-   above is only this page-load's copy of it, which used to start empty on
-   every reload - so the same thumbnail resolved to a local file in one view
-   and to the raw remote URL in another, until each view re-learned it. Seed
-   from the server once at startup so every surface agrees on first paint. */
-function seedCoverCache(){
-  return API('/api/cover/index').then(function(m){
-    if(!m||typeof m!=='object')return;
-    for(var u in m){if(_coverCache[u]===undefined&&m[u])_coverCache[u]=m[u]}
-  }).catch(function(){})}
-/* Several views build style="background:..." as a string, so a quote in a
-   cover URL would close the attribute and let the rest be read as markup or
-   CSS. Encode the handful of characters that can break out of a url(). */
-function cssUrl(u){return String(u==null?'':u).replace(/["'<>)]/g,function(c){return encodeURIComponent(c)})}
-function coverBg(url){
-  if(!url)return 'linear-gradient(135deg,#333,#555)';
-  var k=_coverCache[url];if(k&&k!=='pending')return 'url("/cover/'+cssUrl(k)+'") center/cover no-repeat';
-  setTimeout(function(){cacheCover(url)},0);
-  return 'url("'+cssUrl(url)+'") center/cover no-repeat';
-}
-/* ---------------- sidebar ---------------- */
-var SIDECOLL=false;
-function toggleSide(){
-  var s=document.getElementById('side');if(!s)return;
-  /* Under 820px the library is a slide-over drawer (#side.open) rather than a
-     collapsible rail, so flipping SIDECOLL here - which applySide throws away
-     on a narrow window - did nothing at all and the drawer could never be
-     opened on a phone. Toggle the drawer instead, always from a clean
-     transform so a half-finished swipe can't leave it off-screen. */
-  if(window.matchMedia('(max-width:820px)').matches){
-    var open=!s.classList.contains('open');
-    s.classList.remove('collapsed');
-    s.style.transition='';s.style.transform='';
-    s.classList.toggle('open',open);
-    return}
-  SIDECOLL=!SIDECOLL;
-  applySide();
-  try{localStorage.setItem('kot_side_collapsed',SIDECOLL?'1':'0')}catch(e){}
-}
-function applySide(){
-  var s=document.getElementById('side');if(!s)return;
-  /* mobile keeps its own open/closed state - don't clobber the rail pref */
-  if(window.matchMedia('(max-width:820px)').matches){s.classList.remove('collapsed');return}
-  s.classList.toggle('collapsed',SIDECOLL);
-  var b=document.getElementById('libBtn');
-  if(b)b.title=SIDECOLL?'Expand library':'Collapse library';
-}
-try{if(localStorage.getItem('kot_side_collapsed')==='1')SIDECOLL=true}catch(e){}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applySide);else applySide();
-function loadSide(){
-  return API('/api/links').then(function(j){
-    LINKS=j.links||[];
-    prefetchPlaylistStarts(LINKS);
-    var L=document.getElementById('sideList');L.innerHTML='';
-    if(!LINKS.length){
-      L.innerHTML='<div id=empty><h3>Your library is empty</h3><p>Click + above and paste a Spotify playlist link.</p></div>';return}
-    LINKS.forEach(function(p,i){
-      var li=document.createElement('div');li.className='pitem';li.dataset.i=i;li.title=p.name||'';
-      var c=document.createElement('div');c.className='pcover';c.style.background=gcss(p.name);c.textContent=(p.name||'?').charAt(0).toUpperCase();
-      var _pc=(p.cover||p.tracks&&p.tracks[0]&&p.tracks[0].cover||'');if(_pc){c.style.background=coverBg(_pc);c.setAttribute('data-cover-url',_pc)}
-      var play=document.createElement('span');play.className='pcoverPlay';play.title='Play '+(p.name||'playlist');
-      play.innerHTML='<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5l10 5.5-10 5.5z"/></svg>';
-      play.onclick=function(e){e.stopPropagation();openPlaylist(i).then(function(){playList()})};
-      c.onclick=function(e){e.stopPropagation();openPlaylist(i).then(function(){playList()})};
-      c.appendChild(play);
-      var meta=document.createElement('div');meta.className='pmeta';
-      var b=document.createElement('b');b.textContent=p.name||'?';
-      var s=document.createElement('small');
-      var n=(typeof p.total==='number'&&p.total>p.count)?p.count+' of '+p.total+' songs':(p.count)+' songs'+(p.partial?' (partial)':'');
-      s.textContent=n;
-      meta.appendChild(b);meta.appendChild(s);li.appendChild(c);li.appendChild(meta);
-      li.onclick=function(){openPlaylist(i)};
-      L.appendChild(li)})});
-}
-function abox(){var b=document.getElementById('addBox');
-  b.style.display=(b.style.display==='none'||!b.style.display)?'block':'none';
-  if(b.style.display==='block')document.getElementById('plink').focus()}
-function addLink(){
-  var u=document.getElementById('plink').value.trim();if(!u)return;
-  /* resolving a big playlist can take a while - keep the hint on screen and
-     never leave the promise uncaught, otherwise a failure is silent. */
-  var hold=setInterval(function(){toast('resolving link...')},2500);
-  toast('resolving link...');
-  function stop(){clearInterval(hold)}
-  API('/api/spot/resolve?url='+encodeURIComponent(u)).then(function(j){
-    stop();
-    if(!j||j.error){toast('could not open: '+((j&&(j.error_description||j.error))||'no answer from the server'));return}
-    document.getElementById('plink').value='';
-    return loadSide().then(function(){
-      var i=LINKS.reduce(function(a,p,ix){return p.url===u||p.name===j.name?ix:a},-1);
-      toast('saved: '+(j.name||'link')+' - '+((j.tracks||[]).length)+' tracks');
-      if(i>=0)openPlaylist(i)})}).catch(function(e){
-        stop();toast('could not open: '+((e&&(e.message||e))||'network error'))})}
-/* Fetch each saved playlist and warm the track that Play would pick with the
-   current shuffle setting. The per-link guard prevents repeat visits from
-   launching duplicate metadata requests; prefetch itself de-dupes track jobs. */
-function prefetchPlaylistStarts(links){
-  (links||[]).forEach(function(link){
-    var key=link.url||link.name||'';
-    if(!key||_playlistPrefetchStarted[key])return;
-    _playlistPrefetchStarted[key]=true;
-    _playlistPrefetchPending[key]=API('/api/links/get?url='+encodeURIComponent(link.url||'')).then(function(full){
-      var tracks=(full&&full.tracks||[]).filter(function(t){return t&&t.t});
-      if(!tracks.length){delete _playlistPrefetchStarted[key];return null}
-      var choice=SHUF?Math.floor(Math.random()*tracks.length):0;
-      _playlistPrefetchStarted[key]=tracks[choice];
-      prefetch(tracks[choice]);
-      return full;
-    }).catch(function(){delete _playlistPrefetchStarted[key];return null});
-  });
-}
-/* ---------------- home ---------------- */
-function goHome(){var qi=document.getElementById('q');qi.value='';document.getElementById('searchwrap').classList.remove('filled');renderHome()}
-function renderHome(){
-  var m=document.getElementById('main');
-  m.innerHTML='<div id=homeView><h2>Your playlists</h2><div class=cardgrid></div></div>';
-  var grid=m.querySelector('.cardgrid');
-  if(!LINKS.length){grid.innerHTML='<div id=empty>No playlists yet - add one with the + button.</div>';return}
-  LINKS.forEach(function(p,i){
-    var c=document.createElement('div');c.className='card';
-    var cv=document.createElement('div');cv.className='ccover';cv.style.background=gcss(p.name);
-    var _cc=(p.cover||p.tracks&&p.tracks[0]&&p.tracks[0].cover||'');if(_cc){cv.style.background=coverBg(_cc);cv.setAttribute('data-cover-url',_cc)}
-    var pl=document.createElement('button');pl.id='cardPlay';pl.title='Play '+p.name;
-    pl.innerHTML='<svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5l10 5.5-10 5.5z"/></svg>';
-    pl.onclick=function(e){e.stopPropagation();openPlaylist(i).then(function(){playList()})};
-    cv.appendChild(pl);c.appendChild(cv);
-    var b=document.createElement('b');b.textContent=p.name||'?';
-    var s=document.createElement('small');s.textContent=(p.total||p.count)+' songs';
-    c.appendChild(b);c.appendChild(s);
-    c.onclick=function(){openPlaylist(i)};
-    grid.appendChild(c)})};
-function card(p){return ''}
-/* ---------------- playlist view ---------------- */
-function openPlaylist(i){
-  var p=LINKS[i];if(!p)return Promise.resolve();
-  if(window.matchMedia('(max-width:820px)').matches)document.getElementById('side').classList.remove('open');
-  var pending=_playlistPrefetchPending[p.url||p.name||''];
-  /* A prefetch that failed - or that found no tracks - resolves null, so
-     re-fetch directly. Returning that second request from inside the first
-     .then() used to drop it: the click did nothing at all. */
-  return (pending||API('/api/links/get?url='+encodeURIComponent(p.url)))
-    .then(function(full){return full||API('/api/links/get?url='+encodeURIComponent(p.url))})
-    .then(function(full){
-    if(full.error)full=p;
-    PL=(full.tracks||[]).filter(function(t){return t&&t.t});
-    _curViewName=p.name;
-    renderPlaylistView(p.name||'Playlist',PL);
-    markActive();
-  });
-}
-function renderPlaylistView(name,tracks){
-  var m=document.getElementById('main');var h=hue(name);
-  m.innerHTML=
-  '<div id=plhead style="background:linear-gradient(180deg,hsl('+h+',65%,30%),hsl('+((h+40)%360)+',60%,22%) 60%,#12121200)">'+
-  '<div id=plx style="background:'+gcss(name)+'">'+esc(name.charAt(0))+'</div>'+
-  '<div class=plinfo><small>Public Playlist</small><h1>'+esc(name)+'</h1><p>'+(tracks.length)+' song'+(tracks.length===1?'':'s')+'</p></div></div>'+
-  '<div id=plactions>'+
-  '<button id=bigplay onclick=playList() title="Play"><svg viewBox="0 0 16 16" fill="currentColor" style="width:28px;height:28px"><path d="M4 2.5l10 5.5-10 5.5z"/></svg></button>'+
-  '<button class=aicon id=shuf2 onclick=toggleShuffle() title="Shuffle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>'+
-  '<button class=aicon id=rb2 onclick=toggleRepeat() title="Repeat"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>'+
-  '</div>'+
-  '<div id=tbl><div class=tr-head><span>#</span><span>Title</span><span>Album</span><span style="text-align:right;color:#b3b3b3">Duration</span></div></div>';
-  var t=document.getElementById('tbl');
-  tracks.forEach(function(tr,i){
-    var row=document.createElement('div');row.className='row';row.dataset.i=i;
-    var cvb=tr.cover?coverBg(tr.cover):gcss(tr.album||tr.t);
-    var alb=tr.album||'';
-    row.innerHTML=
-    '<div><span class=trnum>'+(i+1)+'</span></div>'+
-    '<div class=rt><div style="width:40px;height:40px;border-radius:4px;flex:none;background:'+cvb+'" '+(tr.cover?'data-cover-url="'+esc(tr.cover)+'"':'')+'></div>'+
-    '<div class=rtxt><b>'+esc(tr.t||'')+'</b><small>'+esc(tr.a||'')+'</small></div></div>'+
-    '<div class=ralb>'+esc(alb)+'</div>'+
-    '<div class=rdura>'+fmt(tr.ms)+'</div>';
-    row.onclick=function(){playT(i,true)};
-    t.appendChild(row)});
-}
-/* ---------------- search ---------------- */
-function doSearch(){
-  var q=document.getElementById('q').value.trim();if(!q)return;
-  var m=document.getElementById('main');
-  m.innerHTML='<div id=homeView><h2>Searching \u201c'+esc(q)+'\u201d...</h2></div>';
-  API('/api/search?q='+encodeURIComponent(q)).then(function(j){
-    var res=(j.results||[]);
-    m.innerHTML='<div id=homeView><h2>Results for \u201c'+esc(q)+'\u201d</h2></div><div id=tbl style="padding-top:0"><div class=tr-head><span></span><span>Title</span><span>Source</span><span></span></div></div>';
-    var t=m.querySelector('#tbl');
-    if(!res.length){t.innerHTML='<div id=empty>No results from any source.</div>';return}
-    PL=res.map(function(tr){return{t:tr.title,a:tr.artist,source:tr.source,id:tr.id,preview:tr.preview,ms:(tr.dur||0)*1000,album:'',cover:tr.cover||''}});
-    _curViewName='';
-    res.forEach(function(tr,i){
-      var row=document.createElement('div');row.className='srow';row.dataset.i=i;
-      PL[i]={t:tr.title,a:tr.artist,source:tr.source,id:tr.id,preview:tr.preview,ms:(tr.dur||0)*1000,album:'',cover:tr.cover||''};
-      row.innerHTML=
-      '<button class=rbtn title="Play"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3v10l7-5-7-5z"/></svg></button>'+
-      '<div class=rtxt style="flex:1"><b>'+esc(tr.title||'')+'</b><small>'+esc(tr.artist||'')+'</small></div>'+
-      '<span class=stag>'+esc(tr.source||'')+'</span>'+(tr.full===false?'<span style="color:#b3b3b3;font-size:11px">stream only</span>':'<span></span>')+'<span></span><span></span>';
-      row.onclick=function(){playT(i,true)};
-      t.appendChild(row)})});
-}
-/* ---------------- player ---------------- */
-function markActive(){
-  document.querySelectorAll('#tbl .row,#tbl .srow').forEach(function(r){
-    var i=Number(r.dataset.i);var isPL=(PLAYING_PL===curViewName());
-    var on=(isPL&&i===qi_view());
-    r.classList.toggle('playing',!!on);
-    var n=r.querySelector('.trnum');
-    if(!n)return;
-    if(on){n.innerHTML='<span class=bars style="display:inline-flex"><i></i><i></i><i></i><i></i></span>'}
-    else{n.textContent=(i+1)}});
-}
-/* _curViewName is the playlist whose rows are on screen; PLAYING_PL is the
-   playlist the queue in Q was loaded from. They are different things:
-   browsing a playlist is not playing it, and only playT(setQ) moves
-   PLAYING_PL - the fullscreen header reads it as "now playing" and the row
-   highlight compares it against the view. */
-var _curViewName='';
-function curViewName(){return _curViewName}
-function qi_view(){return (PLAYING_PL===_curViewName)?QI:-1}
-var QI=-1;
-var SHUFFLE_ORDER=[];var SHUFFLE_POS=0;var SHUFFLE_SKIP=-1;
-function rebuildShuffle(){if(!Q.length){SHUFFLE_ORDER=[];return}SHUFFLE_ORDER=[];SHUFFLE_SKIP=QI;var idxs=[];for(var i=0;i<Q.length;i++)if(i!==QI)idxs.push(i);for(var i=idxs.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=idxs[i];idxs[i]=idxs[j];idxs[j]=t}SHUFFLE_ORDER=idxs;SHUFFLE_POS=0}
-function nextIndex(){if(QI<0)return -1;if(REPEAT===2)return QI;if(SHUF&&Q.length>1){if(!SHUFFLE_ORDER.length||SHUFFLE_POS>=SHUFFLE_ORDER.length)rebuildShuffle();return SHUFFLE_ORDER[SHUFFLE_POS]}if(QI+1<Q.length)return QI+1;if(REPEAT===1&&Q.length)return 0;return -1}
-/* The upcoming tracks in the order they will really play, used by every
-   queue view. Sequential is just QI+1.., but shuffle plays the rest of the
-   current pass - SHUFFLE_ORDER[SHUFFLE_POS..], which can point anywhere in
-   Q - so listing queue order there shows a row 1 that never plays next while
-   the Up next toast names the real one. Nothing selected (QI<0) means the
-   whole queue; repeat-one means nothing else plays at all. */
-function upcomingIdxs(){
-  var out=[],seen={};
-  function add(i){if(i<0||i>=Q.length||i===QI||seen[i])return;seen[i]=1;out.push(i)}
-  if(QI<0){for(var i=0;i<Q.length;i++)add(i);return out}
-  if(REPEAT===2)return out;
-  if(SHUF&&Q.length>1){
-    if(!SHUFFLE_ORDER.length||SHUFFLE_POS>=SHUFFLE_ORDER.length)rebuildShuffle();
-    for(var k=0;k<SHUFFLE_ORDER.length;k++){
-      if(k<SHUFFLE_POS){seen[SHUFFLE_ORDER[k]]=1;continue} /* played this pass */
-      add(SHUFFLE_ORDER[k])}
-    /* queued after the pass was drawn (radio): still to come, just later */
-    for(var i=0;i<Q.length;i++)if(i!==SHUFFLE_SKIP)add(i);
-    return out}
-  for(var i=QI+1;i<Q.length;i++)add(i);
-  /* repeat-all wraps back to the top and nextIndex() does too, so the queue
-     views must: otherwise the last track of a list claimed "0 tracks" left
-     while the player was about to start track 1. */
-  if(REPEAT===1&&QI===Q.length-1)for(var i=0;i<QI;i++)add(i);
-  return out
-}
-/* "Play" on a playlist (the card's button or the header's big play) means
-   start this playlist - and with shuffle on that should land somewhere
-   random, not always on track 1. Tapping a specific row still starts
-   exactly where you tapped. */
-function playList(){
-  var link=LINKS.find(function(p){return p.name===_curViewName});
-  var key=link&&(link.url||link.name||'');
-  if(key&&_playlistPrefetchStarted[key]===true&&_playlistPrefetchPending[key]){
-    _playlistPrefetchPending[key].then(function(){playList()});
-    return;
-  }
-  var choice=key&&_playlistPrefetchStarted[key];
-  var index=choice&&PL?PL.findIndex(function(t){return t.t===choice.t&&t.a===choice.a}):-1;
-  playT(index>=0?index:(SHUF&&PL&&PL.length?Math.floor(Math.random()*PL.length):0),true)
-}
-function playT(i,setQ){
-  if(!PL||!PL[i])return;
-  if(setQ){Q=PL.slice();PLAYING_PL=_curViewName}
-  if(setQ&&SHUF){
-    var selected=PL[i];
-    Object.keys(_playlistPrefetchStarted).forEach(function(key){
-      var choice=_playlistPrefetchStarted[key];
-      if(choice&&choice.t===selected.t&&choice.a===selected.a)i=PL.indexOf(choice);
-    });
-  }
-  QI=i; if(SHUF)rebuildShuffle();
-  syncPlaybackControls();
-  if(setQ)prefetch(PL[i]);
-  playTrack(PL[i])
-}
-function showNow(tr){
-  var nt=document.getElementById('nowt');
-  nt.querySelector('b').textContent=tr.t||'';
-  nt.querySelector('small').textContent=tr.a||'';
-  var c=document.getElementById('nowc');
-  if(tr.cover){c.style.background=coverBg(tr.cover);c.setAttribute('data-cover-url',tr.cover)}
-  else{c.style.background=gcss(tr.t);c.removeAttribute('data-cover-url')}
-  reportNow('playing',tr);
-  document.getElementById('upnext')._gone=false; /* a swipe-dismiss lasts one track */
-  syncFs();
-  syncPlaybackControls();
-}
-function meta(t){if('mediaSession' in navigator)try{navigator.mediaSession.metadata=new MediaMetadata({title:t.t||'?',artist:t.a||'',album:t.album||''})}catch(e){}}
-function syncPlaybackControls(){
-  var hasTrack=!!AU.src||QI>=0&&!!Q[QI];
-  var canPrev=hasTrack&&(QI>0||REPEAT===1&&Q.length>1);
-  var canNext=hasTrack&&(nextIndex()>=0||RADIO);
-  ['prevb','fsprev'].forEach(function(id){var b=document.getElementById(id);if(b)b.disabled=!canPrev});
-  ['nextb','fsnext'].forEach(function(id){var b=document.getElementById(id);if(b)b.disabled=!canNext});
-  ['playb','fsPlay'].forEach(function(id){var b=document.getElementById(id);if(b)b.disabled=!hasTrack});
-  var dfs=document.getElementById('dfsBtn');if(dfs)dfs.disabled=!hasTrack;
-}
-function setPausedIcon(p){
-  var h=p?'<path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(0.6 0)"/>':'<path d="M4.8 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z" transform="translate(0 -1)"/>';
-  document.getElementById('pbIcon').innerHTML=h;
-  var f=document.getElementById('fsPlayIcon');if(f)f.innerHTML=h;
-  syncPlaybackControls()}
-function playTrack(tr){
-  if(!tr)return;
-  showNow(tr);meta(tr);markActive();
-  if(tr.source==='youtube'||tr.source==='newgrounds'){return localResolve(tr,true)}
-  if(tr.source&&tr.source!=='local'){
-    var u='/api/play?src='+tr.source+'&id='+tr.id;
-    if(tr.preview)u+='&preview='+encodeURIComponent(tr.preview);
-    AU.src=u;AU.play();return
-  }
-  localResolve(tr,true);
-}
-function stopSrc(){try{AU.pause()}catch(e){}try{AU.removeAttribute('src');AU.load()}catch(e){}}
-/* the current track is fully up and running now - fetch the next one soon */
-function schedulePrefetch(){
-  if(_pfTimer)clearTimeout(_pfTimer);
-  var at=QI;
-  _pfTimer=setTimeout(function(){
-    _pfTimer=null;
-    if(QI!==at)return; /* the user skipped; the new track schedules its own */
-    var n=nextIndex();if(n>=0&&Q[n])prefetch(Q[n])},5000)}
-var _cache={};try{var _c=JSON.parse(localStorage.getItem('kot_ytcache')||'{}');for(var k in _c)_cache[k]=_c[k]}catch(e){}
-function localResolve(tr,fresh){
-  stopSrc();setPausedIcon(true);syncPlaybackControls();
-  var key=(tr.t||'')+'|'+(tr.a||'');
-  var cached=_cache[key];
-  if(cached){
-    dlJob(cached,tr.t).then(function(d){
-      if(d.file&&!d.error){
-        var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
-        if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
-        /* dlJob only resolves once the full file is on disk, so play it
-           directly - the old 5s-preview -> full swap cut the audio for a
-           blink right around 4-5s into every track */
-        AU.src='/lib/'+encodeURIComponent(d.file);
-        AU.play().catch(function(){setTimeout(function(){AU.play().catch(function(){})},300)});
-      }else{delete _cache[key];localResolveFresh(tr)}
-    },function(){delete _cache[key];localResolveFresh(tr)});
-    return
-  }
-  localResolveFresh(tr)
-}
-/* Candidates for a track that has to be fetched: YouTube first, then the
-   Newgrounds Audio Portal (direct mp3s, a lot of the same catalogue). The
-   Newgrounds query gets t/a separately because the portal ANDs whole terms:
-   "artist title" there matches remakes quoting the artist, not the original. */
-function findCands(tr){
-  var q=(tr.a?tr.a+' ':'')+(tr.t||'');
-  if(tr.source==='newgrounds'&&tr.id)return Promise.resolve([{source:'newgrounds',id:tr.id}]);
-  return API('/api/search?src=youtube&q='+encodeURIComponent(q)).then(function(j){
-    var yt=(j.results||[]).filter(function(r){return r.source==='youtube'}).slice(0,5);
-    if(yt.length)return yt;
-    return API('/api/search?src=newgrounds&q='+encodeURIComponent(q)+'&t='+encodeURIComponent(tr.t||'')+'&a='+encodeURIComponent(tr.a||'')).then(function(k){
-      return (k.results||[]).filter(function(r){return r.source==='newgrounds'}).slice(0,5);
-    },function(){return []});
-  });
-}
-function localResolveFresh(tr){
-  stopSrc();setPausedIcon(true);
-  toast('fetching new '+(tr.t||'')+'...');
-  findCands(tr).then(function(cands){
-    if(!cands.length){toast('no source found for '+(tr.t||''));return}
-    tryCands(cands,0,tr)},function(){toast('no source found for '+(tr.t||''))});
-}
-function tryCands(cands,k,tr){
-  if(k>=cands.length){toast('could not download '+(tr.t||'')+' - skipped');nx();return}
-  var c=cands[k];
-  dlJob(c.id,tr&&tr.t).then(function(d){
-    if(d.file&&!d.error){
-      var idx=Q.findIndex(function(q){return q&&q.t===tr.t&&q.a===tr.a});
-      if(idx>=0)QI=idx;else{Q.push(tr);QI=Q.length-1}
-      _cache[tr.t+'|'+tr.a]=c.id;try{localStorage.setItem('kot_ytcache',JSON.stringify(_cache))}catch(e){}
-      /* full file ready (see localResolve): play it straight, no preview */
-      AU.src='/lib/'+encodeURIComponent(d.file);
-      AU.play().catch(function(){setTimeout(function(){AU.play().catch(function(){})},300)});
-    }else{tryCands(cands,k+1,tr)}
-  },function(){tryCands(cands,k+1,tr)});
-}
-/* Prefetch the next track quietly. Crucially it must remember the exact id
-   it downloaded under (kot_ytcache), or play time re-searches YouTube, gets
-   a different first candidate and downloads again - leaving dead air at the
-   track boundary. Only one prefetch per track key, retried on failure. */
-var _pfTimer=null,_pfDone={};
-function rememberYt(tr,id){
-  var key=(tr.t||'')+'|'+(tr.a||'');
-  if(_cache[key]===id)return;
-  _cache[key]=id;
-  try{localStorage.setItem('kot_ytcache',JSON.stringify(_cache))}catch(e){}}
-function prefetch(tr){
-  if(!tr)return;
-  if(tr.source&&tr.source!=='youtube'&&tr.source!=='newgrounds')return; /* streamed sources: nothing to fetch */
-  var key=(tr.t||'')+'|'+(tr.a||'');
-  if(_pfDone[key])return;
-  var id=((tr.source==='youtube'||tr.source==='newgrounds')&&tr.id)||_cache[key];
-  if(id){
-    _pfDone[key]=1;
-    rememberYt(tr,id);
-    dlJob(id,tr.t,true).catch(function(){_pfDone[key]=0});
-    return}
-  _pfDone[key]=1;
-  findCands(tr).then(function(cands){
-    var c=cands&&cands[0];
-    if(!c){_pfDone[key]=0;return}
-    rememberYt(tr,c.id);
-    dlJob(c.id,tr.t,true).catch(function(){_pfDone[key]=0})},function(){_pfDone[key]=0});
-}
-function toggle(){
-  if(AU.src){AU.paused?AU.play():AU.pause()}else if(Q.length)playT(QI<0?0:QI,false)}
-function nx(){
-  if(REPEAT===2){playIdx(QI);return}
-  var n=nextIndex();
-  if(n>=0){if(SHUF)SHUFFLE_POS++;playIdx(n)}
-  else if(RADIO){radioNext()}
-}
-function qiR(){var n;do{n=Math.floor(Math.random()*Q.length)}while(n===QI&&Q.length>1);return n}
-function playIdx(i){QI=i;syncPlaybackControls();playTrack(Q[i])}
-function pv(){if(QI>0)playIdx(QI-1)}
-/* Switching normal <-> shuffle changes what "next" is, but nothing fires a
-   'play' event, so the timer above - which already fired for the old order -
-   never re-arms. Prefetch the new next track right away, or the first shuffled
-   song plays cold. */
-function rearmPrefetch(){
-  if(_pfTimer){clearTimeout(_pfTimer);_pfTimer=null}
-  if(!AU.src||AU.paused)return; /* paused: the play event schedules it */
-  var n=nextIndex();if(n>=0&&Q[n])prefetch(Q[n])
-}
-function toggleShuffle(){SHUF=!SHUF;document.querySelectorAll('.aicon#shufb,.aicon#shuf2,.aicon#fsShuf').forEach(function(b){b.classList.toggle('on',SHUF)});if(SHUF)rebuildShuffle();syncPlaybackControls();try{localStorage.setItem('kot_shuf',SHUF?'1':'0')}catch(e){}rearmPrefetch()}
-function toggleRepeat(){REPEAT=(REPEAT+1)%3;updateRepeatUI();syncPlaybackControls();toast('repeat '+(REPEAT===0?'off':REPEAT===1?'all':'one'));try{localStorage.setItem('kot_repeat',REPEAT)}catch(e){}}
-function updateRepeatUI(){
-  var on=REPEAT>0;
-  document.querySelectorAll('#repeatb,#rb2,#fsRepeat').forEach(function(b){b.classList.toggle('on',on)});
-  var arrows='<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>';
-  var one=(REPEAT===2)?'<path d="M11 10h1v4"/>' : '';
-  var svg='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'+'>'+arrows+one+'</svg>';
-  var el=document.getElementById('repeatIcon');if(el)el.outerHTML=svg.replace('<svg','<svg id="repeatIcon"');
-  document.querySelectorAll('#rb2 svg,#fsRepeat svg').forEach(function(s){s.outerHTML=svg.replace('width="18" height="18"','width="24" height="24"').replace('id="repeatIcon"','')})}
-function radioNext(){
-  var seed=Q[QI];if(!seed)return;
-  var u='/api/recommend'+(seed.source==='youtube'?('?seed='+seed.id):('?artist='+encodeURIComponent(seed.a||seed.t)));
-  API(u).then(function(j){
-    var n=0;(j.results||[]).forEach(function(t){
-      var nt={t:t.title,a:t.artist,source:t.source,id:t.id,preview:t.preview,ms:(t.dur||0)*1000};
-      if(!Q.some(function(q){return q.t===nt.t&&q.a===nt.a})){Q.push(nt);n++}});
-    if(n)toast('radio: +'+n+' tracks');
-    syncPlaybackControls();
-    if(QI+1<Q.length)playIdx(QI+1)},function(){toast('radio failed')});
-}
-
-
-/* media wiring */
-AU.addEventListener('play',function(){setPausedIcon(false);reportNow('playing');schedulePrefetch()});
-AU.addEventListener('pause',function(){if(AU.src){setPausedIcon(true);reportNow('paused')}else syncPlaybackControls()});
-AU.addEventListener('ended',function(){if(REPEAT===2){AU.currentTime=0;AU.play();return}nx()});
-AU.addEventListener('timeupdate',function(){
-  var _dur=(Q[QI]&&Q[QI].ms)?Q[QI].ms/1000:(AU.duration||0);
-  document.getElementById('progf').style.width=(_dur?AU.currentTime/_dur*100:0)+'%';
-  document.getElementById('curt').textContent=secs(AU.currentTime);
-  if(_dur)document.getElementById('tott').textContent=secs(_dur);
-  document.getElementById('fsProgf').style.width=(_dur?Math.min(100,AU.currentTime/_dur*100):0)+'%';
-  document.getElementById('fsCur').textContent=secs(AU.currentTime);
-  if(_dur)document.getElementById('fsTot').textContent=secs(_dur);
-  var un=document.getElementById('upnext');
-  if(AU.duration && AU.duration-AU.currentTime<=30){
-    var ni=nextIndex();
-    if(ni>=0 && Q[ni]){
-      var t=Q[ni];
-      /* same cache as every other thumbnail: coverBg resolves to the local
-         /cover/ file when the server has it, and the data-cover-url lets
-         rewriteCover swap it in if it is still being fetched */
-      var bg=String(coverBg(t.cover)).replace(/"/g,"'");
-      un.innerHTML='<span style="color:#b3b3b3;font-size:11px;margin-right:8px">Up next</span><div style="display:flex;align-items:center;gap:8px"><div style="width:36px;height:36px;border-radius:4px;flex:none;background:'+bg+'" '+(t.cover?'data-cover-url="'+esc(t.cover)+'"':'')+'></div><div style="min-width:0"><b style="display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.t||'')+'</b><small style="display:block;font-size:11px;color:#b3b3b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.a||'')+'</small></div></div>';
-      if(!un._gone)upnextVis(true);
-    } else {un._gone=false;upnextVis(false)}
-  }else{un._gone=false;upnextVis(false)}
-  reportNow();});
-document.getElementById('prog').addEventListener('click',function(e){
-  if(!AU.duration)return;var r=this.getBoundingClientRect();
-  AU.currentTime=(e.clientX-r.left)/r.width*AU.duration});
-(function(){
-  var vol=document.getElementById('vol');
-  function setVol(e){var r=vol.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));AU.volume=v*v;AU.muted=false;setVolFill(v*100);try{localStorage.setItem('kot_vol',v)}catch(e){};updateVolIcon()}
-  vol.addEventListener('mousedown',function(e){vol.classList.add('dragging');setVol(e);
-    function move(ev){setVol(ev)}
-    function up(){vol.classList.remove('dragging');document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up)}
-    document.addEventListener('mousemove',move);document.addEventListener('mouseup',up)});
-})();function updateVolIcon(){
-  var h;
-  if(AU.muted){h='<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>'}
-  else if(AU.volume<=0.01){h='<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'}
-  else if(AU.volume<0.5){h='<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'}
-  else{h='<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'}
-  document.querySelectorAll('#volIcon,#volIcon2').forEach(function(vi){vi.innerHTML=h})}
-function muteVol(){AU.muted=!AU.muted;setVolFill(AU.muted?0:Math.sqrt(AU.volume)*100);updateVolIcon()}
-function setVolFill(pct){document.querySelectorAll('#volf,#fsVolFill').forEach(function(el){el.style.width=pct+'%'})}
-/* ---------------- fullscreen player (mobile) ---------------- */
-var FS_EASE='cubic-bezier(.2,.8,.2,1)',_fsHideT=0;
-function openFs(){
-  if(!window.matchMedia('(max-width:820px)').matches)return;
-  var fs=document.getElementById('fs');
-  if(_fsHideT){ /* caught it mid-close: slide it back open */
-    clearTimeout(_fsHideT);_fsHideT=0;
-    fs.style.transition='transform .3s '+FS_EASE;
-    fs.style.transform='translateY(0)';
-    return}
-  if(fs.classList.contains('on'))return;
-  syncFs();
-  /* start off-screen, then animate up on the next frame */
-  fs.style.transition='none';
-  fs.style.transform='translateY(100%)';
-  fs.classList.add('on');
-  /* open at the top of the list so the very next track is the first row.
-     This has to come after the 'on' class: while the sheet is display:none
-     the queue has no layout box and setting scrollTop would be ignored. */
-  var _q=document.getElementById('fsQueue');if(_q)_q.scrollTop=0;
-  void fs.offsetHeight;
-  fs.style.transition='transform .3s '+FS_EASE;
-  fs.style.transform='translateY(0)'}
-function closeFs(){
-  var fs=document.getElementById('fs');
-  if(!fs.classList.contains('on'))return;
-  fs.style.transition='transform .25s '+FS_EASE;
-  fs.style.transform='translateY(100%)'; /* slides down from wherever it is */
-  if(_fsHideT)clearTimeout(_fsHideT);
-  _fsHideT=setTimeout(hideFs,300)}
-function hideFs(){
-  var fs=document.getElementById('fs');
-  if(_fsHideT){clearTimeout(_fsHideT);_fsHideT=0}
-  if(!fs.classList.contains('on'))return;
-  fs.classList.remove('on');
-  fs.style.transition='none';
-  fs.style.transform=''}
-/* where the sheet visually is right now, even mid-transition */
-function fsOffset(fs){
-  var t=(window.getComputedStyle(fs).transform||'');
-  var m=t.match(/matrix\(([^)]+)\)/);
-  if(!m)return 0;
-  var p=m[1].split(',');
-  return p.length===6?(parseFloat(p[5])||0):0}
-function syncFs(){
-  var tr=Q[QI];
-  var ft=document.getElementById('fsTitle'),fa=document.getElementById('fsArtist'),fc=document.getElementById('fsArt');
-  if(tr){
-    ft.textContent=tr.t||'';fa.textContent=tr.a||'';
-    if(tr.cover){fc.style.background=coverBg(tr.cover);fc.setAttribute('data-cover-url',tr.cover)}
-    else{fc.style.background=gcss(tr.t);fc.removeAttribute('data-cover-url')}}
-  else{ft.textContent='Choose a playlist to listen';fa.textContent='nothing playing';fc.style.background='';fc.removeAttribute('data-cover-url')}
-  document.getElementById('fsPl').textContent=PLAYING_PL||'Now playing';
-  var dt=document.getElementById('dfsTitle'),da=document.getElementById('dfsArtist'),dc=document.getElementById('dfsArt');
-  if(dt){
-    dt.textContent=tr?(tr.t||''):'Choose a playlist to listen';
-    da.textContent=tr?(tr.a||''):'nothing playing';
-    if(tr&&tr.cover){dc.style.background=coverBg(tr.cover);dc.setAttribute('data-cover-url',tr.cover)}
-    else if(tr){dc.style.background=gcss(tr.t);dc.removeAttribute('data-cover-url')}
-    else{dc.style.background='';dc.removeAttribute('data-cover-url')}
-    document.getElementById('dfsTopTitle').textContent=PLAYING_PL||'Now playing';
-  }
-  var dur=(tr&&tr.ms)?tr.ms/1000:(AU.duration||0);
-  var pos=AU.currentTime||0;
-  document.getElementById('fsCur').textContent=secs(pos);
-  document.getElementById('fsTot').textContent=secs(dur);
-  document.getElementById('fsProgf').style.width=(dur?Math.min(100,pos/dur*100):0)+'%';
-  setPausedIcon(!!AU.paused);
-  setVolFill(AU.muted?0:Math.sqrt(AU.volume)*100);
-  renderFsQueue();renderDfsQueue()}
-/* fullscreen sliders: pointer events cover touch and mouse in one path */
-function fsSlider(el,fn){
-  function at(e){var r=el.getBoundingClientRect();fn(Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)))}
-  el.addEventListener('pointerdown',function(e){
-    e.preventDefault();
-    try{el.setPointerCapture(e.pointerId)}catch(_){}
-    at(e);
-    function mv(ev){at(ev)}
-    function up(){el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up)}
-    el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up)})}
-fsSlider(document.getElementById('fsProg'),function(v){if(AU.duration)AU.currentTime=v*AU.duration});
-fsSlider(document.getElementById('fsVolBar'),function(v){AU.volume=v*v;AU.muted=false;setVolFill(v*100);try{localStorage.setItem('kot_vol',v)}catch(e){};updateVolIcon()});
-/* the fullscreen queue is built from Q; tap a row to jump to it */
-function renderFsQueue(){
-  var box=document.getElementById('fsQrows'),cnt=document.getElementById('fsQcount'),wrap=document.getElementById('fsQueue');
-  if(!box||!wrap)return;
-  /* "Up next" means what has not played yet, in the order it will actually
-     play (see upcomingIdxs): row 1 must be the track the Up next toast
-     names, so under shuffle that is the next shuffle draw rather than QI+1.
-     The hero art above already shows the current track. */
-  var ord=upcomingIdxs(),n=ord.length;
-  wrap.style.display=(Q.length===0||n===0)?'none':'';
-  cnt.textContent=n+(n===1?' track':' tracks');
-  var h='';
-  for(var r=0;r<n;r++){
-    var i=ord[r],t=Q[i]||{};
-    var bg=String(coverBg(t.cover)).replace(/"/g,"'");
-    h+='<div class="fsQrow" data-i="'+i+'">'+
-       '<span class=fsQn>'+(r+1)+'</span>'+
-       '<span class=fsQcov style="background:'+bg+'"'+(t.cover?' data-cover-url="'+esc(t.cover)+'"':'')+'></span>'+
-       '<span class=fsQt><b>'+esc(t.t||'')+'</b><small>'+esc(t.a||'')+'</small></span>'+
-       '<span class=fsQtime>'+fmt(t.ms||0)+'</span></div>';
-  }
-  box.innerHTML=h;
-}
-document.getElementById('fsQrows').addEventListener('click',function(e){
-  var r=e.target.closest?e.target.closest('.fsQrow'):null;
-  if(!r)return;
-  var i=parseInt(r.getAttribute('data-i'),10);
-  if(!isNaN(i))playIdx(i)});
-/* ---------------- full screen mode (desktop / web) ----------------
-   Info-only view: big art, title, artist, queue. The playback chrome
-   (raised bottom bar + top strip) shows only while the window is focused
-   and there has been interaction in the last 10s; idle or blurred, it
-   fades and only the information remains. */
-var _dfsT=0;
-function dfsActive(){return document.body.classList.contains('dfs')}
-function toggleDfs(){
-  if(dfsActive()){exitDfs();return}
-  if(document.getElementById('dfsBtn').disabled)return;
-  enterDfs()}
-function enterDfs(){
-  if(!window.matchMedia('(min-width:821px)').matches)return;
-  document.body.classList.add('dfs');
-  syncFs();
-  dfsWake()}
-function exitDfs(){
-  if(_dfsT){clearTimeout(_dfsT);_dfsT=0}
-  document.body.classList.remove('dfs','dfsidle')}
-function dfsWake(){
-  if(!dfsActive())return;
-  document.body.classList.remove('dfsidle');
-  if(_dfsT)clearTimeout(_dfsT);
-  _dfsT=setTimeout(dfsSleep,10000)}
-function dfsSleep(){
-  _dfsT=0;
-  if(!dfsActive())return;
-  document.body.classList.add('dfsidle')}
-function renderDfsQueue(){
-  syncPlaybackControls();
-  var box=document.getElementById('dfsQrows'),cnt=document.getElementById('dfsQcount'),wrap=document.getElementById('dfsQueue');
-  if(!box||!wrap)return;
-  wrap.style.display=Q.length?'':'none';
-  cnt.textContent=Q.length+(Q.length===1?' track':' tracks');
-  var h='';
-  if(QI>=0&&Q[QI]){
-    h+='<div class=dfsQsect>Now playing</div>'+dfsRow(QI,Q[QI]);
-    var ord=upcomingIdxs();
-    if(ord.length)h+='<div class=dfsQsect>Next up</div>';
-    for(var r=0;r<ord.length;r++)h+=dfsRow(ord[r],Q[ord[r]]);
-  }else{
-    for(var k=0;k<Q.length;k++)h+=dfsRow(k,Q[k]);
-  }
-  box.innerHTML=h;
-}
-function dfsRow(i,t){
-  var bg=String(coverBg(t&&t.cover)).replace(/"/g,"'");
-  return '<div class="dfsQrow'+(i===QI?' cur':'')+'" data-i="'+i+'">'+
-    '<span class=dfsQcov style="background:'+bg+'"'+(t&&t.cover?' data-cover-url="'+esc(t.cover)+'"':'')+'></span>'+
-    '<span class=dfsQt><b>'+esc(t&&t.t||'')+'</b><small>'+esc(t&&t.a||'')+'</small></span></div>';
-}
-document.getElementById('dfsQrows').addEventListener('click',function(e){
-  var r=e.target.closest?e.target.closest('.dfsQrow'):null;
-  if(!r)return;
-  var i=parseInt(r.getAttribute('data-i'),10);
-  if(!isNaN(i))playIdx(i)});
-/* any pointer/key/wheel activity re-shows the chrome and restarts the 10s */
-['pointerdown','pointermove','wheel','keydown','touchstart'].forEach(function(ev){
-  document.addEventListener(ev,function(){if(dfsActive())dfsWake()},{passive:true})});
-/* unfocused window = not "actively focussed": fade immediately */
-function dfsBlur(){
-  if(dfsActive()&&_dfsT){clearTimeout(_dfsT);_dfsT=0;document.body.classList.add('dfsidle')}}
-window.addEventListener('blur',dfsBlur);
-document.addEventListener('visibilitychange',function(){if(document.hidden)dfsBlur()});
-document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'&&dfsActive())exitDfs()});
-/* shrinking into mobile territory hands over to the mobile player */
-window.addEventListener('resize',function(){if(dfsActive()&&window.innerWidth<=820)exitDfs()});
-/* gestures: swipe the bar up to expand, drag the overlay down to collapse */
-(function(){
-  var bar=document.getElementById('bar');
-  var fs=document.getElementById('fs');
-  var sy=0,sx=0,dragging=false,_swiped=0,ly=0,lt=0,openBase=0;
-  /* the sheet is exactly one screen tall, so translateY(H) parks it fully
-     below the edge and every pixel the finger rises uncovers one more */
-  function fsH(){return window.innerHeight||document.documentElement.clientHeight}
-  bar.addEventListener('touchstart',function(e){
-    /* the seek bar, volume and right-side controls keep their own touches */
-    if(e.target.closest&&e.target.closest('#prog,#vol,#rside'))return;
-    sy=e.touches[0].clientY;sx=e.touches[0].clientX;dragging=false;
-    ly=sy;lt=Date.now();
-  },{passive:true});
-  bar.addEventListener('touchmove',function(e){
-    var dy=e.touches[0].clientY-sy,dx=e.touches[0].clientX-sx;
-    if(!dragging){
-      /* wait for a clearly upward move, so taps and horizontal seeks pass through */
-      if(dy>=-6||Math.abs(dx)>=Math.abs(dy))return;
-      dragging=true;
-      syncFs();
-      fs.style.transition='none';
-      fs.classList.add('on');
-      /* start from wherever the sheet actually is: hidden means parked
-         off-screen (fsOffset would read 0 == fully open, which is wrong),
-         while a sheet mid-animation reports its live position */
-      var H=fsH();
-      openBase=fs.classList.contains('on')?fsOffset(fs):H;
-      if(openBase<0)openBase=0;if(openBase>H)openBase=H;
-      fs.style.transform='translateY('+openBase+'px)';
-    }
-    ly=e.touches[0].clientY;lt=Date.now();
-    var y=openBase+dy;if(y<0)y=0;
-    fs.style.transform='translateY('+y+'px)';
-  },{passive:true});
-  function endDrag(e){
-    if(!dragging)return;
-    dragging=false;
-    _swiped=Date.now();
-    if(_fsHideT){clearTimeout(_fsHideT);_fsHideT=0}
-    var H=fsH();
-    var dy=(e.changedTouches?e.changedTouches[0].clientY:sy)-sy;
-    var y=Math.max(0,openBase+dy);
-    /* still-travelling speed on release, in px/ms (negative = upward) */
-    var vy=(e.changedTouches&&lt)?(e.changedTouches[0].clientY-ly)/(Date.now()-lt):0;
-    if(y<H*0.5||vy<-0.6){ /* past halfway, or a confident flick: finish opening */
-      fs.style.transition='transform .3s '+FS_EASE;
-      fs.style.transform='translateY(0)';
-    }else{ /* shy of that: spring back down and hide */
-      closeFs();
-    }
-  }
-  bar.addEventListener('touchend',endDrag,{passive:true});
-  bar.addEventListener('touchcancel',endDrag,{passive:true});
-  /* a swipe must not also fire the thumbnail's tap-to-open */
-  bar.addEventListener('click',function(e){
-    if(Date.now()-_swiped<400){e.stopPropagation();e.preventDefault()}
-  },true);
-  var fy=0,fx=0,fgo=false,fdy=0,fbase=0,inq=false,swiped=0,moved=false,active=false;
-  /* pin the sheet exactly where it visually is - it may be animating
-     (springing back or mid-close), so capture that position before following,
-     otherwise killing the transition teleports it to the inline value */
-  function claim(cy){
-    fbase=fsOffset(fs);
-    fs.style.transition='none';
-    fs.style.transform='translateY('+fbase+'px)';
-    if(_fsHideT){clearTimeout(_fsHideT);_fsHideT=0}
-    fy=cy;fgo=true;fdy=fbase}
-  fs.addEventListener('touchstart',function(e){
-    /* one flag owns the whole touch sequence, so a stale "in queue" from the
-       previous gesture can never claim the sheet under the seek bar */
-    if(e.target.closest&&e.target.closest('#fsProg,#fsVolBar')){
-      active=false;fgo=false;inq=false;return}
-    active=true;moved=false;
-    fx=e.touches[0].clientX;fy=e.touches[0].clientY;fgo=false;
-    /* Outside the list the sheet owns the gesture straight away. Inside "Up
-       next" the list gets first refusal: claim() is held back until touchmove
-       finds no scroll left to give, so scrolling never fights the collapse. */
-    inq=!!(e.target.closest&&e.target.closest('#fsQueue'));
-    if(!inq)claim(fy);
-  },{passive:true});
-  fs.addEventListener('touchmove',function(e){
-    if(!active)return;
-    var cx=e.touches[0].clientX,cy=e.touches[0].clientY;
-    if(!fgo){
-      if(!inq)return;
-      /* wait for a clear downward move, so taps and the list's own scroll
-         pass through untouched */
-      var dx=cx-fx,dy=cy-fy;
-      if(dy<6||Math.abs(dx)>Math.abs(dy))return;
-      var q=document.getElementById('fsQueue');
-      if(q&&q.scrollTop>0)return; /* the list can still scroll: it wins */
-      claim(cy); /* nothing left to scroll, so the collapse takes over here */
-    }
-    var y=fbase+(cy-fy);
-    if(y<0)y=0; /* clamped at rest: no snap when the finger wiggles up */
-    if(Math.abs(y-fbase)>6)moved=true;
-    fdy=y;fs.style.transform='translateY('+y+'px)';
-  },{passive:true});
-  function release(){
-    if(!active)return;active=false;
-    if(!fgo)return;
-    fgo=false;
-    if(moved)swiped=Date.now();
-    if(fdy>90)closeFs(); /* continues from the current position, then hides */
-    else{fs.style.transition='transform .25s '+FS_EASE;fs.style.transform='translateY(0)'}}
-  fs.addEventListener('touchend',release,{passive:true});
-  fs.addEventListener('touchcancel',release,{passive:true});
-  /* a drag must not also activate the queue row it ended on */
-  fs.addEventListener('click',function(e){
-    if(Date.now()-swiped<400){e.stopPropagation();e.preventDefault()}
-  },true);
-})();
-/* mobile library: drag the panel left to dismiss it, since the only other
-   way out is the same library button that opened it */
-(function(){
-  var side=document.getElementById('side');if(!side)return;
-  var sx=0,sy=0,go=false,swiped=0,ly=0,lt=0;
-  function mob(){return window.matchMedia('(max-width:820px)').matches}
-  side.addEventListener('touchstart',function(e){
-    if(!mob()||!side.classList.contains('open'))return;
-    /* the link field keeps its own horizontal touches (cursor/selection) */
-    if(e.target.closest&&e.target.closest('input'))return;
-    sx=e.touches[0].clientX;sy=e.touches[0].clientY;go=false;
-    ly=sx;lt=Date.now();
-  },{passive:true});
-  side.addEventListener('touchmove',function(e){
-    if(!go&&(!mob()||!side.classList.contains('open')))return;
-    var mx=e.touches[0].clientX-sx,my=e.touches[0].clientY-sy;
-    if(!go){
-      /* wait for a clearly leftward move, so taps and the list's vertical
-         scroll pass through untouched */
-      if(mx>=-6||Math.abs(my)>=Math.abs(mx))return;
-      go=true;
-      side.style.transition='none';
-    }
-    ly=e.touches[0].clientX;lt=Date.now();
-    side.style.transform='translateX('+Math.min(0,mx)+'px)';
-  },{passive:true});
-  function end(e){
-    if(!go)return;
-    go=false;swiped=Date.now();
-    var w=side.getBoundingClientRect().width||280;
-    var x=Math.min(0,(e.changedTouches?e.changedTouches[0].clientX:sx)-sx);
-    /* still-travelling speed on release, in px/ms (negative = leftward) */
-    var vx=e.changedTouches && lt ?(e.changedTouches[0].clientX-ly)/Math.max(1,Date.now()-lt):0;
-    side.style.transition='transform .25s '+FS_EASE;
-    if(x<-w*0.4||vx<-0.5){ /* past 40%, or a confident flick: slide out and close */
-      side.style.transform='translateX(-100%)';
-      setTimeout(function(){
-        /* the transform is cleared if the button reopened it mid-slide */
-        if(side.style.transform!=='translateX(-100%)')return;
-        side.classList.remove('open');
-        side.style.transition='';side.style.transform='';
-      },250);
-    }else{ /* shy of that: spring back into place */
-      side.style.transform='translateX(0)';
-      setTimeout(function(){if(!go){side.style.transition='';side.style.transform=''}},250);
-    }
-  }
-  side.addEventListener('touchend',end,{passive:true});
-  side.addEventListener('touchcancel',end,{passive:true});
-  /* a swipe must not also activate the playlist row it ended on */
-  side.addEventListener('click',function(e){
-    if(Date.now()-swiped<400){e.stopPropagation();e.preventDefault()}
-  },true);
-  /* a fresh open starts from scratch, never from a half-finished slide */
-  document.getElementById('libBtn').addEventListener('click',function(){
-    side.style.transition='';side.style.transform=''
-  });
-})();
-document.addEventListener('keydown',function(e){
-  if(e.code==='Space'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();toggle()}});
-if('mediaSession' in navigator){try{
-  navigator.mediaSession.setActionHandler('play',function(){AU.play()});
-  navigator.mediaSession.setActionHandler('pause',function(){AU.pause()});
-  navigator.mediaSession.setActionHandler('nexttrack',nx);
-  navigator.mediaSession.setActionHandler('previoustrack',pv)}catch(e){}}
-try{var _v=parseFloat(localStorage.getItem('kot_vol'));if(!isNaN(_v))AU.volume=_v*_v}catch(e){}
-/* the markup ships an 80% fill and a mid-range glyph, but a fresh profile
-   really starts at full volume - show what is actually set */
-setVolFill(AU.muted?0:Math.sqrt(AU.volume)*100);updateVolIcon();
-try{if(localStorage.getItem('kot_shuf')==='1'){SHUF=true;document.querySelectorAll('.aicon#shufb,.aicon#shuf2,.aicon#fsShuf').forEach(function(b){b.classList.add('on')})}}catch(e){}
-try{var _r=parseInt(localStorage.getItem('kot_repeat'));if(!isNaN(_r)){REPEAT=_r;updateRepeatUI()}}catch(e){}
-/* ---------------- updates (macOS app bundle) ---------------- */
-var IC_CHECK='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
-var IC_DOWN='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
-var _updManual=false,_updTimer=0;
-function renderUpdate(st){
-  var d=document.getElementById('upd'),t=document.getElementById('updtext'),b=document.getElementById('updbtn'),again=document.getElementById('updcheck');
-  if(!st||!st.supported){d.classList.remove('on');return}
-  d.classList.add('on');
-  updAction.st=st;
-  if(st.state==='downloading'||st.state==='installing'||st.state==='ready'){
-    b.style.display='none';if(again)again.style.display='none';
-    t.textContent=st.state==='downloading'?'downloading update '+Math.round(st.pct||0)+'%':(st.state==='ready'?'restarting...':'installing update...');
-    d.classList.remove('icononly');
-    return;
-  }
-  var chk=(st.state==='checking'),got=!!st.available&&st.state!=='error';
-  var versionText=st.latest?'Kotassium '+st.latest:'A Kotassium update';
-  b.style.display='';
-  if(again){again.style.display=got&&!chk?'flex':'none';again.disabled=chk}
-  b.classList.toggle('spin',chk);
-  b.classList.toggle('go',(got||st.state==='error')&&st.can_install!==false);
-  b.innerHTML=(got||st.state==='error')?IC_DOWN:IC_CHECK;
-  b.title=chk?'Checking for updates...':(got?'Restart & Update':(st.state==='error'?'Retry update':'Check for updates'));
-  b.disabled=chk;
-  if(st.state==='error')t.textContent=st.error||'update failed';
-  else if(st.can_install===false)t.textContent=versionText+' is available ('+updateSteps(st.version,st.latest)+') — move it to Applications to update';
-  else if(got)t.textContent=versionText+' is available ('+updateSteps(st.version,st.latest)+')';
-  else if(st.error)t.textContent=st.error;
-  else if(_updManual){
-    _updManual=false;
-    t.textContent='Kotassium '+(st.version||'')+' is up to date';
-    setTimeout(function(){renderUpdate(updAction.st)},4000);
-  }
-  else t.textContent='';
-  d.classList.toggle('icononly',!t.textContent);
-}
-function updateSteps(current,latest){
-  var a=String(current||'').match(/\d+/g),b=String(latest||'').match(/\d+/g);
-  if(!a||!b)return 'a new version';
-  a=a.slice(0,3).map(Number);b=b.slice(0,3).map(Number);
-  while(a.length<3)a.push(0);
-  while(b.length<3)b.push(0);
-  /* Patch releases count directly; across major/minor changes, say one
-     version forward rather than guessing how many releases were skipped. */
-  var count=(a[0]!==b[0]||a[1]!==b[1])?1:Math.max(1,b[2]-a[2]);
-  return count+' version'+(count===1?'':'s')+' forward';
-}
-function updAction(){
-  var st=updAction.st||{};
-  if(st.available&&st.state!=='error')startUpdate();else checkUpdate();
-}
-function checkUpdate(){
-  _updManual=true;
-  var b=document.getElementById('updbtn');
-  if(b){b.disabled=true;b.classList.add('spin')}
-  var again=document.getElementById('updcheck');if(again)again.disabled=true;
-  postJSON('/api/update/check',{}).then(function(st){renderUpdate(st);pollUpdate(300)})
-    .catch(function(){_updManual=false;if(again)again.disabled=false;toast('could not check for updates')});
-}
-function pollUpdate(delay){
-  if(_updTimer)return;
-  var go=function(){
-    _updTimer=0;
-    fetch('/api/update').then(function(r){return r.json()}).then(function(st){
-      renderUpdate(st);
-      if(st.state==='downloading'||st.state==='installing'||st.state==='checking')pollUpdate(700);
-    }).catch(function(){});
-  };
-  if(delay)_updTimer=setTimeout(go,delay);else go();
-}
-function startUpdate(){
-  var b=document.getElementById('updbtn');
-  if(b){b.disabled=true;b.classList.add('spin')}
-  postJSON('/api/update',{}).then(function(st){renderUpdate(st);pollUpdate(500)})
-    .catch(function(){if(b)b.disabled=false;toast('could not start the update')});
-}
-if(/[?&]desktop=1/.test(location.search))setTimeout(pollUpdate,1500);
-if(!/[?&]desktop=1/.test(location.search)){
-var _mt=0;fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){_mt=j.mtime||0}).catch(function(){});
-setInterval(function(){fetch('/api/mtime').then(function(r){return r.json()}).then(function(j){if(_mt&&j.mtime&&j.mtime!==_mt)location.reload()}).catch(function(){})},2000);
-}window.addEventListener('load',function(){
-  syncPlaybackControls();
-  /* Start fetching playlist metadata (and its first-track prefetch) alongside
-     cover-cache seeding; cover lookup must not delay warming the first song. */
-  Promise.all([seedCoverCache(),loadSide()]).then(renderHome);
-});
-if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='127.0.0.1'||location.hostname==='localhost')){
-  navigator.serviceWorker.register('/sw.js').catch(function(){});
-}
-</script>
+<div id="root"></div>
+<script src="/app.js" defer></script>
 </body></html>

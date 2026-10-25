@@ -974,6 +974,8 @@ def handle(path, params, hdr):
         return 200, "application/manifest+json", open(os.path.join(BASE, "web", "manifest.webmanifest"), "rb").read(), None, False
     if path == "/sw.js":
         return 200, "application/javascript", open(os.path.join(BASE, "web", "sw.js"), "rb").read(), {"Cache-Control": "no-cache"}, False
+    if path == "/app.js":
+        return 200, "application/javascript", open(os.path.join(BASE, "web", "app.js"), "rb").read(), {"Cache-Control": "no-cache"}, False
     if path.startswith("/icons/"):
         name = os.path.basename(path)
         f = os.path.join(BASE, "web", "icons", name)

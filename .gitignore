@@ -1,4 +1,6 @@
 venv/
+.agent-venv/
+node_modules/
 .vercel
 __pycache__/
 *.apk

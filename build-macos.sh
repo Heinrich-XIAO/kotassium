@@ -12,6 +12,13 @@ VERSION="${KOTASSIUM_VERSION:-2.1.0}"
 YTDLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
 
 ./setup.sh
+if command -v npm >/dev/null 2>&1; then
+    npm ci
+    npm run build
+else
+    echo "npm is required to build the React player bundle." >&2
+    exit 1
+fi
 desktop-venv/bin/python -m pip install --quiet -r requirements-macos-build.txt
 ./desktop-venv/bin/python tools/normalize-icons.py
 ./desktop-venv/bin/python tools/make-macos-icon.py
