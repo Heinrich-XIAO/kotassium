@@ -139,6 +139,8 @@ function App() {
   const [updateState, setUpdateState] = useState(null);
   const [updateMessage, setUpdateMessage] = useState('');
   const [updateBusy, setUpdateBusy] = useState(false);
+  const updateCheckManual = useRef(false);
+  const updateStatusTimer = useRef(0);
   const toastTimer = useRef(0);
   const toastGesture = useRef({ active: false, startX: 0, startY: 0, deltaX: 0, dismissed: false, previousOpacity: '' });
   const dragStart = useRef(null);
@@ -608,9 +610,20 @@ function App() {
       setUpdateState(st);
       if (st.state === 'downloading') setUpdateMessage(`downloading update ${Math.round(st.pct || 0)}%`);
       else if (st.state === 'installing') setUpdateMessage('installing update…');
+      else if (st.state === 'checking') setUpdateMessage('Checking for updates…');
+      else if (st.state === 'error') setUpdateMessage(st.error || 'update failed');
+      else if (st.available) setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateSteps(st.version, st.latest)})${st.can_install === false ? ' — move it to Applications to update' : ''}`);
+      else if (updateCheckManual.current && !st.error) {
+        updateCheckManual.current = false;
+        setUpdateMessage(`Kotassium ${st.version || ''} is up to date`);
+        clearTimeout(updateStatusTimer.current);
+        updateStatusTimer.current = setTimeout(() => {
+          setUpdateMessage((message) => message.startsWith('Kotassium ') && message.endsWith(' is up to date') ? '' : message);
+        }, 4000);
+      }
     }, 700);
     return () => clearTimeout(timer);
-  }, [updateState]);
+  }, [updateState, updateSteps]);
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -858,7 +871,7 @@ function App() {
     const count = a[0] !== b[0] || a[1] !== b[1] ? 1 : Math.max(1, b[2] - a[2]);
     return `${count} version${count === 1 ? '' : 's'} forward`;
   }, []);
-  const checkUpdate = useCallback(async () => { setUpdateBusy(true); try { const st = await postJSON('/api/update/check', {}); setUpdateState(st); if (st.state === 'checking') setUpdateMessage('Checking for updates…'); else if (st.available) setUpdateMessage(`Kotassium ${st.latest} is available (${updateSteps(st.version, st.latest)})`); else if (!st.error) setUpdateMessage(`Kotassium ${st.version || ''} is up to date`); } catch { toast('could not check for updates'); } finally { setUpdateBusy(false); } }, [toast, updateSteps]);
+  const checkUpdate = useCallback(async () => { updateCheckManual.current = true; clearTimeout(updateStatusTimer.current); setUpdateBusy(true); setUpdateMessage('Checking for updates…'); try { const st = await postJSON('/api/update/check', {}); setUpdateState(st); if (st.state === 'checking') setUpdateMessage('Checking for updates…'); else if (st.state === 'error') { updateCheckManual.current = false; setUpdateMessage(st.error || 'update failed'); } else if (st.available) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateSteps(st.version, st.latest)})${st.can_install === false ? ' — move it to Applications to update' : ''}`); } else if (!st.error) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.version || ''} is up to date`); updateStatusTimer.current = setTimeout(() => setUpdateMessage(''), 4000); } } catch { updateCheckManual.current = false; toast('could not check for updates'); } finally { setUpdateBusy(false); } }, [toast, updateSteps]);
   const startUpdate = useCallback(async () => { setUpdateBusy(true); try { await postJSON('/api/update', {}); const st = await pollUpdate(); if (st?.state === 'installing' || st?.state === 'downloading') setUpdateMessage(st.state === 'downloading' ? `downloading update ${Math.round(st.pct || 0)}%` : 'installing update…'); } catch { toast('could not start the update'); } finally { setUpdateBusy(false); } }, [pollUpdate, toast]);
 
   const imageStyle = (url, name) => ({ background: url ? resolveCover(url) : gradient(name) });
