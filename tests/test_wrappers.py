@@ -232,9 +232,10 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("grid-template-columns:36px minmax(0,1fr)", page)
         self.assertIn("grid-template-rows:auto auto", page)
         self.assertIn("#upnext .upnext-label{grid-column:1/-1", page)
-        # The heading reads as plain "Up Next", not shouted in caps.
-        self.assertIn("<span className=\"upnext-label\">Up Next</span>", app)
-        self.assertNotIn("text-transform:uppercase;color:#fff", page)
+        self.assertIn("<span className=\"upnext-label\">Up next</span>", app)
+        self.assertNotIn("text-transform:uppercase", page)
+        self.assertIn(".dfsQsect{font-size:11px;color:#8a8a8a", page)
+        self.assertIn(".settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;color:#8f8f8f}", page)
         self.assertIn("#upnext .upnext-art{grid-column:1;grid-row:2", page)
         self.assertIn("#upnext .upnext-copy{grid-column:2;grid-row:2", page)
 
