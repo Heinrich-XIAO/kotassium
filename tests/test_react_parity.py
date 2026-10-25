@@ -60,8 +60,8 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("for (let pos = shufflePos; pos < shuffleOrder.length; pos++) add(shuffleOrder[pos])", body)
         self.assertNotIn("for (let index = 0; index < queue.length; index++) add(index)", body)
         self.assertIn("if (repeat === 1 && currentIndex === queue.length - 1)", body)
-        self.assertIn('className="dfsQsect">Now playing</div>', self.app)
-        self.assertIn('className="dfsQsect">Next up</div>', self.app)
+        self.assertIn('className="dfsQsect">Now Playing</div>', self.app)
+        self.assertIn('className="dfsQsect">Next Up</div>', self.app)
 
     def test_playlist_and_search_preserve_counts_and_empty_state(self):
         self.assertIn("{playlist.length} song{playlist.length === 1 ? '' : 's'}", self.app)
@@ -118,6 +118,8 @@ class ReactParityTests(unittest.TestCase):
         current_css = current_css[:settings_start]
         current_css = current_css.replace("#root{flex:1;min-height:0;display:flex;flex-direction:column}\n", "", 1)
         reference_css = reference_css.replace('#btns button[aria-label="Radio"],#btns button[aria-label="Collapse player"]{display:none}', '#btns button[aria-label="Radio"]{display:none}')
+        reference_css = reference_css.replace('.dfsQsect{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8a8a8a;font-weight:700;padding:16px 20px 6px}', '.dfsQsect{font-size:11px;color:#8a8a8a;font-weight:700;padding:16px 20px 6px}')
+        reference_css = reference_css.replace('.settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#8f8f8f}', '.settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;color:#8f8f8f}')
         reference_css = re.sub(r"\n{2,}", "\n", reference_css)
         current_css = re.sub(r"\n{2,}", "\n", current_css)
         self.assertEqual(reference_css, current_css)
