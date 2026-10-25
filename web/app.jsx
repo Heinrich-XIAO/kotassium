@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Settings2, RefreshCw, Download, RotateCw, Repeat, Repeat1 } from 'lucide-react';
 
@@ -43,6 +43,14 @@ function Icon({ name, size = 20, children }) {
 
 function TooltipLayer() {
   const [tooltip, setTooltip] = useState(null);
+  useLayoutEffect(() => {
+    if (!tooltip) return;
+    const node = document.querySelector('.app-tooltip');
+    if (!node) return;
+    const halfWidth = node.getBoundingClientRect().width / 2;
+    const left = Math.max(12 + halfWidth, Math.min(window.innerWidth - 12 - halfWidth, tooltip.left));
+    if (left !== tooltip.left) setTooltip((current) => current === tooltip ? { ...current, left } : current);
+  }, [tooltip]);
   useEffect(() => {
     let timer = 0;
     let target = null;
@@ -53,7 +61,7 @@ function TooltipLayer() {
       clearTimeout(timer);
       timer = setTimeout(() => {
         const rect = node.getBoundingClientRect();
-        const left = Math.max(12, Math.min(window.innerWidth - 12, rect.left + rect.width / 2));
+        const left = rect.left + rect.width / 2;
         const above = rect.top > 44;
         setTooltip({ text: node.dataset.tooltip, left, top: above ? rect.top - 8 : rect.bottom + 8, above });
       }, event.type === 'focusin' ? 0 : 420);
