@@ -69,9 +69,9 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("No results from any source.", self.app)
         self.assertIn('track.full === false ? <span className="stream-only">stream only</span>', self.app)
 
-    def test_add_link_keeps_button_and_enter_submission(self):
-        self.assertIn("onKeyDown={(e) => e.key === 'Enter' && addLink()}", self.app)
-        self.assertIn("<button onClick={addLink} disabled={busy}>Add</button>", self.app)
+    def test_add_link_submits_with_enter_without_a_redundant_button(self):
+        self.assertIn("onKeyDown={(e) => e.key === 'Enter' && !busy && addLink()}", self.app)
+        self.assertNotIn("<button onClick={addLink} disabled={busy}>Add</button>", self.app)
         self.assertIn("if (linkOpen) document.getElementById('plink')?.focus()", self.app)
 
     def test_fullscreen_tracks_live_playback_and_reference_ids_exist(self):
@@ -97,6 +97,12 @@ class ReactParityTests(unittest.TestCase):
         current = read("web/index.html")
         reference_css = re.search(r"<style>(.*?)</style>", migrated_shell, re.S).group(1)
         current_css = re.search(r"<style>(.*?)</style>", current, re.S).group(1)
+        reference_update_start = reference_css.index("#upd{")
+        reference_update_end = reference_css.index("#empty{", reference_update_start)
+        reference_css = reference_css[:reference_update_start] + reference_css[reference_update_end:]
+        update_start = current_css.index("#upd{")
+        update_end = current_css.index("#empty{", update_start)
+        current_css = current_css[:update_start] + current_css[update_end:]
         settings_start = current_css.index("/* settings */")
         current_css = current_css[:settings_start]
         current_css = current_css.replace("#root{flex:1;min-height:0;display:flex;flex-direction:column}\n", "", 1)

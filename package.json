@@ -6,6 +6,7 @@
     "build": "esbuild web/app.jsx --bundle --minify --target=es2018 --outfile=web/app.js '--define:process.env.NODE_ENV=\"production\"'"
   },
   "dependencies": {
+    "lucide-react": "^1.61.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

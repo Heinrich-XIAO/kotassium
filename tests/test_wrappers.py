@@ -215,6 +215,26 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("version${count === 1 ? '' : 's'} forward", app)
         self.assertIn("updateState.can_install === false", app)
 
+    def test_custom_tooltips_and_lucide_update_and_settings_controls(self):
+        app = read("web/app.jsx")
+        page = read("web/index.html")
+        package = read("package.json")
+        self.assertIn('from \'lucide-react\'', app)
+        self.assertIn("<Settings2", app)
+        self.assertIn("<RefreshCw", app)
+        self.assertIn("<Download", app)
+        self.assertIn("Repeat1", app)
+        self.assertIn("Repeat size={fullscreen ? 24 : 18}", app)
+        self.assertIn("Repeat ${repeat === 0 ? 'off' : repeat === 1 ? 'all' : 'one'}", app)
+        self.assertNotIn("toast(`repeat ${", app)
+        self.assertNotIn("<button onClick={addLink} disabled={busy}>Add</button>", app)
+        self.assertIn("function TooltipLayer()", app)
+        self.assertIn("data-tooltip", app)
+        self.assertIn("<div className={`app-tooltip", app)
+        self.assertIn(".app-tooltip", page)
+        self.assertNotIn("title=", app)
+        self.assertIn('"lucide-react"', package)
+
     def test_android_dialogs_can_be_dismissed(self):
         # Every dialog is a dead end if it only has one button: the address
         # prompt used to save "remote" before a URL existed, so backing out
