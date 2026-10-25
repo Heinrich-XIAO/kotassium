@@ -114,5 +114,48 @@ class TokenCacheTests(unittest.TestCase):
         self.assertEqual(spotify_get._cache_load(), "BQlive")
 
 
+class PlaylistImageTests(unittest.TestCase):
+    """A playlist's cover art is carried by the playlist, not by any track,
+    so resolve asks Spotify for it separately - and must degrade to the
+    first track's art whenever that extra call fails."""
+
+    def _with_http(self, http_json):
+        saved = (spotify_get.http_json, spotify_get.get_token,
+                 spotify_get._token_override)
+        spotify_get.http_json = http_json
+        spotify_get.get_token = lambda tries=8: "tok"
+        spotify_get._token_override = None
+        def restore():
+            (spotify_get.http_json, spotify_get.get_token,
+             spotify_get._token_override) = saved
+        self.addCleanup(restore)
+
+    def test_playlist_image_hits_the_images_endpoint(self):
+        seen = []
+        def fake(url, data=None, headers=None, timeout=30):
+            seen.append((url, headers or {}))
+            return [{"url": "https://i.scdn.co/image/pl"}]
+        self._with_http(fake)
+        got = spotify_get.playlist_image("https://open.spotify.com/playlist/ABC123")
+        self.assertEqual(got, "https://i.scdn.co/image/pl")
+        self.assertIn("/v1/playlists/ABC123/images", seen[0][0])
+        self.assertIn("Bearer tok", seen[0][1].get("Authorization", ""))
+
+    def test_only_playlists_ask_and_failures_stay_soft(self):
+        # Albums and tracks already have their cover on the first track.
+        self.assertIsNone(spotify_get.playlist_image("https://open.spotify.com/album/XYZ"))
+        self.assertIsNone(spotify_get.playlist_image("https://open.spotify.com/track/XYZ"))
+        # Short links and API failures must not break a resolve that worked.
+        self.assertIsNone(spotify_get.playlist_image("https://spotify.link/abc"))
+        def boom(url, data=None, headers=None, timeout=30):
+            raise RuntimeError("offline")
+        self._with_http(boom)
+        self.assertIsNone(spotify_get.playlist_image("https://open.spotify.com/playlist/ABC123"))
+        def empty(url, data=None, headers=None, timeout=30):
+            return []
+        self._with_http(empty)
+        self.assertIsNone(spotify_get.playlist_image("https://open.spotify.com/playlist/ABC123"))
+
+
 if __name__ == "__main__":
     unittest.main()
