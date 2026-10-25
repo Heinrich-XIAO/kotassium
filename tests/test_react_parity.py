@@ -139,6 +139,11 @@ class ReactParityTests(unittest.TestCase):
         self.assertNotIn("bgQueueRef.current.map", self.app)
         self.assertIn(".link-opt", read("web/index.html"))
 
+    def test_bottom_play_button_uses_a_smaller_optically_centered_triangle(self):
+        self.assertIn("fullscreen ? 26 : 16", self.app)
+        css = read("web/index.html")
+        self.assertIn('#playb svg[viewBox="0 0 16 16"]{transform:translateX(1px)}', css)
+
     def test_cover_frames_have_even_borders_and_clip_square_artwork(self):
         css = read("web/index.html")
         self.assertIn(".pcover,.ccover,#plx,#nowc,.track-cover,#dfsArt,#fsArt{border:1px solid #ffffff18;overflow:hidden;background-clip:padding-box}", css)
@@ -162,6 +167,7 @@ class ReactParityTests(unittest.TestCase):
         settings_start = current_css.index("/* settings */")
         current_css = current_css[:settings_start]
         current_css = current_css.replace("#root{flex:1;min-height:0;display:flex;flex-direction:column}\n", "", 1)
+        current_css = current_css.replace('#playb svg[viewBox="0 0 16 16"]{transform:translateX(1px)}\n', "", 1)
         reference_css = reference_css.replace('#btns button[aria-label="Radio"],#btns button[aria-label="Collapse player"]{display:none}', '#btns button[aria-label="Radio"]{display:none}')
         reference_css = reference_css.replace('.dfsQsect{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8a8a8a;font-weight:700;padding:16px 20px 6px}', '.dfsQsect{font-size:11px;color:#8a8a8a;font-weight:700;padding:16px 20px 6px}')
         reference_css = reference_css.replace('.settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#8f8f8f}', '.settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;color:#8f8f8f}')
