@@ -293,15 +293,6 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
         **kwargs
     )
 
-    # updater.py runs the swap script once this process is gone; closing the
-    # window is what ends it.
-    def quit_for_update():
-        try:
-            w.destroy()
-        except Exception:
-            pass
-    updater.on_installed = quit_for_update
-
     missing = preflight() if port is not None else []
 
     # Media keys arrive on the GTK main loop; evaluate_js there would deadlock,

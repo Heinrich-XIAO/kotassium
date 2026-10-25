@@ -32,10 +32,10 @@ RELEASE = {
     "html_url": "https://github.com/Heinrich-XIAO/kotassium/releases/tag/v2.1.0",
     "body": "notes",
     "assets": [
-        {"name": "Kotassium-2.1.0-arm64.dmg", "size": 10,
-         "browser_download_url": "https://example.invalid/a.dmg"},
-        {"name": "Kotassium-2.1.0-x86_64.dmg", "size": 10,
-         "browser_download_url": "https://example.invalid/b.dmg"},
+        {"name": "Kotassium-2.1.0-arm64.pkg", "size": 10,
+         "browser_download_url": "https://example.invalid/a.pkg"},
+        {"name": "Kotassium-2.1.0-x86_64.pkg", "size": 10,
+         "browser_download_url": "https://example.invalid/b.pkg"},
         {"name": "SHA256SUMS", "size": 10,
          "browser_download_url": "https://example.invalid/sums"},
     ],
@@ -44,15 +44,19 @@ RELEASE = {
 
 class AssetTests(unittest.TestCase):
     def test_picks_matching_arch(self):
-        dmg, sums = updater.asset_for(RELEASE, "arm64")
-        self.assertEqual(dmg["name"], "Kotassium-2.1.0-arm64.dmg")
+        package, sums = updater.asset_for(RELEASE, "arm64")
+        self.assertEqual(package["name"], "Kotassium-2.1.0-arm64.pkg")
         self.assertEqual(sums["name"], "SHA256SUMS")
-        dmg, _ = updater.asset_for(RELEASE, "x86_64")
-        self.assertEqual(dmg["name"], "Kotassium-2.1.0-x86_64.dmg")
+        package, _ = updater.asset_for(RELEASE, "x86_64")
+        self.assertEqual(package["name"], "Kotassium-2.1.0-x86_64.pkg")
 
     def test_missing_arch(self):
-        rel = {"assets": [{"name": "Kotassium-2.1.0-arm64.dmg"}]}
+        rel = {"assets": [{"name": "Kotassium-2.1.0-arm64.pkg"}]}
         self.assertIsNone(updater.asset_for(rel, "x86_64")[0])
+
+    def test_ignores_legacy_dmgs(self):
+        rel = {"assets": [{"name": "Kotassium-2.1.0-arm64.dmg"}]}
+        self.assertIsNone(updater.asset_for(rel, "arm64")[0])
 
     def test_status_shape(self):
         st = updater.status()
@@ -85,6 +89,15 @@ class AssetTests(unittest.TestCase):
         st = updater.start_install()
         self.assertEqual(st["state"], "idle")
 
+    def test_system_app_install_is_available_to_non_admin_user(self):
+        real_supported, real_app_path = updater.SUPPORTED, updater.app_path
+        updater.SUPPORTED = True
+        updater.app_path = lambda: "/Applications/Kotassium.app"
+        try:
+            self.assertTrue(updater.can_install())
+        finally:
+            updater.SUPPORTED, updater.app_path = real_supported, real_app_path
+
     def test_previous_bundle_is_available_only_for_a_writable_supported_install(self):
         with tempfile.TemporaryDirectory() as tmp:
             previous = tmp + ".old"
@@ -95,7 +108,7 @@ class AssetTests(unittest.TestCase):
             updater.can_install = lambda: True
             updater.app_path = lambda: tmp
             try:
-                self.assertTrue(updater.rollback_available())
+                self.assertFalse(updater.rollback_available())
                 updater.can_install = lambda: False
                 self.assertFalse(updater.rollback_available())
                 updater.can_install = lambda: True
@@ -196,95 +209,66 @@ class AssetTests(unittest.TestCase):
                 updater._state.update(saved)
 
     def test_parse_checksums(self):
-        text = ("abc123  Kotassium-2.1.0-arm64.dmg\n"
-                "def456  *Kotassium-2.1.0-x86_64.dmg\n")
-        self.assertEqual(updater.parse_checksums(text, "Kotassium-2.1.0-arm64.dmg"), "abc123")
-        self.assertEqual(updater.parse_checksums(text, "Kotassium-2.1.0-x86_64.dmg"), "def456")
-        self.assertIsNone(updater.parse_checksums(text, "other.dmg"))
+        text = ("abc123  Kotassium-2.1.0-arm64.pkg\n"
+                "def456  *Kotassium-2.1.0-x86_64.pkg\n")
+        self.assertEqual(updater.parse_checksums(text, "Kotassium-2.1.0-arm64.pkg"), "abc123")
+        self.assertEqual(updater.parse_checksums(text, "Kotassium-2.1.0-x86_64.pkg"), "def456")
+        self.assertIsNone(updater.parse_checksums(text, "other.pkg"))
 
 
-class SwapScriptTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="kot-swap-")
-        self.bin = os.path.join(self.tmp, "bin")
-        os.makedirs(self.bin)
-        self._stub("ditto", '[ -n "$FAIL" ] && exit 1\nrm -rf "$2"; cp -R "$1" "$2"\n')
-        self._stub("xattr", "exit 0\n")
+class RollbackGuardTests(unittest.TestCase):
+    def test_rollback_explains_manual_package_recovery(self):
+        real_supported, real_can_install, real_app_path, real_isdir = (
+            updater.SUPPORTED, updater.can_install, updater.app_path, updater.os.path.isdir)
+        updater.SUPPORTED = True
+        updater.can_install = lambda: True
+        updater.app_path = lambda: "/Applications/Kotassium.app"
+        updater.os.path.isdir = lambda path: path == "/Applications/Kotassium.app.old"
+        try:
+            self.assertTrue(updater.rollback_available())
+            with self.assertRaisesRegex(RuntimeError, "replace /Applications/Kotassium.app"):
+                updater.rollback()
+        finally:
+            updater.SUPPORTED = real_supported
+            updater.can_install = real_can_install
+            updater.app_path = real_app_path
+            updater.os.path.isdir = real_isdir
 
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
+    def test_system_install_does_not_offer_the_old_bundle_as_recovery(self):
+        real_supported, real_can_install, real_app_path, real_isdir = (
+            updater.SUPPORTED, updater.can_install, updater.app_path, updater.os.path.isdir)
+        updater.SUPPORTED = True
+        updater.can_install = lambda: True
+        updater.app_path = lambda: "/Applications/Kotassium.app"
+        updater.os.path.isdir = lambda path: False
+        try:
+            self.assertFalse(updater.rollback_available())
+        finally:
+            updater.SUPPORTED = real_supported
+            updater.can_install = real_can_install
+            updater.app_path = real_app_path
+            updater.os.path.isdir = real_isdir
 
-    def _stub(self, name, body):
-        p = os.path.join(self.bin, name)
-        with open(p, "w") as f:
-            f.write("#!/bin/sh\n" + body)
-        os.chmod(p, 0o755)
 
-    def _run(self, fail=False, mode="normal", previous=None):
-        target = os.path.join(self.tmp, "Kotassium.app")
-        new = os.path.join(self.tmp, "New.app")
-        for d, ver in ((target, "old"), (new, "new")):
-            os.makedirs(os.path.join(d, "Contents"))
-            with open(os.path.join(d, "Contents", "v"), "w") as f:
-                f.write(ver)
-        if previous:
-            previous_path = target + ".old"
-            os.makedirs(os.path.join(previous_path, "Contents"))
-            with open(os.path.join(previous_path, "Contents", "v"), "w") as f:
-                f.write(previous)
-        script = os.path.join(self.tmp, "swap.sh")
-        with open(script, "w") as f:
-            f.write(updater.SWAP_SCRIPT)
-        env = dict(os.environ, PATH=self.bin + os.pathsep + os.environ["PATH"])
-        if fail:
-            env["FAIL"] = "1"
-        r = subprocess.run(["/bin/sh", script, target, new, "0", "0", mode],
-                           env=env, capture_output=True)
-        return r.returncode, target, new
-
-    def test_swaps_and_cleans_up(self):
-        code, target, new = self._run()
-        self.assertEqual(code, 0)
-        with open(os.path.join(target, "Contents", "v")) as f:
-            self.assertEqual(f.read(), "new")
-        self.assertFalse(os.path.exists(new))
-        self.assertTrue(os.path.isdir(target + ".old"))
-        with open(os.path.join(target + ".old", "Contents", "v")) as f:
-            self.assertEqual(f.read(), "old")
-
-    def test_update_retains_only_the_most_recent_previous_bundle(self):
-        code, target, _ = self._run(mode="keep", previous="older")
-        self.assertEqual(code, 0)
-        with open(os.path.join(target + ".old", "Contents", "v")) as f:
-            self.assertEqual(f.read(), "old")
-        self.assertFalse(os.path.exists(target + ".old.next"))
-
-    def test_rollback_discards_the_failed_current_bundle(self):
-        code, target, _ = self._run(mode="rollback", previous="previous")
-        self.assertEqual(code, 0)
-        with open(os.path.join(target, "Contents", "v")) as f:
-            self.assertEqual(f.read(), "new")
-        self.assertFalse(os.path.exists(target + ".old"))
-        self.assertFalse(os.path.exists(target + ".old.next"))
-
-    def test_failure_restores_old_bundle(self):
-        code, target, _ = self._run(fail=True)
-        self.assertNotEqual(code, 0)
-        with open(os.path.join(target, "Contents", "v")) as f:
-            self.assertEqual(f.read(), "old")
-        self.assertFalse(os.path.exists(target + ".old"))
-
-    def test_script_restores_on_failure(self):
-        s = updater.SWAP_SCRIPT
-        self.assertIn('mv "$TARGET" "$PREVIOUS"', s)
-        self.assertIn('mv "$PREVIOUS" "$TARGET"', s)   # rollback path
-        self.assertIn("xattr -dr com.apple.quarantine", s)
-        self.assertIn('kill -0 "$PID"', s)
-        # A failed swap reopens the old bundle instead of leaving no app.
-        self.assertIn('[ "$RELAUNCH" = "1" ] && open "$TARGET"\nexit 1', s)
-
-    def test_no_wait_when_pid_is_zero(self):
-        self.assertIn('if [ "$PID" != "0" ]; then', updater.SWAP_SCRIPT)
+class InstallerLaunchTests(unittest.TestCase):
+    def test_install_opens_verified_pkg_in_macos_installer_without_quitting_app(self):
+        real_download, real_popen = updater.download, updater.subprocess.Popen
+        launched = []
+        updater.download = lambda asset, sums, progress: "/tmp/update.pkg"
+        updater.subprocess.Popen = lambda args, **kwargs: launched.append((args, kwargs))
+        with updater._lock:
+            saved_state = dict(updater._state)
+            updater._state.update(state="idle", pct=0, error=None)
+        try:
+            updater.install(RELEASE["assets"][0], RELEASE["assets"][2])
+            self.assertEqual(launched[0][0], ["/usr/bin/open", "-a", "Installer", "/tmp/update.pkg"])
+            self.assertTrue(launched[0][1]["start_new_session"])
+            self.assertEqual(updater.status()["state"], "ready")
+        finally:
+            updater.download, updater.subprocess.Popen = real_download, real_popen
+            with updater._lock:
+                updater._state.clear()
+                updater._state.update(saved_state)
 
 
 class InstallGuardTests(unittest.TestCase):

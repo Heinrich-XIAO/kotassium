@@ -1060,14 +1060,13 @@ class AppBoundary extends React.Component {
     try {
       const response = await fetch('/api/update/rollback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const result = await response.json();
-      if (result.error) this.setState({ rollbackError: result.error });
-      else this.setState({ rollbackError: 'Kotassium is closing and restoring the previous version…' });
+      this.setState({ rollbackError: result.error || 'No recovery instructions were returned.' });
     } catch {
-      this.setState({ rollbackError: 'Could not start recovery. Close and reopen the app, then try again.' });
+      this.setState({ rollbackError: 'Could not get recovery instructions. Close and reopen the app, then try again.' });
     }
   };
   render() {
-    if (this.state.failed) return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#090909', color: '#fff', fontFamily: 'system-ui,sans-serif', textAlign: 'center' }}><div><h1 style={{ fontSize: 22 }}>Kotassium couldn’t start</h1><p style={{ color: '#aaa' }}>The player hit a problem. Reload it, or restore the previous app version if available.</p>{window.__kotRollbackAvailable && <button onClick={this.rollback} style={{ margin: '12px 8px 0', padding: '10px 18px', borderRadius: 24, background: '#1ed760', color: '#07140a', fontWeight: 700 }}>Restore previous version</button>}<button onClick={() => location.reload()} style={{ margin: '12px 8px 0', padding: '10px 18px', borderRadius: 24, background: '#292929', color: '#fff', fontWeight: 700 }}>Reload player</button>{this.state.rollbackError && <p role="status" style={{ color: '#aaa' }}>{this.state.rollbackError}</p>}</div></main>;
+    if (this.state.failed) return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#090909', color: '#fff', fontFamily: 'system-ui,sans-serif', textAlign: 'center' }}><div><h1 style={{ fontSize: 22 }}>Kotassium couldn’t start</h1><p style={{ color: '#aaa' }}>The player hit a problem. Reload it, or follow the recovery instructions to restore the previous app version if available.</p>{window.__kotRollbackAvailable && <button onClick={this.rollback} style={{ margin: '12px 8px 0', padding: '10px 18px', borderRadius: 24, background: '#1ed760', color: '#07140a', fontWeight: 700 }}>Restore previous version</button>}<button onClick={() => location.reload()} style={{ margin: '12px 8px 0', padding: '10px 18px', borderRadius: 24, background: '#292929', color: '#fff', fontWeight: 700 }}>Reload player</button>{this.state.rollbackError && <p role="status" style={{ color: '#aaa', maxWidth: 560 }}>{this.state.rollbackError}</p>}</div></main>;
     return this.props.children;
   }
 }

@@ -140,10 +140,11 @@ desktop-venv/bin/python desktop.py
 ./install.sh                # Linux: add to the app grid
 ```
 
-macOS: install the DMG from [GitHub Releases](https://github.com/Heinrich-XIAO/kotassium/releases)
-(`Kotassium-*-arm64.dmg` for Apple Silicon, `Kotassium-*-x86_64.dmg` for
-Intel), drag **Kotassium** into **Applications**, then right-click → **Open**
-the first time (the app is unsigned). Downloads still need `ffmpeg`:
+macOS: download and open the PKG from [GitHub Releases](https://github.com/Heinrich-XIAO/kotassium/releases)
+(`Kotassium-*-arm64.pkg` for Apple Silicon, `Kotassium-*-x86_64.pkg` for
+Intel). It installs Kotassium into **Applications** and asks before quitting an
+already running copy; Cancel leaves the current app untouched. The app is
+unsigned, so right-click → **Open** the first time. Downloads still need `ffmpeg`:
 `brew install ffmpeg` — `yt-dlp` is bundled inside the app.
 
 Building the app yourself (on the Mac — it cannot be cross-compiled here):
@@ -151,12 +152,13 @@ Building the app yourself (on the Mac — it cannot be cross-compiled here):
 ```sh
 ./install-macos.sh          # py2app -> /Applications/Kotassium.app
 ./build-macos.sh            # just build dist/Kotassium.app
-./make-dmg.sh               # wrap it in Kotassium-<version>.dmg
+./make-pkg.sh               # package it as Kotassium-<version>.pkg
+./make-dmg.sh               # legacy drag-to-Applications disk image
 ./install-macos.sh --wrapper   # fallback: tiny AppleScript app
 ```
 
-CI builds both architectures on every `v*` tag
-(`.github/workflows/macos-release.yml`); a manual run of that workflow only
+CI builds the Apple Silicon PKG on every `v*` tag
+(`.github/workflows/build.yml`); a manual run of the release workflow only
 uploads artifacts, so it is the safe way to test packaging changes.
 
 `install.sh` rewrites the launcher with this checkout's absolute path. Closing
@@ -186,11 +188,13 @@ Downloads and state live outside the repo in `~/Music/Kotassium`
   latest release. The top-right pill is a single morphing button, like T3
   Code's updater: a circular **⟳ check** icon when it has not found an update
   (tap it to re-check GitHub on demand), a spinning arrow while the check is
-  in flight, and a **⬇ download** icon when a newer DMG exists. It downloads
+  in flight, and a **⬇ download** icon when a newer PKG exists. It downloads
   the build for its architecture, checks it against the release's
-  `SHA256SUMS`, mounts the DMG, then a detached `swap.sh` replaces
-  `/Applications/Kotassium.app` once the app has quit and reopens it, putting
-  the old bundle back if the copy fails. Only the frozen macOS app reports
+  `SHA256SUMS`, then opens macOS Installer. The package asks before quitting a
+  running app, saves the prior bundle as `/Applications/Kotassium.app.old` for
+  recovery when installed in `/Applications`, and installs the new version
+  there. If recovery is needed, its recovery panel provides instructions to
+  restore the saved bundle. Only frozen macOS app builds report
   `supported: true`; the web and Linux builds hide the pill.
 - **Persistent storage.** The window uses `private_mode=False`, so the
   YouTube-id cache, volume, shuffle and repeat survive restarts (pywebview's

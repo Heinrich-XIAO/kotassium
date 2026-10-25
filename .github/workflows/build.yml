@@ -4,7 +4,7 @@ name: build artifacts
 #   - release.yml      a v* tag you push yourself (a cut you name)
 #   - auto-release.yml every push to main (a rolling patch bump)
 #
-# Both hand it a version and get the same Apple Silicon DMG and Android APK
+# Both hand it a version and get the same Apple Silicon PKG and Android APK
 # back, so a build cannot drift between the two paths.
 
 on:
@@ -102,46 +102,25 @@ jobs:
           curl -fsS http://127.0.0.1:8421/ | grep -qi "<title>Kotassium"
           kill "$PID"
 
-      - name: Make the DMG
+      - name: Make the PKG
         env:
           KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          # hdiutil on the macOS runners sometimes fails with "Resource busy"
-          # when a diskimages-helper from an earlier job is still around. It
-          # is a flake, not a broken build, so retry instead of failing the
-          # whole release over it.
-          hdiutil detach /Volumes/Kotassium 2>/dev/null || true
-          for i in 1 2 3; do
-            if ./make-dmg.sh "Kotassium-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.dmg"; then
-              exit 0
-            fi
-            echo "make-dmg.sh failed (attempt $i) - retrying in 20s"
-            hdiutil detach /Volumes/Kotassium 2>/dev/null || true
-            sleep 20
-          done
-          echo "make-dmg.sh failed three times" >&2
-          exit 1
+        run: ./make-pkg.sh "Kotassium-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.pkg"
 
-      - name: Verify the DMG
+      - name: Verify the PKG
         run: |
-          hdiutil attach -nobrowse -readonly Kotassium-*.dmg | tail -1
-          test -d /Volumes/Kotassium/Kotassium.app
-          test -L /Volumes/Kotassium/Applications
-          test -x /Volumes/Kotassium/Kotassium.app/Contents/MacOS/Kotassium
-          test -f /Volumes/Kotassium/Kotassium.app/Contents/Resources/web/index.html
-          test -x /Volumes/Kotassium/Kotassium.app/Contents/Resources/bin/yt-dlp
-          hdiutil detach /Volumes/Kotassium
-
-      - name: Updater selftest
-        # Mounts the DMG, stages the app, runs the swap script against a
-        # throwaway target and checks the result — the risky half of
-        # self-update, without needing a real newer release.
-        run: python3 updater.py --selftest Kotassium-*.dmg
+          TMP=$(mktemp -d)
+          trap 'rm -rf "$TMP"' EXIT
+          pkgutil --payload-files Kotassium-*.pkg | grep -q 'Applications/Kotassium.app/Contents/MacOS/Kotassium'
+          pkgutil --expand Kotassium-*.pkg "$TMP/expanded"
+          test -f "$TMP/expanded/Scripts/preinstall"
+          grep -q 'display dialog' "$TMP/expanded/Scripts/preinstall"
+          test -x macos-pkg-scripts/preinstall
 
       - uses: actions/upload-artifact@v4
         with:
           name: Kotassium-${{ matrix.arch }}
-          path: Kotassium-*.dmg
+          path: Kotassium-*.pkg
           if-no-files-found: error
 
   android:

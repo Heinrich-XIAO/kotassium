@@ -1,0 +1,48 @@
+#!/bin/sh
+# Installer scripts run as root. Ask the logged-in user before terminating the
+# app; cancellation aborts the package installation without touching the app.
+set -eu
+
+CONSOLE_USER=$(/usr/bin/stat -f '%Su' /dev/console)
+if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = root ] || [ "$CONSOLE_USER" = loginwindow ]; then
+    echo "No logged-in desktop user is available to confirm quitting Kotassium." >&2
+    exit 1
+fi
+
+if /usr/bin/pgrep -x Kotassium >/dev/null 2>&1; then
+    if ! /bin/launchctl asuser "$(/usr/bin/id -u "$CONSOLE_USER")" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/osascript <<'APPLESCRIPT'
+set answer to button returned of (display dialog "Kotassium is currently running. Quit it now so the update can finish installing?" buttons {"Cancel", "Quit Kotassium"} default button "Quit Kotassium" cancel button "Cancel" with icon caution)
+if answer is not "Quit Kotassium" then error "Installation cancelled by user" number 128
+try
+    tell application id "app.kotassium.desktop" to quit
+end try
+return
+APPLESCRIPT
+    then
+        echo "Kotassium was not quit; installation cancelled." >&2
+        exit 1
+    fi
+
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        if ! /usr/bin/pgrep -x Kotassium >/dev/null 2>&1; then
+            break
+        fi
+        /bin/sleep 1
+    done
+    if /usr/bin/pgrep -x Kotassium >/dev/null 2>&1; then
+        echo "Kotassium is still running; refusing to replace a live app." >&2
+        exit 1
+    fi
+fi
+
+# Preserve the app for the web recovery panel, but do not let a failed copy
+# or a cancelled install move/delete the existing application.
+TARGET="/Applications/Kotassium.app"
+PREVIOUS="$TARGET.old"
+STAGED="$TARGET.old.next"
+if [ -d "$TARGET" ]; then
+    /bin/rm -rf "$STAGED"
+    /usr/bin/ditto "$TARGET" "$STAGED"
+    /bin/rm -rf "$PREVIOUS"
+    /bin/mv "$STAGED" "$PREVIOUS"
+fi

@@ -5,11 +5,13 @@ the same web app, so a fix lands everywhere at once.
 
 ### macOS
 
-Download the DMG for your Mac and drag **Kotassium** into
-**Applications**:
+Download and open the installer package for your Mac:
 
-- `Kotassium-*-arm64.dmg` — Apple Silicon (M1 and later)
-- `Kotassium-*-x86_64.dmg` — Intel
+- `Kotassium-*-arm64.pkg` — Apple Silicon (M1 and later)
+- `Kotassium-*-x86_64.pkg` — Intel
+
+The installer places Kotassium in `/Applications`. If it is running, the installer
+asks whether to quit it; choosing Cancel safely aborts the update.
 
 The app is **unsigned and not notarized**. On first launch macOS
 will refuse to open it. Either right-click the app → **Open** →
@@ -20,8 +22,8 @@ xattr -dr com.apple.quarantine /Applications/Kotassium.app
 ```
 
 Once installed it checks this page on launch and updates itself:
-a **Restart & Update** pill appears when a newer DMG is available,
-verified against `SHA256SUMS`.
+a **Restart & Update** pill appears when a newer PKG is available,
+verified against `SHA256SUMS` and handed to macOS Installer.
 
 ### Android
 

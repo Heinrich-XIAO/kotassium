@@ -60,7 +60,7 @@ jobs:
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   macos:
-    name: build Apple Silicon DMG
+    name: build Apple Silicon PKG
     needs: version
     uses: ./.github/workflows/build.yml
     with:
@@ -79,14 +79,14 @@ jobs:
     secrets: inherit
 
   publish-macos:
-    name: publish or attach Apple Silicon DMG
+    name: publish or attach Apple Silicon PKG
     needs: [version, preflight, macos]
     if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.macos.result == 'success' }}
     uses: ./.github/workflows/publish-artifact.yml
     with:
       version: ${{ needs.version.outputs.version }}
       artifact: Kotassium-arm64
-      filename: Kotassium-${{ needs.version.outputs.version }}-arm64.dmg
+      filename: Kotassium-${{ needs.version.outputs.version }}-arm64.pkg
     secrets: inherit
 
   publish-android:

@@ -54,7 +54,7 @@ of these lines as the message's last line:
   `.m4a`). Never assume `.mp3`: use `track_path()` / `AUDIO_EXTS` in
   `serve_web.py`, and keep the `_preview.mp3` → full-track redirect for
   builds without ffmpeg.
-- `.github/workflows/release.yml` builds both DMGs and the APK on a `v*` tag and
+- `.github/workflows/release.yml` builds the macOS PKG and Android APK on a `v*` tag and
   publishes one release; `workflow_dispatch` only uploads artifacts.
 
 - UI state (playlists, cached covers) lives outside the repo in
@@ -131,13 +131,14 @@ of these lines as the message's last line:
 - Tests: `venv/bin/python -m unittest discover -s tests`, plus
   `dbus-run-session -- desktop-venv/bin/python -m unittest tests.test_mpris`
   and `xvfb-run -a desktop-venv/bin/python tools/ui_check.py`.
-- Updates are self-replacing (`updater.py`): the public repo's latest release
-  is checked at launch and re-checked on demand from the page's pill, the DMG
-  is verified against `SHA256SUMS`, staged, and a detached `swap.sh` replaces
-  `/Applications/Kotassium.app` after exit and reopens it. `desktop.py` sets
-  `updater.on_installed` so the window closes — never swap while the app is
-  alive. `python updater.py --selftest <dmg>` (run in CI) exercises mount +
-  swap against a throwaway target. `updater.check_async()` runs a check on a
+- Updates are installer-package based (`updater.py`): the public repo's latest
+  release is checked at launch and on demand from the page's pill, the PKG is
+  verified against `SHA256SUMS`, and macOS Installer handles replacement. Its
+  preinstall script asks before quitting a running Kotassium and saves the
+  previous bundle as `/Applications/Kotassium.app.old` for recovery when
+  installed in `/Applications`; the recovery endpoint displays Finder restore
+  instructions rather than modifying the root-owned app from the user process.
+  `updater.check_async()` runs a check on a
   background thread and returns immediately with `state: "checking"`; it is
   single-flight (one click = one GitHub request, so it never stacks a second
   thread and never clobbers an install in progress). The page polls
