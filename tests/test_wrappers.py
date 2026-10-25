@@ -87,6 +87,7 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("// Touch + pointer gestures work on Android WebView and desktop browsers", app)
         self.assertIn("window.matchMedia('(max-width:820px)').matches", app)
         self.assertIn("const toggleRadio", app)
+        self.assertNotIn('aria-label="Radio"', app)
         self.assertIn("const fetchRadio", app)
         self.assertIn("function QueueRow(", app)
         self.assertIn("Math.abs(actual - expected) > Math.max(8, expected * 0.2)", app)
