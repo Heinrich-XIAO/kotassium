@@ -139,6 +139,12 @@ class ReactParityTests(unittest.TestCase):
         self.assertNotIn("bgQueueRef.current.map", self.app)
         self.assertIn(".link-opt", read("web/index.html"))
 
+    def test_bottom_volume_icon_is_close_to_a_longer_slider(self):
+        css = read("web/index.html")
+        self.assertIn("#rside .volume-row{width:auto;gap:4px}", css)
+        self.assertIn("#rside .volume-row .aicon{width:24px;height:24px;padding:0}", css)
+        self.assertIn("#rside #vol{width:112px;", css)
+
     def test_bottom_play_button_uses_a_smaller_optically_centered_triangle(self):
         self.assertIn("fullscreen ? 26 : 16", self.app)
         css = read("web/index.html")
@@ -168,6 +174,8 @@ class ReactParityTests(unittest.TestCase):
         current_css = current_css[:settings_start]
         current_css = current_css.replace("#root{flex:1;min-height:0;display:flex;flex-direction:column}\n", "", 1)
         current_css = current_css.replace('#playb svg[viewBox="0 0 16 16"]{transform:translateX(1px)}\n', "", 1)
+        current_css = current_css.replace("#rside .volume-row{width:auto;gap:4px}\n#rside .volume-row .aicon{width:24px;height:24px;padding:0}\n", "", 1)
+        current_css = current_css.replace("#rside #vol{width:112px;", "#vol{width:90px;")
         reference_css = reference_css.replace('#btns button[aria-label="Radio"],#btns button[aria-label="Collapse player"]{display:none}', '#btns button[aria-label="Radio"]{display:none}')
         reference_css = reference_css.replace('.dfsQsect{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8a8a8a;font-weight:700;padding:16px 20px 6px}', '.dfsQsect{font-size:11px;color:#8a8a8a;font-weight:700;padding:16px 20px 6px}')
         reference_css = reference_css.replace('.settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#8f8f8f}', '.settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;color:#8f8f8f}')
