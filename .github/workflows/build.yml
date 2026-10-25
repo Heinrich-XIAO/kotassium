@@ -109,7 +109,7 @@ jobs:
 
       - name: Verify the PKG
         run: |
-          TMP=$(mktemp -d)
+          TMP=$(mktemp -d "$RUNNER_TEMP/kotassium-pkg.XXXXXX")
           trap 'rm -rf "$TMP"' EXIT
           pkgutil --payload-files Kotassium-*.pkg | grep -q 'Applications/Kotassium.app/Contents/MacOS/Kotassium'
           pkgutil --expand Kotassium-*.pkg "$TMP/expanded"

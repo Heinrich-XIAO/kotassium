@@ -209,6 +209,9 @@ class WrapperTests(unittest.TestCase):
         self.assertIn('["/usr/bin/open", "-a", "Installer", package]', updater)
         self.assertNotIn('if not name.endswith(".dmg")', updater)
         build = read(".github/workflows/build.yml")
+        verify_pkg = build.split("- name: Verify the PKG", 1)[1].split("      # Keep the DMG", 1)[0]
+        self.assertIn('TMP=$(mktemp -d "$RUNNER_TEMP/kotassium-pkg.XXXXXX")', verify_pkg)
+        self.assertIn('pkgutil --expand Kotassium-*.pkg "$TMP/expanded"', verify_pkg)
         self.assertIn("./make-pkg.sh", build)
         self.assertIn("Kotassium-*.pkg", build)
         self.assertIn("./make-dmg.sh", build)
