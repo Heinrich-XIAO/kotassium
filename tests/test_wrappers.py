@@ -165,6 +165,15 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("<title>Kotassium</title>", read("web/index.html"))
         self.assertIn("serviceWorker", read("web/app.jsx"))
 
+    def test_macos_bundle_uses_pywebview_py2app_compatible_configuration(self):
+        requirements = read("requirements-macos-build.txt")
+        self.assertIn("pywebview>=5.4", requirements)
+        setup = read("setup-macos.py")
+        self.assertIn('"zipfile": False', setup)
+        self.assertIn('"packages": ["webview"]', setup)
+        bootstrap = read("setup.sh")
+        self.assertIn("pywebview>=5.4", bootstrap)
+
     def test_update_button_keeps_manual_recheck_separate_from_install(self):
         app = read("web/app.jsx")
         self.assertIn("Check again", app)

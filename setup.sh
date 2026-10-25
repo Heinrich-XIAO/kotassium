@@ -19,7 +19,13 @@ if [ ! -x desktop-venv/bin/python ]; then
 fi
 
 desktop-venv/bin/python -m pip install --quiet --upgrade pip
-desktop-venv/bin/python -m pip install --quiet pywebview
+if [ "$(uname -s)" = "Darwin" ]; then
+    # pywebview 5.3's JavaScript bridge breaks in py2app's zipped package;
+    # 5.4 is the first release with the py2app resource fix.
+    desktop-venv/bin/python -m pip install --quiet 'pywebview>=5.4'
+else
+    desktop-venv/bin/python -m pip install --quiet pywebview
+fi
 
 if [ "$(uname -s)" = "Darwin" ]; then
     echo "macOS: pywebview installed (Cocoa/WKWebView backend)"
