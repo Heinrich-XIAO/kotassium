@@ -111,10 +111,13 @@ jobs:
         run: |
           TMP=$(mktemp -d "$RUNNER_TEMP/kotassium-pkg.XXXXXX")
           trap 'rm -rf "$TMP"' EXIT
-          pkgutil --payload-files Kotassium-*.pkg | grep -q 'Applications/Kotassium.app/Contents/MacOS/Kotassium'
+          pkgutil --payload-files Kotassium-*.pkg > "$TMP/payload-files.txt"
+          grep -q 'Applications/Kotassium.app/Contents/MacOS/Kotassium' "$TMP/payload-files.txt"
           pkgutil --expand Kotassium-*.pkg "$TMP/expanded"
-          test -f "$TMP/expanded/Scripts/preinstall"
-          grep -q 'display dialog' "$TMP/expanded/Scripts/preinstall"
+          PREINSTALL=$(find "$TMP/expanded" -type f -path '*/Scripts/preinstall' -print -quit)
+          test -n "$PREINSTALL"
+          test -x "$PREINSTALL"
+          grep -q 'display dialog' "$PREINSTALL"
           test -x macos-pkg-scripts/preinstall
 
       # Keep the DMG alongside the PKG so releases remain consumable by the

@@ -212,6 +212,9 @@ class WrapperTests(unittest.TestCase):
         verify_pkg = build.split("- name: Verify the PKG", 1)[1].split("      # Keep the DMG", 1)[0]
         self.assertIn('TMP=$(mktemp -d "$RUNNER_TEMP/kotassium-pkg.XXXXXX")', verify_pkg)
         self.assertIn('pkgutil --expand Kotassium-*.pkg "$TMP/expanded"', verify_pkg)
+        self.assertIn('PREINSTALL=$(find "$TMP/expanded" -type f -path \'*/Scripts/preinstall\' -print -quit)', verify_pkg)
+        self.assertIn('test -x "$PREINSTALL"', verify_pkg)
+        self.assertIn('grep -q \'display dialog\' "$PREINSTALL"', verify_pkg)
         self.assertIn("./make-pkg.sh", build)
         self.assertIn("Kotassium-*.pkg", build)
         self.assertIn("./make-dmg.sh", build)
