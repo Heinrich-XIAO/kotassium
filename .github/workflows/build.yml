@@ -113,10 +113,13 @@ jobs:
           trap 'rm -rf "$TMP"' EXIT
           pkgutil --payload-files Kotassium-*.pkg > "$TMP/payload-files.txt"
           grep -q 'Applications/Kotassium.app/Contents/MacOS/Kotassium' "$TMP/payload-files.txt"
-          pkgutil --expand Kotassium-*.pkg "$TMP/expanded"
-          PREINSTALL=$(find "$TMP/expanded" -type f -path '*/Scripts/preinstall' -print -quit)
-          test -n "$PREINSTALL"
-          test -x "$PREINSTALL"
+          pkgutil --expand-full Kotassium-*.pkg "$TMP/expanded"
+          PREINSTALL=$(find "$TMP/expanded" -type f -name preinstall -print -quit)
+          if [ -z "$PREINSTALL" ]; then
+            echo "No preinstall script found in fully expanded package; contents were:" >&2
+            find "$TMP/expanded" -print >&2
+            exit 1
+          fi
           grep -q 'display dialog' "$PREINSTALL"
           test -x macos-pkg-scripts/preinstall
 
