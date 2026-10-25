@@ -141,6 +141,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkValue, setLinkValue] = useState('');
+  const [bgDownload, setBgDownload] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toastText, setToastText] = useState('');
   const [upNext, setUpNext] = useState(false);
@@ -303,6 +304,16 @@ function App() {
     return promise;
   }, [downloadId]);
 
+  // Playback and prefetch mark their searches/downloads here so the opt-in
+  // background lane can yield: it never starts an item while this is above
+  // zero, which is what keeps prefetch (and whatever you press play on) in
+  // front of the queue.
+  const interactiveRef = useRef(0);
+  const asInteractive = useCallback(async (fn) => {
+    interactiveRef.current += 1;
+    try { return await fn(); } finally { interactiveRef.current = Math.max(0, interactiveRef.current - 1); }
+  }, []);
+
   const playTrackRef = useRef(null);
   const findCandidates = useCallback(async (track) => {
     const q = `${track.a ? `${track.a} ` : ''}${track.t || ''}`;
@@ -326,7 +337,7 @@ function App() {
     const candidate = candidates[candidateIndex];
     if (!candidate) { toast(`Could not find a matching source for ${track.t || 'track'}`); return; }
     try {
-      const result = await downloadId(candidate.id, track.t, false);
+      const result = await asInteractive(() => downloadId(candidate.id, track.t, false));
       if (epoch !== playbackEpoch.current) return;
       const expected = Number(track.ms) || 0;
       const pending = { trackKey: trackKey(track), candidates, index: candidateIndex, expected, cacheKey, cached, id: candidate.id, epoch };
@@ -344,7 +355,7 @@ function App() {
       }
       toast(error.message || `Could not fetch ${track.t || 'track'}`);
     }
-  }, [downloadId, toast]);
+  }, [asInteractive, downloadId, toast]);
 
   const playTrack = useCallback(async (track) => {
     if (!track) return;
@@ -369,7 +380,7 @@ function App() {
           // deleted file, dead video, wrong duration - clears this cache and
           // re-enters playTrack, which falls through to findCandidates below.
           candidates = [{ source: 'youtube', id: cached, dur: 0 }];
-        } else candidates = await findCandidates(track);
+        } else candidates = await asInteractive(() => findCandidates(track));
         if (epoch !== playbackEpoch.current) return;
         if (!candidates.length) { toast(`No source found for ${track.t || 'track'}`); return; }
         const cachedIndex = cached ? candidates.findIndex((c) => c.id === cached) : -1;
@@ -386,7 +397,7 @@ function App() {
     const url = `/api/play?src=${encodeURIComponent(track.source)}&id=${encodeURIComponent(track.id || '')}${track.preview ? `&preview=${encodeURIComponent(track.preview)}` : ''}`;
     audio.src = url;
     audio.play().catch(() => toast('Playback could not start'));
-  }, [findCandidates, startResolvedTrack, toast]);
+  }, [asInteractive, findCandidates, startResolvedTrack, toast]);
   playTrackRef.current = playTrack;
 
   const startQueue = useCallback((tracks, name = '', index = 0) => {
@@ -519,7 +530,7 @@ function App() {
     const key = trackKey(track);
     if (prefetchJobsRef.current.has(key)) return prefetchJobsRef.current.get(key);
     prefetchRef.current.add(key);
-    const pending = (async () => {
+    const pending = asInteractive((async () => {
       try {
         const knownId = track.id && (track.source === 'youtube' || track.source === 'newgrounds' || track.source === 'soundcloud');
         const cachedId = !track.source && cacheRef.current[key];
@@ -536,11 +547,70 @@ function App() {
         prefetchRef.current.delete(key);
         return false;
       }
-    })();
+    })());
     prefetchJobsRef.current.set(key, pending);
     return pending;
-  }, [findCandidates, runDownload]);
+  }, [asInteractive, findCandidates, runDownload]);
   prefetchTrackRef.current = prefetchTrack;
+
+  // Opt-in background download (the add-link checkbox, off by default): one
+  // track at a time that only ever starts while playback and prefetch are
+  // idle, with a few seconds of air between items - this lane shares the
+  // search and download queues with everything else, so it never bursts.
+  const bgQueueRef = useRef([]);
+  const bgRunningRef = useRef(false);
+  const startBackgroundDownload = useCallback((tracks, name) => {
+    const items = (tracks || []).filter((t) => t && t.t);
+    if (!items.length) return;
+    bgQueueRef.current.push(...items);
+    toast(`background download queued: ${items.length} tracks${name ? ` from ${name}` : ''}`);
+    if (bgRunningRef.current) return;
+    bgRunningRef.current = true;
+    const fetchOne = async (track) => {
+      const key = trackKey(track);
+      const knownId = track.id && (track.source === 'youtube' || track.source === 'newgrounds' || track.source === 'soundcloud');
+      const remember = (id) => { cacheRef.current[key] = id; try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {} };
+      const forget = () => { if (!knownId && cacheRef.current[key]) { delete cacheRef.current[key]; try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {} } };
+      const discover = async () => (await findCandidates(track))[0]?.id || '';
+      const remembered = knownId ? track.id : cacheRef.current[key];
+      const id = knownId ? remembered : remembered || await discover();
+      if (!id) return false;
+      try {
+        await runDownload(id, track.t);
+        if (!knownId) remember(id);
+        return true;
+      } catch {
+        // A remembered id can point at a dead video: forget it and take one
+        // fresh discovery pass before giving up on the track. Only ids that
+        // actually worked are ever written back to the cache.
+        forget();
+        if (knownId || !remembered) return false;
+        const fresh = await discover();
+        if (!fresh) return false;
+        try { await runDownload(fresh, track.t); remember(fresh); return true; } catch { forget(); return false; }
+      }
+    };
+    (async () => {
+      let saved = 0, failed = 0;
+      try {
+        while (bgQueueRef.current.length) {
+          // Yield first: never start a background item while playback or
+          // prefetch has work in flight.
+          while (interactiveRef.current > 0) await new Promise((resolve) => setTimeout(resolve, 900));
+          const track = bgQueueRef.current.shift();
+          if (!track) break;
+          if (await fetchOne(track)) saved += 1;
+          else failed += 1;
+          if (bgQueueRef.current.length) {
+            await new Promise((resolve) => setTimeout(resolve, 4000 + Math.random() * 6000));
+          }
+        }
+      } finally {
+        bgRunningRef.current = false;
+      }
+      toast(failed ? `background download: ${saved} saved, ${failed} failed` : `background download finished: ${saved} tracks saved`);
+    })();
+  }, [findCandidates, runDownload, toast]);
 
   // The next-track identity is derived from the queue state, so changes to the
   // queue, current item, shuffle order, or repeat mode always reconsider it.
@@ -752,11 +822,12 @@ function App() {
       setLinkValue(''); setLinkOpen(false);
       const updated = await loadLinks();
       toast(`saved: ${j.name || 'link'} - ${(j.tracks || []).length} tracks`);
+      if (bgDownload) startBackgroundDownload(j.tracks || [], j.name || '');
       const ix = updated.findIndex((p) => p.url === url || p.name === j.name);
       if (ix >= 0) await loadPlaylist(ix, false, updated);
     } catch (error) { toast(`could not open: ${error.message || 'network error'}`); }
     finally { clearInterval(resolving); setBusy(false); }
-  }, [linkValue, loadLinks, loadPlaylist, toast]);
+  }, [bgDownload, linkValue, loadLinks, loadPlaylist, startBackgroundDownload, toast]);
 
   const goHome = useCallback(() => { setQuery(''); setView({ type: 'home' }); }, []);
   useEffect(() => {
@@ -809,6 +880,7 @@ function App() {
   const addLibraryLink = useCallback(() => {
     setLinkValue('');
     setLinkOpen(true);
+    setBgDownload(false);
   }, []);
   const mobileOpen = useCallback(() => {
     if (!window.matchMedia('(max-width:820px)').matches) return;
@@ -1020,7 +1092,7 @@ function App() {
       <section className="link-dialog" role="dialog" aria-modal="true" aria-labelledby="linkTitle" aria-describedby="linkDescription">
         <header className="link-dialog-head"><span className="link-dialog-mark"><Icon name="add" size={19}/></span><button className="settings-close" onClick={() => setLinkOpen(false)} disabled={busy} aria-label="Close add link dialog"><Icon name="close" size={18}/></button></header>
         <div className="link-dialog-copy"><span className="link-eyebrow">Your library <i/> New link</span><h2 id="linkTitle">Add to your library</h2><p id="linkDescription">Bring in a Spotify playlist, album, or track. Paste its link below and we’ll get it ready to play.</p></div>
-        <form className="link-form" onSubmit={(event) => { event.preventDefault(); if (!busy) addLink(); }}><label htmlFor="plink">Spotify link</label><div className="link-input-wrap"><input id="plink" type="url" value={linkValue} onChange={(event) => setLinkValue(event.target.value)} placeholder="https://open.spotify.com/…" autoComplete="url" required disabled={busy}/><span className="link-input-icon"><Icon name="browse" size={17}/></span></div><small className="link-hint">Playlist, album, or track links are all welcome.</small><button className="link-submit" type="submit" disabled={busy || !linkValue.trim()}>{busy ? <><i className="link-spinner"/>Adding to library…</> : <>Add link <span>↗</span></>}</button></form>
+        <form className="link-form" onSubmit={(event) => { event.preventDefault(); if (!busy) addLink(); }}><label htmlFor="plink">Spotify link</label><div className="link-input-wrap"><input id="plink" type="url" value={linkValue} onChange={(event) => setLinkValue(event.target.value)} placeholder="https://open.spotify.com/…" autoComplete="url" required disabled={busy}/><span className="link-input-icon"><Icon name="browse" size={17}/></span></div><small className="link-hint">Playlist, album, or track links are all welcome.</small><label className="link-opt" htmlFor="bgdl"><input id="bgdl" type="checkbox" checked={bgDownload} onChange={(event) => setBgDownload(event.target.checked)} disabled={busy}/><span><b>Download every track</b><small>Queues the whole playlist in the background - one at a time, behind anything you play.</small></span></label><button className="link-submit" type="submit" disabled={busy || !linkValue.trim()}>{busy ? <><i className="link-spinner"/>Adding to library…</> : <>Add link <span>↗</span></>}</button></form>
       </section>
     </div>}
     <div id="mid" className={sideDragWidth !== null ? 'resizing' : ''}><aside id="side" className={`${(sideDragWidth !== null ? sideDragWidth < 165 : collapsed) ? 'collapsed' : ''} ${drawerOpen ? 'open' : ''}`} style={sideDragWidth !== null ? { flexBasis: `${sideDragWidth}px` } : undefined} onTouchStart={(e) => gestureStart(e, 'side')} onTouchMove={(e) => gestureMove(e, 'side')} onTouchEnd={(e) => gestureEnd(e, 'side')} onTouchCancel={(e) => gestureEnd(e, 'side')} onClickCapture={suppressGestureClick}><div id="sideHead"><button id="libToggle" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'} aria-label={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={18}/><b>Your Library</b></button><button id="addBtn" onClick={addLibraryLink} data-tooltip="Add Spotify link" aria-label="Add Spotify link"><Icon name="add" size={17}/></button></div><div id="sideList">{links.length ? links.map((p, i) => <div className={`pitem ${view.type === 'playlist' && view.name === p.name ? 'active' : ''}`} key={p.url || p.name} data-tooltip={p.name} onClick={() => loadPlaylist(i)}><div className="pcover" data-tooltip={p.name || '?'} style={{ background: coverBackground(p.cover || p.tracks?.[0]?.cover, p.name) }} onMouseEnter={() => warmCover(p.cover || p.tracks?.[0]?.cover)} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><button className="pcoverPlay" data-tooltip={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={18}/></button></div><div className="pmeta"><b>{p.name || '?'}</b><small>{typeof p.total === 'number' && p.total > p.count ? `${p.count} of ${p.total} songs` : `${p.count} songs${p.partial ? ' (partial)' : ''}`}</small></div></div>) : <div id="empty"><h3>Your library is empty</h3><p>Click + above and paste a Spotify link.</p></div>}</div></aside><div id="sideResize" role="separator" aria-label="Resize library" aria-orientation="vertical" aria-valuemin={68} aria-valuemax={262} aria-valuenow={sideDragWidth ?? (collapsed ? 68 : 262)} tabIndex={0} onPointerDown={startSidebarResize} onPointerMove={moveSidebarResize} onPointerUp={finishSidebarResize} onPointerCancel={finishSidebarResize} onKeyDown={keySidebarResize}/><main id="main">{renderMain()}</main></div>

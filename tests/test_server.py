@@ -185,6 +185,37 @@ class CoverIndexTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(body), {})
 
+    def test_warm_covers_fetches_each_remote_cover_once_and_keeps_going(self):
+        # A cover already on disk must not be fetched again, duplicates
+        # collapse, /cover/ urls are skipped, and one failure must not stop
+        # the rest of the playlist's artwork from landing locally.
+        serve_web.cover_store("https://img.example/warm-cached.jpg", b"\xff\xd8\xff cached")
+        got = []
+        def fake(url):
+            got.append(url)
+            if "broken" in url:
+                raise RuntimeError("boom")
+            return b"\xff\xd8\xff" + url.encode()
+        serve_web.warm_covers([
+            "https://img.example/warm-a.jpg",
+            "https://img.example/warm-a.jpg",
+            "/cover/already.jpg",
+            "https://img.example/warm-cached.jpg",
+            "https://img.example/warm-broken.jpg",
+            "https://img.example/warm-b.jpg",
+            "",
+        ], delay=0, fetch=fake)
+        self.assertEqual(got, ["https://img.example/warm-a.jpg",
+                               "https://img.example/warm-broken.jpg",
+                               "https://img.example/warm-b.jpg"])
+        self.assertNotEqual(serve_web.cover_local("https://img.example/warm-a.jpg"),
+                            "https://img.example/warm-a.jpg")
+        self.assertNotEqual(serve_web.cover_local("https://img.example/warm-b.jpg"),
+                            "https://img.example/warm-b.jpg")
+        # The failure was neither retried nor cached.
+        self.assertEqual(serve_web.cover_local("https://img.example/warm-broken.jpg"),
+                         "https://img.example/warm-broken.jpg")
+
     def test_playlist_cover_is_returned_in_links_and_get(self):
         original = serve_web.read_links
         serve_web.read_links = lambda: [{
@@ -213,8 +244,14 @@ class CoverIndexTests(unittest.TestCase):
     def test_resolve_prefers_the_playlists_own_thumbnail(self):
         import spotify_get
         saved = (spotify_get.resolve, spotify_get.playlist_image,
-                 serve_web.save_link)
+                 serve_web.save_link, serve_web.warm_covers)
         saved_links = []
+        warmed = []
+        warmed_evt = threading.Event()
+        def record_warm(urls):
+            warmed.append(list(urls))
+            warmed_evt.set()
+        serve_web.warm_covers = record_warm
         spotify_get.resolve = lambda url: ("My Playlist", [
             {"title": "T", "artist": "A", "dur": 4.0, "album": "",
              "cover": "https://img.example/first.jpg"}])
@@ -229,6 +266,12 @@ class CoverIndexTests(unittest.TestCase):
                              "https://i.scdn.co/image/plthumb")
             self.assertEqual(saved_links[-1]["cover"],
                              "https://i.scdn.co/image/plthumb")
+            # The add-time warmer is kicked off with every stored cover url,
+            # so the artwork lands on disk instead of being re-fetched by
+            # every tile, hover and session afterwards.
+            self.assertTrue(warmed_evt.wait(2))
+            self.assertIn("https://i.scdn.co/image/plthumb", warmed[0])
+            self.assertIn("https://img.example/first.jpg", warmed[0])
             # No image from Spotify: the first track's art still covers it.
             spotify_get.playlist_image = lambda url: None
             code, body = self.req("GET", target)
@@ -238,6 +281,7 @@ class CoverIndexTests(unittest.TestCase):
         finally:
             spotify_get.resolve, spotify_get.playlist_image = saved[:2]
             serve_web.save_link = saved[2]
+            serve_web.warm_covers = saved[3]
 
     def test_index_is_closed_behind_the_password(self):
         saved = (serve_web.PASSWORD, serve_web.AUTH, serve_web.SESSION)

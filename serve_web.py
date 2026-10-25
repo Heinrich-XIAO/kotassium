@@ -1060,6 +1060,78 @@ def cover_local(url):
         return "/cover/" + m[url]
     return url
 
+_cover_lock = threading.Lock()
+
+def cover_store(url, b):
+    """Write cover bytes into the cache and remember url -> file.
+
+    Returns the filename. Shared by the page's /api/cover/cache posts and the
+    add-time warmer, so the map read-modify-write stays under one lock."""
+    if not url or not b:
+        raise ValueError("missing")
+    ext = "jpg"
+    low = url.lower()
+    if ".png" in low or b.startswith(b"\x89PNG"):
+        ext = "png"
+    elif ".webp" in low or b.startswith(b"RIFF"):
+        ext = "webp"
+    elif ".gif" in low or b.startswith(b"GIF"):
+        ext = "gif"
+    elif ".jpg" in low or ".jpeg" in low or b.startswith(b"\xff\xd8"):
+        ext = "jpg"
+    key = hashlib.sha256(url.encode()).hexdigest()[:16]
+    name = key + "." + ext
+    with _cover_lock:
+        with open(os.path.join(COVER_DIR, name), "wb") as f:
+            f.write(b)
+        try:
+            m = json.load(open(COVERS_JSON))
+        except Exception:
+            m = {}
+        m[url] = name
+        with open(COVERS_JSON, "w") as f:
+            json.dump(m, f)
+    return name
+
+def _cover_fetch(url):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return r.read()
+
+def warm_covers(urls, delay=0.12, fetch=None):
+    """Fetch every not-yet-cached cover once so a freshly added playlist's
+    artwork is served from disk like the rest of the library.
+
+    Strictly sequential with a stagger between fetches: these hit the same
+    image hosts the browser would, and a burst of parallel requests is how a
+    lane gets itself throttled. Already-local, /cover/ and duplicate urls are
+    skipped without a request; a failed fetch just leaves that one cover to
+    the browser's HTTP cache and never stops the rest."""
+    getter = fetch or _cover_fetch
+    for url in dict.fromkeys(u for u in urls if u):
+        if url.startswith("/cover/") or cover_local(url) != url:
+            continue
+        try:
+            b = getter(url)
+        except Exception as e:
+            print("[kotassium-web] cover warm failed: %s" % str(e)[:120], flush=True)
+            time.sleep(delay)
+            continue
+        try:
+            if b:
+                cover_store(url, b)
+        except Exception as e:
+            print("[kotassium-web] cover warm store failed: %s" % str(e)[:120], flush=True)
+        time.sleep(delay)
+
+# One warmer at a time: adding several playlists in a row queues them on this
+# lock instead of fanning out into parallel bursts against the same hosts.
+_warm_lock = threading.Lock()
+
+def _warm_worker(urls):
+    with _warm_lock:
+        warm_covers(urls)
+
 def handle_post(path, params, raw, hdr):
     pp = urllib.parse.parse_qs(params, keep_blank_values=True)
     if path == "/api/links/drop":
@@ -1089,29 +1161,8 @@ def handle_post(path, params, raw, hdr):
             data = j.get("data") or ""
             if not url or not data:
                 return 400, "application/json", b'{"error":"missing"}', None, False
-            b = base64.b64decode(data.split(",")[-1])
-            ext = "jpg"
-            low = url.lower()
-            if ".png" in low or b.startswith(b"\x89PNG"):
-                ext = "png"
-            elif ".webp" in low or b.startswith(b"RIFF"):
-                ext = "webp"
-            elif ".gif" in low or b.startswith(b"GIF"):
-                ext = "gif"
-            elif ".jpg" in low or ".jpeg" in low or b.startswith(b"\xff\xd8"):
-                ext = "jpg"
-            key = hashlib.sha256(url.encode()).hexdigest()[:16]
-            out = os.path.join(COVER_DIR, key + "." + ext)
-            with open(out, "wb") as f:
-                f.write(b)
-            try:
-                m = json.load(open(COVERS_JSON))
-            except Exception:
-                m = {}
-            m[url] = key + "." + ext
-            with open(COVERS_JSON, "w") as f:
-                json.dump(m, f)
-            return 200, "application/json", json.dumps({"ok": True, "key": key, "file": key + "." + ext}).encode(), None, False
+            name = cover_store(url, base64.b64decode(data.split(",")[-1]))
+            return 200, "application/json", json.dumps({"ok": True, "key": name.rsplit(".", 1)[0], "file": name}).encode(), None, False
         except Exception as e:
             return 400, "application/json", json.dumps({"error": str(e)[:200]}).encode(), None, False
     return 404, "text/plain", b"nope", None, False
@@ -1230,6 +1281,14 @@ def handle(path, params, hdr):
                   "total": len(fmt), "truncated": False, "partial": False,
                   "cover": cover_local(playlist_cover)}
             save_link(link, jr)
+            # Warm every stored cover url now (thread + single-flight lock, so
+            # the response never waits on image hosts and adds never overlap):
+            # after this the sidebar/home/tile art is local, not just the
+            # header. /cover/ and already-cached urls are skipped inside.
+            covers = [t.get("cover") for t in tracks if t.get("cover")]
+            if playlist_cover:
+                covers.append(playlist_cover)
+            threading.Thread(target=_warm_worker, args=(covers,), daemon=True).start()
             return 200, "application/json", json.dumps(jr).encode(), None, False
         except Exception as e:
             return 200, "application/json", json.dumps({"error": "resolve_failed", "error_description": str(e)[:200]}).encode(), None, False
