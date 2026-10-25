@@ -1077,6 +1077,12 @@ def handle_post(path, params, raw, hdr):
         except Exception as e:
             st = dict(updater.status(), error=str(e)[:200])
         return 200, "application/json", json.dumps(st).encode(), None, False
+    if path == "/api/update/rollback":
+        try:
+            st = updater.rollback()
+        except Exception as e:
+            st = dict(updater.status(), error=str(e)[:200])
+        return 200, "application/json", json.dumps(st).encode(), None, False
     if path == "/api/update/check":
         # Manual "check for updates": re-queries GitHub now instead of at the
         # next launch. Returns immediately with state=checking; the page polls
@@ -1147,7 +1153,14 @@ def handle(path, params, hdr):
         return 404, "text/plain", b"nope", None, False
     if path in ("/", "/index.html"):
         html = open(os.path.join(BASE, "web", "index.html"), "rb").read().decode("utf-8", "replace")
-        return 200, "text/html; charset=utf-8", html.encode(), None, False
+        rollback_available = updater.rollback_available()
+        rollback_panel = ("""<aside id="recovery" role="alert" aria-label="App recovery">
+<style>
+#recovery{position:fixed;right:18px;bottom:18px;z-index:99999;width:min(370px,calc(100vw - 36px));padding:16px;border:1px solid #ffffff24;border-radius:14px;background:#191919;color:#f4f4f4;font:13px/1.45 system-ui,sans-serif;box-shadow:0 18px 60px #000c;display:none}
+#recovery.visible{display:block}#recovery strong{display:block;font-size:14px;margin-bottom:4px}#recovery p{margin:0 0 12px;color:#aaa}#recovery button{border:0;border-radius:18px;background:#1ed760;color:#07140a;font:700 12px system-ui,sans-serif;padding:9px 14px;cursor:pointer}#recovery button:disabled{opacity:.55;cursor:wait}#recovery .close{float:right;background:transparent;color:#aaa;padding:2px 6px;font-size:18px}
+</style><button class="close" aria-label="Dismiss recovery panel" onclick="this.parentNode.classList.remove('visible')">×</button><strong>Kotassium didn’t load</strong><p>The player interface failed to start. You can reload it or restore the previous app version.</p><button id="recovery-reload" onclick="location.reload()">Reload player</button><button id="recovery-rollback""" + ("" if rollback_available else " disabled") + ">Restore previous version</button></aside>""")
+        recovery_script = """<script>(function(){var panel=document.getElementById('recovery'),roll=document.getElementById('recovery-rollback');var ready=false;function show(){panel.classList.add('visible')}window.__kotReactReady=function(){ready=true;panel.classList.remove('visible')};window.__kotShowRecovery=show;setTimeout(function(){if(!ready)show()},5000);roll.addEventListener('click',function(){if(roll.disabled)return;roll.disabled=true;roll.textContent='Restoring previous version…';fetch('/api/update/rollback',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(s){if(s.error){roll.disabled=false;roll.textContent='Restore previous version';panel.querySelector('p').textContent=s.error}else{panel.querySelector('p').textContent='Kotassium is closing and restoring the previous version…'}}).catch(function(){roll.disabled=false;roll.textContent='Restore previous version';panel.querySelector('p').textContent='Could not start rollback. Close and reopen the app, then try again.'})})})();</script>"""
+        return 200, "text/html; charset=utf-8", (html + rollback_panel + recovery_script).encode(), None, False
     if path == "/api/search":
         q, src = one("q"), one("src", "all")
         out, errs = [], {}
@@ -1269,7 +1282,7 @@ def handle(path, params, hdr):
     if path == "/api/nowplaying":
         return 200, "application/json", json.dumps(get_now()).encode(), None, False
     if path == "/api/update":
-        return 200, "application/json", json.dumps(updater.status()).encode(), None, False
+        return 200, "application/json", json.dumps(dict(updater.status(), rollback_available=updater.rollback_available())).encode(), None, False
     if path == "/api/manifest":
         try:
             return 200, "application/json", open(os.path.join(STATE, "manifest.json"), "rb").read(), None, False

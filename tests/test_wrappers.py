@@ -66,6 +66,41 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("React", bundle)
         self.assertTrue(bundle.endswith("\n"))
 
+    def test_pre_react_recovery_is_injected_by_server_shell(self):
+        server = read("serve_web.py")
+        self.assertIn('id="recovery"', server)
+        self.assertIn("setTimeout(function(){if(!ready)show()},5000)", server)
+        self.assertIn("window.__kotReactReady", server)
+        self.assertIn("/api/update/rollback", server)
+        self.assertIn("updater.rollback_available()", server)
+        app = read("web/app.jsx")
+        self.assertIn("window.__kotShowRecovery?.()", app)
+        self.assertIn("class AppBoundary extends React.Component", app)
+        self.assertIn("window.__kotReactReady?.()", app)
+
+    def test_http_serves_recovery_outside_the_react_mount(self):
+        import serve_web
+        old_base = serve_web.BASE
+        old_available = serve_web.updater.rollback_available
+        serve_web.BASE = ROOT
+        serve_web.updater.rollback_available = lambda: False
+        server = serve_web.make_server("127.0.0.1", 0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:%s/" % server.server_address[1]) as response:
+                page = response.read().decode("utf-8")
+            self.assertIn('<div id="root"></div>', page)
+            self.assertIn('id="recovery"', page)
+            self.assertIn("Restore previous version</button>", page)
+            self.assertIn(" disabled>", page)
+            self.assertIn("setTimeout(function(){if(!ready)show()},5000)", page)
+        finally:
+            server.shutdown()
+            server.server_close()
+            serve_web.BASE = old_base
+            serve_web.updater.rollback_available = old_available
+
     def test_serve_web_serves_built_react_bundle(self):
         server = read("serve_web.py")
         self.assertEqual(server.count('if path == "/app.js":'), 1)
