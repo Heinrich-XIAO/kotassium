@@ -215,6 +215,15 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("version${count === 1 ? '' : 's'} forward", app)
         self.assertIn("updateState.can_install === false", app)
 
+    def test_up_next_toast_places_white_heading_above_track_details(self):
+        page = read("web/index.html")
+        self.assertIn("grid-template-columns:36px minmax(0,1fr)", page)
+        self.assertIn("grid-template-rows:auto auto", page)
+        self.assertIn("#upnext .upnext-label{grid-column:1/-1", page)
+        self.assertIn("text-transform:uppercase;color:#fff", page)
+        self.assertIn("#upnext .upnext-art{grid-column:1;grid-row:2", page)
+        self.assertIn("#upnext .upnext-copy{grid-column:2;grid-row:2", page)
+
     def test_custom_tooltips_and_lucide_update_and_settings_controls(self):
         app = read("web/app.jsx")
         page = read("web/index.html")

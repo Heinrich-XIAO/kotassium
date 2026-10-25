@@ -103,6 +103,8 @@ class ReactParityTests(unittest.TestCase):
         update_start = current_css.index("#upd{")
         update_end = current_css.index("#empty{", update_start)
         current_css = current_css[:update_start] + current_css[update_end:]
+        reference_css = "\n".join(line for line in reference_css.splitlines() if "#upnext" not in line) + "\n"
+        current_css = "\n".join(line for line in current_css.splitlines() if "#upnext" not in line) + "\n"
         settings_start = current_css.index("/* settings */")
         current_css = current_css[:settings_start]
         current_css = current_css.replace("#root{flex:1;min-height:0;display:flex;flex-direction:column}\n", "", 1)
