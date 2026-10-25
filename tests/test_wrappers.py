@@ -242,7 +242,7 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("grid-template-rows:auto auto", page)
         self.assertIn("#upnext .upnext-label{grid-column:1/-1", page)
         self.assertIn("<span className=\"upnext-label\">Up next</span>", app)
-        self.assertNotIn("text-transform:uppercase", page)
+        self.assertNotIn("text-transform:uppercase", re.sub(r"\.link-eyebrow\{[^}]*\}", "", page))
         self.assertIn(".dfsQsect{font-size:11px;color:#8a8a8a", page)
         self.assertIn(".settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;color:#8f8f8f}", page)
         self.assertIn("#upnext .upnext-art{grid-column:1;grid-row:2", page)

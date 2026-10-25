@@ -76,10 +76,18 @@ class ReactParityTests(unittest.TestCase):
         self.assertNotIn("#bar.collapsed", read("web/index.html"))
         self.assertNotIn("#thumbstrip", read("web/index.html"))
 
-    def test_add_link_submits_with_enter_without_a_redundant_button(self):
-        self.assertIn("onKeyDown={(e) => e.key === 'Enter' && !busy && addLink()}", self.app)
-        self.assertNotIn("<button onClick={addLink} disabled={busy}>Add</button>", self.app)
-        self.assertIn("if (linkOpen) document.getElementById('plink')?.focus()", self.app)
+    def test_add_link_opens_a_modal_from_both_sidebar_states(self):
+        self.assertIn("const addLibraryLink = useCallback(() => {\n    setLinkValue('');\n    setLinkOpen(true);", self.app)
+        self.assertNotIn("if (collapsed) { setCollapsed(false)", self.app)
+        self.assertIn('className="link-backdrop"', self.app)
+        self.assertIn('className="link-dialog" role="dialog" aria-modal="true"', self.app)
+        self.assertIn('id="plink" type="url"', self.app)
+        self.assertIn('className="link-submit" type="submit"', self.app)
+        self.assertIn("onSubmit={(event) => { event.preventDefault(); if (!busy) addLink(); }}", self.app)
+        self.assertNotIn('id="addBox"', self.app)
+        self.assertNotIn('onKeyDown={(e) => e.key === \'Enter\' && !busy && addLink()}', self.app)
+        self.assertIn("if (!linkOpen) return;", self.app)
+        self.assertIn("event.key === 'Escape' && !busy", self.app)
 
     def test_fullscreen_tracks_live_playback_and_reference_ids_exist(self):
         self.assertIn("background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t)", self.app)
@@ -91,7 +99,7 @@ class ReactParityTests(unittest.TestCase):
         app_ids = set(re.findall(r'''\bid=["']([A-Za-z][\w-]*)["']''', self.app))
         dynamic_ids = set(re.findall(r"\bid=\{[^}]*?['\"]([A-Za-z][\w-]*)['\"]", self.app))
         dynamic_control_ids = {"btns", "shufb", "prevb", "playb", "nextb", "repeatb", "prow", "curt", "prog", "progf", "tott", "volIcon", "vol", "volf", "thumbstrip", "fsBtns", "fsShuf", "fsprev", "fsPlay", "fsPlayIcon", "fsnext", "fsRepeat", "fsSeek", "fsCur", "fsProg", "fsProgf", "fsTot", "fsVol", "volIcon2", "fsVolBar", "fsVolFill"}
-        intentional_replacements = {"pbIcon", "fsPlayIcon", "repeatIcon", "fsTitle", "fsArtist", "au"}
+        intentional_replacements = {"pbIcon", "fsPlayIcon", "repeatIcon", "fsTitle", "fsArtist", "au", "addBox"}
         self.assertEqual(set(), original_ids - app_ids - dynamic_ids - dynamic_control_ids - intentional_replacements)
 
     def test_swiping_up_next_dismisses_until_track_or_notice_changes(self):
@@ -113,8 +121,8 @@ class ReactParityTests(unittest.TestCase):
         reference_css = "\n".join(line for line in reference_css.splitlines() if "#upnext" not in line) + "\n"
         current_css = "\n".join(line for line in current_css.splitlines() if "#upnext" not in line) + "\n"
         collapsed_player_css = ("#bar.collapsed", "#bar .collbtn", "#thumbstrip", ".thumb")
-        reference_css = "\n".join(line for line in reference_css.splitlines() if not any(selector in line for selector in collapsed_player_css)) + "\n"
-        current_css = "\n".join(line for line in current_css.splitlines() if not any(selector in line for selector in ("#mid.resizing #side", "#sideResize"))) + "\n"
+        reference_css = "\n".join(line for line in reference_css.splitlines() if not any(selector in line for selector in collapsed_player_css + ("#side.collapsed #addBox", "#addBox"))) + "\n"
+        current_css = "\n".join(line for line in current_css.splitlines() if not any(selector in line for selector in ("#mid.resizing #side", "#sideResize", "#side.collapsed #addBox", "#addBox"))) + "\n"
         settings_start = current_css.index("/* settings */")
         current_css = current_css[:settings_start]
         current_css = current_css.replace("#root{flex:1;min-height:0;display:flex;flex-direction:column}\n", "", 1)
