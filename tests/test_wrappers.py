@@ -224,11 +224,14 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("#dfsQueue #dfsQrows::-webkit-scrollbar-thumb{background:#ffffff18;border-radius:6px}", page)
 
     def test_up_next_toast_places_white_heading_above_track_details(self):
+        app = read("web/app.jsx")
         page = read("web/index.html")
         self.assertIn("grid-template-columns:36px minmax(0,1fr)", page)
         self.assertIn("grid-template-rows:auto auto", page)
         self.assertIn("#upnext .upnext-label{grid-column:1/-1", page)
-        self.assertIn("text-transform:uppercase;color:#fff", page)
+        # The heading reads as plain "Up Next", not shouted in caps.
+        self.assertIn("<span className=\"upnext-label\">Up Next</span>", app)
+        self.assertNotIn("text-transform:uppercase;color:#fff", page)
         self.assertIn("#upnext .upnext-art{grid-column:1;grid-row:2", page)
         self.assertIn("#upnext .upnext-copy{grid-column:2;grid-row:2", page)
 
