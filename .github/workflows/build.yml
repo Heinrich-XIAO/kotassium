@@ -109,10 +109,17 @@ jobs:
 
       - name: Verify the PKG
         run: |
-          TMP=$(mktemp -d "$RUNNER_TEMP/kotassium-pkg.XXXXXX")
+          set -euo pipefail
+          ls -l Kotassium-*.pkg
+          BASE="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+          mkdir -p "$BASE"
+          TMP=$(mktemp -d "$BASE/kotassium-pkg.XXXXXX")
+          echo "TMP=$TMP"
           trap 'rm -rf "$TMP"' EXIT
-          pkgutil --payload-files Kotassium-*.pkg > "$TMP/payload-files.txt"
+          echo "--- payload files ---"
+          pkgutil --payload-files Kotassium-*.pkg | tee "$TMP/payload-files.txt"
           grep -q 'Applications/Kotassium.app/Contents/MacOS/Kotassium' "$TMP/payload-files.txt"
+          echo "--- expanding package ---"
           pkgutil --expand-full Kotassium-*.pkg "$TMP/expanded"
           PREINSTALL=$(find "$TMP/expanded" -type f -name preinstall -print -quit)
           if [ -z "$PREINSTALL" ]; then
@@ -120,6 +127,7 @@ jobs:
             find "$TMP/expanded" -print >&2
             exit 1
           fi
+          echo "PREINSTALL=$PREINSTALL"
           grep -q 'display dialog' "$PREINSTALL"
           test -x macos-pkg-scripts/preinstall
 
