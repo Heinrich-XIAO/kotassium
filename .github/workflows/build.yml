@@ -57,6 +57,13 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-macos-build.txt
 
+      - name: Restore desktop-venv
+        id: venv-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: desktop-venv
+          key: desktop-venv-macos-${{ runner.arch }}-py312-${{ hashFiles('setup.sh', 'requirements-macos-build.txt') }}
+
       - name: Restore yt-dlp binary
         id: yt-dlp-cache
         uses: actions/cache/restore@v4
@@ -86,6 +93,13 @@ jobs:
         with:
           path: vendor/yt-dlp
           key: yt-dlp-macos-${{ runner.arch }}-latest
+
+      - name: Cache desktop-venv
+        uses: actions/cache/save@v4
+        if: ${{ steps.venv-cache.outputs.cache-hit != 'true' }}
+        with:
+          path: desktop-venv
+          key: desktop-venv-macos-${{ runner.arch }}-py312-${{ hashFiles('setup.sh', 'requirements-macos-build.txt') }}
 
       - name: Smoke test the bundle
         run: |
@@ -140,34 +154,10 @@ jobs:
           grep -q 'display dialog' "$PREINSTALL"
           test -x macos-pkg-scripts/preinstall
 
-      # Keep the DMG alongside the PKG so releases remain consumable by the
-      # DMG-only updater already installed in older Kotassium versions.
-      - name: Make the legacy auto-update DMG
-        env:
-          KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          hdiutil detach /Volumes/Kotassium 2>/dev/null || true
-          for attempt in 1 2 3; do
-            if ./make-dmg.sh "Kotassium-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.dmg"; then
-              exit 0
-            fi
-            echo "Legacy DMG creation failed (attempt $attempt); retrying in 20 seconds"
-            hdiutil detach /Volumes/Kotassium 2>/dev/null || true
-            sleep 20
-          done
-          echo "Could not create the DMG needed by existing auto-updaters" >&2
-          exit 1
-
       - uses: actions/upload-artifact@v4
         with:
           name: Kotassium-${{ matrix.arch }}
           path: Kotassium-*.pkg
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Kotassium-${{ matrix.arch }}-legacy-dmg
-          path: Kotassium-*.dmg
           if-no-files-found: error
 
   android:

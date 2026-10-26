@@ -143,9 +143,8 @@ desktop-venv/bin/python desktop.py
 macOS: download and open the PKG from [GitHub Releases](https://github.com/Heinrich-XIAO/kotassium/releases)
 (`Kotassium-*-arm64.pkg` for Apple Silicon, `Kotassium-*-x86_64.pkg` for
 Intel). It installs Kotassium into **Applications** and asks before quitting an
-already running copy; Cancel leaves the current app untouched. Releases also
-retain a DMG for older installed versions whose updater only understands DMG
-assets. The app is unsigned, so right-click → **Open** the first time. Downloads
+already running copy; Cancel leaves the current app untouched. The app is
+unsigned, so right-click → **Open** the first time. Downloads
 still need `ffmpeg`:
 `brew install ffmpeg` — `yt-dlp` is bundled inside the app.
 
@@ -155,7 +154,6 @@ Building the app yourself (on the Mac — it cannot be cross-compiled here):
 ./install-macos.sh          # py2app -> /Applications/Kotassium.app
 ./build-macos.sh            # just build dist/Kotassium.app
 ./make-pkg.sh               # package it as Kotassium-<version>.pkg
-./make-dmg.sh               # legacy drag-to-Applications disk image
 ./install-macos.sh --wrapper   # fallback: tiny AppleScript app
 ```
 

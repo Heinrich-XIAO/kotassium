@@ -23,7 +23,7 @@ desktop-venv/bin/python -m pip install --quiet -r requirements-macos-build.txt
 ./desktop-venv/bin/python tools/normalize-icons.py
 ./desktop-venv/bin/python tools/make-macos-icon.py
 
-# Ship yt-dlp inside the app so a DMG install needs no Homebrew for downloads.
+# Ship yt-dlp inside the app so a PKG install needs no Homebrew for downloads.
 mkdir -p vendor
 if [ ! -x vendor/yt-dlp ]; then
     echo "fetching yt-dlp..."
@@ -50,5 +50,4 @@ codesign --force --deep --sign - dist/Kotassium.app
 
 echo
 echo "built: $(pwd)/dist/Kotassium.app (version $VERSION)"
-echo "make a disk image with: ./make-dmg.sh"
 echo "install locally with: ./install-macos.sh"

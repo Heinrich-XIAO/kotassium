@@ -11,8 +11,7 @@ Download and open the installer package for your Mac:
 - `Kotassium-*-x86_64.pkg` — Intel
 
 The installer places Kotassium in `/Applications`. If it is running, the installer
-asks whether to quit it; choosing Cancel safely aborts the update. A DMG is also
-included temporarily so older installed versions can update to this release.
+asks whether to quit it; choosing Cancel safely aborts the update.
 
 The app is **unsigned and not notarized**. On first launch macOS
 will refuse to open it. Either right-click the app → **Open** →

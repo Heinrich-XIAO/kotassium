@@ -209,7 +209,7 @@ class WrapperTests(unittest.TestCase):
         self.assertIn('["/usr/bin/open", "-a", "Installer", package]', updater)
         self.assertNotIn('if not name.endswith(".dmg")', updater)
         build = read(".github/workflows/build.yml")
-        verify_pkg = build.split("- name: Verify the PKG", 1)[1].split("      # Keep the DMG", 1)[0]
+        verify_pkg = build.split("- name: Verify the PKG", 1)[1].split("      - uses: actions/upload-artifact@v4", 1)[0]
         self.assertIn('BASE="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"', verify_pkg)
         self.assertIn('TMP=$(mktemp -d "$BASE/kotassium-pkg.XXXXXX")', verify_pkg)
         self.assertIn('grep -q \'Kotassium\\.app/Contents/MacOS/Kotassium\' "$TMP/payload-files.txt"', verify_pkg)
@@ -221,14 +221,14 @@ class WrapperTests(unittest.TestCase):
         self.assertIn('grep -q \'display dialog\' "$PREINSTALL"', verify_pkg)
         self.assertIn("./make-pkg.sh", build)
         self.assertIn("Kotassium-*.pkg", build)
-        self.assertIn("./make-dmg.sh", build)
-        self.assertIn("Kotassium-*.dmg", build)
-        self.assertIn("legacy-dmg", build)
+        self.assertNotIn("./make-dmg.sh", build)
+        self.assertNotIn("Kotassium-*.dmg", build)
+        self.assertNotIn("legacy-dmg", build)
         auto_release = read(".github/workflows/auto-release.yml")
         tag_release = read(".github/workflows/release.yml")
         for workflow in (auto_release, tag_release):
-            self.assertIn("publish-macos-legacy-dmg:", workflow)
-            self.assertIn("arm64.dmg", workflow)
+            self.assertNotIn("publish-macos-legacy-dmg", workflow)
+            self.assertNotIn("arm64.dmg", workflow)
             self.assertIn('filename: Kotassium-${{ needs.version.outputs.version }}-arm64.pkg', workflow)
         self.assertIn(".pkg", read(".github/release-body.md"))
 

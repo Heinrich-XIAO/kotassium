@@ -80,24 +80,13 @@ jobs:
 
   publish-macos:
     name: publish or attach Apple Silicon PKG
-    needs: [version, preflight, macos, publish-macos-legacy-dmg]
+    needs: [version, preflight, macos]
     if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.macos.result == 'success' }}
     uses: ./.github/workflows/publish-artifact.yml
     with:
       version: ${{ needs.version.outputs.version }}
       artifact: Kotassium-arm64
       filename: Kotassium-${{ needs.version.outputs.version }}-arm64.pkg
-    secrets: inherit
-
-  publish-macos-legacy-dmg:
-    name: preserve DMG compatibility for existing updaters
-    needs: [version, preflight, macos]
-    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.macos.result == 'success' }}
-    uses: ./.github/workflows/publish-artifact.yml
-    with:
-      version: ${{ needs.version.outputs.version }}
-      artifact: Kotassium-arm64-legacy-dmg
-      filename: Kotassium-${{ needs.version.outputs.version }}-arm64.dmg
     secrets: inherit
 
   publish-android:
