@@ -118,9 +118,18 @@ jobs:
           trap 'rm -rf "$TMP"' EXIT
           echo "--- payload files ---"
           pkgutil --payload-files Kotassium-*.pkg | tee "$TMP/payload-files.txt"
-          grep -q 'Applications/Kotassium.app/Contents/MacOS/Kotassium' "$TMP/payload-files.txt"
+          grep -q 'Kotassium\.app/Contents/MacOS/Kotassium' "$TMP/payload-files.txt"
           echo "--- expanding package ---"
           pkgutil --expand-full Kotassium-*.pkg "$TMP/expanded"
+          echo "--- package info ---"
+          PKGINFO=$(find "$TMP/expanded" -maxdepth 2 -name PackageInfo -print -quit)
+          if [ -z "$PKGINFO" ]; then
+            echo "No PackageInfo found in fully expanded package; contents were:" >&2
+            find "$TMP/expanded" -maxdepth 2 -print >&2
+            exit 1
+          fi
+          echo "PKGINFO=$PKGINFO"
+          grep -q 'install-location="/Applications"' "$PKGINFO"
           PREINSTALL=$(find "$TMP/expanded" -type f -name preinstall -print -quit)
           if [ -z "$PREINSTALL" ]; then
             echo "No preinstall script found in fully expanded package; contents were:" >&2

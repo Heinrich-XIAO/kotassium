@@ -212,7 +212,10 @@ class WrapperTests(unittest.TestCase):
         verify_pkg = build.split("- name: Verify the PKG", 1)[1].split("      # Keep the DMG", 1)[0]
         self.assertIn('BASE="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"', verify_pkg)
         self.assertIn('TMP=$(mktemp -d "$BASE/kotassium-pkg.XXXXXX")', verify_pkg)
+        self.assertIn('grep -q \'Kotassium\\.app/Contents/MacOS/Kotassium\' "$TMP/payload-files.txt"', verify_pkg)
         self.assertIn('pkgutil --expand-full Kotassium-*.pkg "$TMP/expanded"', verify_pkg)
+        self.assertIn('PKGINFO=$(find "$TMP/expanded" -maxdepth 2 -name PackageInfo -print -quit)', verify_pkg)
+        self.assertIn('install-location="/Applications"', verify_pkg)
         self.assertIn('PREINSTALL=$(find "$TMP/expanded" -type f -name preinstall -print -quit)', verify_pkg)
         self.assertIn('No preinstall script found in fully expanded package; contents were:', verify_pkg)
         self.assertIn('grep -q \'display dialog\' "$PREINSTALL"', verify_pkg)
