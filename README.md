@@ -165,8 +165,9 @@ uploads artifacts, so it is the safe way to test packaging changes.
 the window stops the server.
 
 Flags: `--lan` also serves phones, `--port` picks another port, `--dev` opens
-the WebKit inspector (and keeps the live-reload poll), `--no-window` runs the
-server only, `--no-notify` disables track-change notifications.
+the WebKit inspector (and keeps the live-reload poll), `--inspector` opens the
+inspector in a normal session without the live-reload poll, `--no-window` runs
+the server only, `--no-notify` disables track-change notifications.
 
 Downloads and state live outside the repo in `~/Music/Kotassium`
 (`KOTASSIUM_LIB` overrides it, which is what the tests and the demo use).
