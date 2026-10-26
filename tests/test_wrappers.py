@@ -36,13 +36,11 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("http", read("desktop.py"))
         self.assertIn("loadUrl", read(self.WRAPPERS[1]))
 
-    def test_inspector_flag_opens_devtools_without_dev_mode(self):
+    def test_devtools_available_in_every_session(self):
         src = read("desktop.py")
-        self.assertIn('"--inspector"', src)
-        self.assertIn("debug=(dev or inspector)", src)
-        # dev mode still owns the URL (desktop=1 stays off only with --dev).
-        self.assertIn('if not dev:', src)
-        self.assertIn("inspector=a.inspector", src)
+        self.assertNotIn('"--inspector"', src)
+        self.assertIn("debug=True", src)
+        self.assertIn('webview.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False', src)
 
     def test_wrappers_do_not_copy_the_page(self):
         page = read("web/index.html")

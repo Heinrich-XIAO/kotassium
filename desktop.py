@@ -154,8 +154,7 @@ def baked_url():
         return None
 
 
-def run(host, port, dev=False, no_window=False, notify_tracks=True, remote=None,
-        inspector=False):
+def run(host, port, dev=False, no_window=False, notify_tracks=True, remote=None):
     lock = acquire_lock()
     if not lock:
         if health(port):
@@ -183,8 +182,7 @@ def run(host, port, dev=False, no_window=False, notify_tracks=True, remote=None,
                     return 1
                 return 0
             try:
-                return show_window(dev=dev, notify_tracks=notify_tracks, url=remote,
-                                   inspector=inspector)
+                return show_window(dev=dev, notify_tracks=notify_tracks, url=remote)
             finally:
                 lock.close()
 
@@ -204,7 +202,7 @@ def run(host, port, dev=False, no_window=False, notify_tracks=True, remote=None,
             if no_window:
                 while True:
                     time.sleep(3600)
-            return show_window(port, dev, notify_tracks, inspector=inspector)
+            return show_window(port, dev, notify_tracks)
         finally:
             srv.shutdown()
             serve_web.stop_children()
@@ -271,8 +269,7 @@ def start_nowplaying_watch(port, mpris, notify_tracks):
     threading.Thread(target=loop, daemon=True).start()
 
 
-def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=None,
-                inspector=False):
+def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=None):
     try:
         import webview
     except Exception as e:
@@ -364,11 +361,17 @@ def show_window(port=None, dev=False, notify_tracks=True, on_start=None, url=Non
     # a function once the GUI loop is up (used by tools/demo.py).
     # private_mode=True (pywebview's default) makes localStorage null, which
     # would throw away the YouTube-id cache, volume and shuffle every launch.
-    # inspector opens devtools without dev mode's live-reload poll: the URL
-    # (and its desktop=1 flag) still follows dev alone. pywebview enables the
-    # WebKit inspector from debug (auto-opening it in recent versions) and,
-    # on Linux, restores the right-click menu that stays disabled otherwise.
-    webview.start(func=on_start, debug=(dev or inspector), private_mode=False)
+    # Devtools are always one right-click away: debug enables the WebKit
+    # inspector (and, on Linux, the context menu pywebview disables
+    # otherwise). Recent pywebview auto-opens the inspector in debug mode,
+    # so suppress that where supported - normal launches must stay clean.
+    # Guarded: older pywebview has no such setting (and no auto-open).
+    try:
+        if "OPEN_DEVTOOLS_IN_DEBUG" in webview.settings:
+            webview.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False
+    except Exception:
+        pass
+    webview.start(func=on_start, debug=True, private_mode=False)
     return 0
 
 
@@ -377,9 +380,8 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--lan", action="store_true",
                     help="bind 0.0.0.0 so phones can connect too")
-    ap.add_argument("--dev", action="store_true", help="open the WebKit inspector")
-    ap.add_argument("--inspector", action="store_true",
-                    help="open the WebKit inspector without dev-mode live reload")
+    ap.add_argument("--dev", action="store_true",
+                    help="plain URL with live-reload polling (dev mode)")
     ap.add_argument("--no-window", action="store_true", help="server only")
     ap.add_argument("--no-notify", action="store_true",
                     help="don't send a notification on track change")
@@ -395,8 +397,7 @@ def main(argv=None):
     host = "0.0.0.0" if a.lan else "127.0.0.1"
     remote = None if a.local else (a.remote or os.environ.get("KOTASSIUM_URL") or baked_url())
     return run(host, a.port, dev=a.dev, no_window=a.no_window,
-               notify_tracks=not a.no_notify, remote=normalize_url(remote),
-               inspector=a.inspector)
+               notify_tracks=not a.no_notify, remote=normalize_url(remote))
 
 
 if __name__ == "__main__":

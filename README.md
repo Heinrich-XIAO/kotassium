@@ -164,10 +164,10 @@ uploads artifacts, so it is the safe way to test packaging changes.
 `install.sh` rewrites the launcher with this checkout's absolute path. Closing
 the window stops the server.
 
-Flags: `--lan` also serves phones, `--port` picks another port, `--dev` opens
-the WebKit inspector (and keeps the live-reload poll), `--inspector` opens the
-inspector in a normal session without the live-reload poll, `--no-window` runs
-the server only, `--no-notify` disables track-change notifications.
+Flags: `--lan` also serves phones, `--port` picks another port, `--dev` uses
+the plain URL with live-reload polling, `--no-window` runs the server only,
+`--no-notify` disables track-change notifications. Right-click → Inspect
+Element opens the WebKit inspector in any session.
 
 Downloads and state live outside the repo in `~/Music/Kotassium`
 (`KOTASSIUM_LIB` overrides it, which is what the tests and the demo use).
