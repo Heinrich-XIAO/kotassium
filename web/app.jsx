@@ -16,7 +16,10 @@ const shuffledExcept = (length, excluded) => {
   }
   return order;
 };
-const gradient = (name) => { const h = hue(name); return `linear-gradient(135deg,hsl(${h},70%,38%),hsl(${(h + 40) % 360},60%,20%))`; };
+// no-repeat keeps the tile inside the padding box: these covers carry a 1px
+// border, so a repeating tile would bleed the gradient's bright first stop into
+// the border ring as a bright stripe along the bottom and right.
+const gradient = (name) => { const h = hue(name); return `linear-gradient(135deg,hsl(${h},70%,38%),hsl(${(h + 40) % 360},60%,20%)) no-repeat`; };
 const escStyle = (url) => `url("${String(url || '').replace(/["'<>)]/g, (c) => encodeURIComponent(c))}") center/cover no-repeat`;
 function Icon({ name, size = 20, children }) {
   const viewBox = ['add', 'play', 'pause', 'prev', 'next'].includes(name) ? '0 0 16 16' : '0 0 24 24';
