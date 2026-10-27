@@ -154,6 +154,13 @@ class ReactParityTests(unittest.TestCase):
         css = read("web/index.html")
         self.assertIn(".pcover,.ccover,#plx,#nowc,.track-cover,#dfsArt,#fsArt{border:1px solid #ffffff18;overflow:hidden;background-clip:padding-box}", css)
 
+    def test_sidebar_and_main_float_as_islands_on_black(self):
+        css = read("web/index.html")
+        self.assertIn("#mid{flex:1;display:flex;min-height:0;background:#000;padding:8px;gap:8px}", css)
+        self.assertIn("#side{flex:0 0 262px;background:#121212;border-radius:8px;", css)
+        self.assertIn("#main{flex:1;background:#121212;border-radius:8px;", css)
+        self.assertNotIn("#sideResize:after", css)
+
     def test_reference_css_is_preserved_in_index_shell(self):
         migrated_shell = git_show("8ae5e3e:web/index.html")
         current = read("web/index.html")
@@ -180,6 +187,8 @@ class ReactParityTests(unittest.TestCase):
         reference_css = reference_css.replace("#qDiv,#qBrowse{display:none}", "", 1)
         current_css = current_css.replace('body{background:#000;color:#fff;font-family:var(--font-ui);font-size:var(--font-size-body);font-weight:var(--font-weight-regular);', 'body{background:#000;color:#fff;font-family:system-ui,sans-serif;', 1)
         current_css = current_css.replace('#homeView h2{margin:0 0 16px}', '#homeView h2{font-size:22px;margin:0 0 16px}', 1)
+        current_css = current_css.replace('#mid{flex:1;display:flex;min-height:0;background:#000;padding:8px;gap:8px}', '#mid{flex:1;display:flex;min-height:0;background:#121212;padding:8px;gap:8px}', 1)
+        current_css = current_css.replace("/* Spotify-style islands: black shell, rounded panels, and the gutter between\n   them is the drag affordance instead of a painted handle bar. */\n", "", 1)
         current_css = current_css.replace('.settings-head h2,.link-dialog-copy h2{font-size:var(--font-size-title);font-weight:var(--font-weight-bold);letter-spacing:-.02em}', '.settings-head h2{font-size:28px;font-weight:820;letter-spacing:-.035em}.link-dialog-copy h2{font-size:27px;font-weight:790;letter-spacing:-.045em}', 1)
         current_css = current_css.replace('#empty h3{font-size:16px;font-weight:var(--font-weight-bold)}\n.card b,.pmeta b,#nowt b,.rtxt b{font-weight:var(--font-weight-semibold)}\n', '', 1)
         current_css = current_css.replace('.settings-label{margin:0 0 8px 2px;font-size:var(--font-size-section);font-weight:var(--font-weight-bold);', '.settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;', 1)

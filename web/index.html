@@ -29,13 +29,14 @@ svg{display:block}
 #qClear{display:none;width:24px;height:24px;border-radius:50%;background:#ffffff26;color:#fff;place-items:center;flex:none}
 #qClear:hover{background:#ffffff40}
 #searchwrap.filled #qClear{display:grid}
-#mid{flex:1;display:flex;min-height:0;background:#121212;padding:8px;gap:8px}
+/* Spotify-style islands: black shell, rounded panels, and the gutter between
+   them is the drag affordance instead of a painted handle bar. */
+#mid{flex:1;display:flex;min-height:0;background:#000;padding:8px;gap:8px}
 #side{flex:0 0 262px;background:#121212;border-radius:8px;display:flex;flex-direction:column;min-height:0;transition:flex-basis .2s}
 #mid.resizing #side{transition:none}
-#sideResize{position:relative;z-index:2;width:8px;flex:none;margin:0 -8px;cursor:col-resize;touch-action:none}
-#sideResize:after{content:"";position:absolute;left:3px;top:14px;bottom:14px;width:2px;border-radius:2px;background:#ffffff45;transition:background .15s,transform .15s}
-#sideResize:hover:after,#sideResize:focus-visible:after,#mid.resizing #sideResize:after{background:#fff;transform:scaleX(1.5)}
-#sideResize:focus-visible{outline:none}
+#sideResize{position:relative;z-index:2;width:8px;flex:none;margin:0 -8px;cursor:col-resize;touch-action:none;border-radius:8px;transition:background .15s}
+#sideResize:hover,#mid.resizing #sideResize{background:#ffffff1a}
+#sideResize:focus-visible{outline:2px solid #1ed760;outline-offset:0}
 #main{flex:1;background:#121212;border-radius:8px;overflow-y:auto;position:relative}
 #main,#sideList{scrollbar-width:none}
 #main::-webkit-scrollbar,#sideList::-webkit-scrollbar{width:0}
