@@ -532,5 +532,80 @@ class BaseDirTests(unittest.TestCase):
                 os.environ["KOTASSIUM_BASE"] = saved
 
 
+class AddToPlaylistTests(unittest.TestCase):
+    """The playback bar's save button drives these two routes."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = serve_web.make_server("127.0.0.1", 0)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.saved_links = serve_web.LINKS
+        serve_web.LINKS = os.path.join(self.tmp, "links.json")
+        with open(serve_web.LINKS, "w") as fh:
+            json.dump([{"url": "u-road", "name": "Road Trip", "count": 1,
+                        "tracks": [{"t": "A", "a": "B", "ms": 1000}]},
+                       {"url": "u-focus", "name": "Focus", "count": 0,
+                        "tracks": []}], fh)
+
+    def tearDown(self):
+        serve_web.LINKS = self.saved_links
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def req(self, method, path, body=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request(method, path, body=body,
+                  headers={"Content-Type": "application/json"} if body else {})
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, (json.loads(data) if data else {})
+
+    def test_contains_answers_for_every_playlist(self):
+        code, body = self.req("GET", "/api/links/contains?t=A&a=B")
+        self.assertEqual(code, 200)
+        self.assertEqual(body["contains"], {"u-road": True, "u-focus": False})
+        code, body = self.req("GET", "/api/links/contains?t=Missing&a=B")
+        self.assertEqual(body["contains"], {"u-road": False, "u-focus": False})
+
+    def test_add_remove_round_trip_updates_count_and_membership(self):
+        track = {"t": "C", "a": "D", "ms": 2000}
+        code, body = self.req("POST", "/api/links/track",
+                              json.dumps({"url": "u-focus", "op": "add", "track": track}))
+        self.assertEqual(code, 200)
+        self.assertTrue(body["contains"])
+        self.assertEqual(body["count"], 1)
+        code, body = self.req("POST", "/api/links/track",
+                              json.dumps({"url": "u-focus", "op": "add", "track": track}))
+        self.assertEqual(body["count"], 1)  # adding twice must not duplicate
+        code, body = self.req("GET", "/api/links/contains?t=C&a=D")
+        self.assertTrue(body["contains"]["u-focus"])
+        code, body = self.req("POST", "/api/links/track",
+                              json.dumps({"url": "u-focus", "op": "remove", "track": track}))
+        self.assertFalse(body["contains"])
+        self.assertEqual(body["count"], 0)
+        code, links = self.req("GET", "/api/links")
+        focus = next(l for l in links["links"] if l["url"] == "u-focus")
+        self.assertEqual(focus["count"], 0)
+
+    def test_bad_requests_are_rejected(self):
+        code, _ = self.req("POST", "/api/links/track",
+                           json.dumps({"url": "", "op": "add", "track": {"t": "x"}}))
+        self.assertEqual(code, 400)
+        code, _ = self.req("POST", "/api/links/track",
+                           json.dumps({"url": "u-missing", "op": "add", "track": {"t": "x"}}))
+        self.assertEqual(code, 404)
+        code, _ = self.req("POST", "/api/links/track", "not json")
+        self.assertEqual(code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

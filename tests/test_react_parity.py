@@ -162,6 +162,16 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("#main{flex:1;background:#121212;border-radius:8px;", css)
         self.assertNotIn("#sideResize:after", css)
 
+    def test_playback_bar_has_an_add_to_playlist_control(self):
+        app = read("web/app.jsx")
+        self.assertIn('id="nowsave"', app)
+        self.assertIn("/api/links/track", app)
+        self.assertIn("/api/links/contains", app)
+        self.assertIn("inCurrentPlaylist", app)
+        css = read("web/index.html")
+        self.assertIn("#nowsave.on{background:#1ed760;border-color:#1ed760;color:#07140a}", css)
+        self.assertIn(".save-menu{position:absolute", css)
+
     def test_reference_css_is_preserved_in_index_shell(self):
         migrated_shell = git_show("8ae5e3e:web/index.html")
         current = read("web/index.html")

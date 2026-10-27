@@ -30,6 +30,7 @@ function Icon({ name, size = 20, children }) {
     close: <><path d="m5 5 14 14M19 5 5 19"/></>,
     browse: <path d="M3 4.5h13v2H3zM3 8.25h13v2H3zM3 12h18v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z" fill="currentColor" stroke="none" />,
     add: <path d="M8 1.5a.75.75 0 0 1 1.5 0v5h5a.75.75 0 0 1 0 1.5h-5v5a.75.75 0 0 1-1.5 0V8H3a.75.75 0 0 1 0-1.5h5v-5z" fill="currentColor" stroke="none" />,
+    check: <path d="M4.5 12.5l5 5 10-11"/>,
     play: <path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(-1.145 0)" fill="currentColor" stroke="none" />,
     pause: <path d="M4.8 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z" transform="translate(0 -1)" fill="currentColor" stroke="none" />,
     prev: <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z" fill="currentColor" stroke="none" />,
@@ -155,6 +156,8 @@ function App() {
   const sideDrag = useRef(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveContains, setSaveContains] = useState(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkValue, setLinkValue] = useState('');
   const [bgDownload, setBgDownload] = useState(false);
@@ -189,6 +192,51 @@ function App() {
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastText(''), 3000);
   }, []);
+  // Playback bar: a Spotify-style add-to-playlist control. The button's green
+  // state tracks the playlist that is open; the menu manages every playlist.
+  const inCurrentPlaylist = !!(currentTrack && view.type === 'playlist'
+    && playlist.some((t) => trackKey(t) === trackKey(currentTrack)));
+  const refreshSaveContains = useCallback(() => {
+    if (!currentTrack) return;
+    API(`/api/links/contains?t=${encodeURIComponent(currentTrack.t || '')}&a=${encodeURIComponent(currentTrack.a || '')}`)
+      .then((j) => setSaveContains(j.contains || {}))
+      .catch(() => setSaveContains({}));
+  }, [currentTrack]);
+  const toggleSaveMenu = useCallback(() => {
+    const next = !saveOpen;
+    setSaveOpen(next);
+    if (next) refreshSaveContains();
+  }, [saveOpen, refreshSaveContains]);
+  const togglePlaylistMembership = useCallback(async (link) => {
+    if (!currentTrack) return;
+    const url = link.url || link.name || '';
+    const had = !!(saveContains && saveContains[url]);
+    try {
+      const result = await postJSON('/api/links/track', { url, op: had ? 'remove' : 'add', track: currentTrack });
+      if (result.error) throw new Error(result.error);
+      setSaveContains((prev) => ({ ...(prev || {}), [url]: !!result.contains }));
+      setLinks((prev) => prev.map((l) => ((l.url || l.name) === url ? { ...l, count: result.count } : l)));
+      if (view.type === 'playlist' && view.name === link.name) {
+        setPlaylist((prev) => (had ? prev.filter((t) => trackKey(t) !== trackKey(currentTrack)) : [...prev, currentTrack]));
+      }
+      toast(had ? `Removed from ${link.name}` : `Added to ${link.name}`);
+    } catch { toast('Could not update playlist'); }
+  }, [currentTrack, saveContains, view, toast]);
+  useEffect(() => {
+    if (!saveOpen) return undefined;
+    const away = (event) => {
+      const target = event.target;
+      if (!target || !target.closest || !target.closest('#nowsave, .save-menu')) setSaveOpen(false);
+    };
+    const onKey = (event) => { if (event.key === 'Escape') setSaveOpen(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', away);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [saveOpen]);
+  useEffect(() => { setSaveOpen(false); setSaveContains(null); }, [currentTrack?.t, currentTrack?.a]);
   const toastPointerStart = (event) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     const node = event.currentTarget;
@@ -1124,7 +1172,7 @@ function App() {
       </section>
     </div>}
     <div id="mid" className={sideDragWidth !== null ? 'resizing' : ''}><aside id="side" className={`${(sideResizePreview !== null ? sideResizePreview : collapsed) ? 'collapsed' : ''} ${drawerOpen ? 'open' : ''}`} onTouchStart={(e) => gestureStart(e, 'side')} onTouchMove={(e) => gestureMove(e, 'side')} onTouchEnd={(e) => gestureEnd(e, 'side')} onTouchCancel={(e) => gestureEnd(e, 'side')} onClickCapture={suppressGestureClick}><div id="sideHead"><button id="libToggle" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'} aria-label={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={18}/><b>Your Library</b></button><button id="addBtn" onClick={addLibraryLink} data-tooltip="Add Spotify link" aria-label="Add Spotify link"><Icon name="add" size={17}/></button></div><div id="sideList">{links.length ? links.map((p, i) => <div className={`pitem ${view.type === 'playlist' && view.name === p.name ? 'active' : ''}`} key={p.url || p.name} data-tooltip={p.name} onClick={() => loadPlaylist(i)}><div className="pcover" data-tooltip={p.name || '?'} style={{ background: coverBackground(p.cover || p.tracks?.[0]?.cover, p.name) }} onMouseEnter={() => warmCover(p.cover || p.tracks?.[0]?.cover)} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><button className="pcoverPlay" data-tooltip={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={18}/></button></div><div className="pmeta"><b>{p.name || '?'}</b><small>{typeof p.total === 'number' && p.total > p.count ? `${p.count} of ${p.total} songs` : `${p.count} songs${p.partial ? ' (partial)' : ''}`}</small></div></div>) : <div id="empty"><h3>Your library is empty</h3><p>Click + above and paste a Spotify link.</p></div>}</div></aside><div id="sideResize" role="separator" aria-label="Resize library" aria-orientation="vertical" aria-valuemin={68} aria-valuemax={262} aria-valuenow={sideDragWidth ?? (collapsed ? 68 : 262)} tabIndex={0} onPointerDown={startSidebarResize} onPointerMove={moveSidebarResize} onPointerUp={finishSidebarResize} onPointerCancel={finishSidebarResize} onKeyDown={keySidebarResize}/><main id="main">{renderMain()}</main></div>
-    <footer id="bar" onTouchStart={(e) => gestureStart(e, 'bar')} onTouchMove={(e) => gestureMove(e, 'bar')} onTouchEnd={(e) => gestureEnd(e, 'bar')} onTouchCancel={(e) => gestureEnd(e, 'bar')} onClickCapture={suppressGestureClick}><div className="barfull" style={{ display: 'contents' }}><div id="nowp"><button id="nowc" onClick={mobileOpen} data-tooltip="Open player" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)} /><div id="nowt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div></div><div id="ctr">{controls()}{progress()}</div><div id="rside">{volumeRow()}<button id="dfsBtn" disabled={!currentTrack} className="aicon desktop-fullscreen" onClick={toggleDesktop} data-tooltip={desktopPlayer ? 'Exit full screen' : 'Full screen'} aria-label={desktopPlayer ? 'Exit full screen' : 'Full screen'}><Icon name={desktopPlayer ? 'exitFullscreen' : 'fullscreen'}/></button></div></div></footer>
+    <footer id="bar" onTouchStart={(e) => gestureStart(e, 'bar')} onTouchMove={(e) => gestureMove(e, 'bar')} onTouchEnd={(e) => gestureEnd(e, 'bar')} onTouchCancel={(e) => gestureEnd(e, 'bar')} onClickCapture={suppressGestureClick}><div className="barfull" style={{ display: 'contents' }}><div id="nowp"><button id="nowc" onClick={mobileOpen} data-tooltip="Open player" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)} /><div id="nowt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div>{currentTrack && <div className="nowsave-wrap"><button id="nowsave" className={inCurrentPlaylist ? 'on' : ''} onClick={toggleSaveMenu} aria-label="Add to playlist" aria-expanded={saveOpen} data-tooltip={inCurrentPlaylist ? 'Saved to this playlist' : 'Add to playlist'}><Icon name={inCurrentPlaylist ? 'check' : 'add'} size={15}/></button>{saveOpen && <div className="save-menu" role="dialog" aria-label="Add to playlist"><div className="save-head"><b>Add to playlist</b><button className="save-close" onClick={() => setSaveOpen(false)} aria-label="Close"><Icon name="close" size={14}/></button></div><div className="save-list">{links.length ? links.map((l) => { const inIt = !!(saveContains && saveContains[l.url || l.name]); return <button key={l.url || l.name} className={`save-row ${inIt ? 'in' : ''}`} onClick={() => togglePlaylistMembership(l)} aria-pressed={inIt}><span className="save-name">{l.name || '?'}</span><span className="save-mark"><Icon name={inIt ? 'check' : 'add'} size={13}/></span></button>; }) : <p className="save-empty">No playlists yet - add one with the + button in your library.</p>}</div></div>}</div>}</div><div id="ctr">{controls()}{progress()}</div><div id="rside">{volumeRow()}<button id="dfsBtn" disabled={!currentTrack} className="aicon desktop-fullscreen" onClick={toggleDesktop} data-tooltip={desktopPlayer ? 'Exit full screen' : 'Full screen'} aria-label={desktopPlayer ? 'Exit full screen' : 'Full screen'}><Icon name={desktopPlayer ? 'exitFullscreen' : 'fullscreen'}/></button></div></div></footer>
     <div id="fs" className={mobilePlayer ? 'on' : ''} onTouchStart={(e) => gestureStart(e, 'fs')} onTouchMove={(e) => gestureMove(e, 'fs')} onTouchEnd={(e) => gestureEnd(e, 'fs')} onTouchCancel={(e) => gestureEnd(e, 'fs')} onClickCapture={suppressGestureClick}><div id="fsGrip" onClick={mobileClose}/><div id="fsHead"><span id="fsPl">{playingPlaylist || 'Now playing'}</span></div><div id="fsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)}/><div id="fsTxt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div><div id="fsQueue" style={{ display: upcoming.length ? '' : 'none' }}><div id="fsQhead"><b>Up next</b><span id="fsQcount">{upcoming.length} {upcoming.length === 1 ? 'track' : 'tracks'}</span></div><div id="fsQrows">{upcoming.map((i, n) => <div className="fsQrow" key={`${trackKey(queue[i])}-${i}`} onClick={() => playIndex(i)}><span className="fsQn">{n + 1}</span><span className="fsQcov" style={{ background: coverBackground(queue[i]?.cover, queue[i]?.t) }}/><span className="fsQt"><b>{queue[i]?.t}</b><small>{queue[i]?.a}</small></span><span className="fsQtime">{fmt(queue[i]?.ms)}</span></div>)}</div></div><div id="fsIsland">{progress(true)}{controls(true)}{volumeRow(true)}</div></div>
     {desktopPlayer && <div id="dfs" className={`open ${desktopIdle ? 'idle' : ''}`} onMouseMove={() => setDesktopIdle(false)}><div id="dfsMain"><div id="dfsTop"><span id="dfsTopTitle">{playingPlaylist || 'Now playing'}</span><button id="dfsExit" onClick={() => setDesktopPlayer(false)} data-tooltip="Exit full screen"><Icon name="exitFullscreen" size={18}/></button></div><div id="dfsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }}/><div id="dfsInfo"><b id="dfsTitle">{currentTrack?.t || 'Choose a playlist to listen'}</b><small id="dfsArtist">{currentTrack?.a || 'nothing playing'}</small></div></div><div id="dfsQueue" style={{ display: queue.length ? '' : 'none' }}><div id="dfsQhead"><b>Queue</b><span id="dfsQcount">{queue.length} {queue.length === 1 ? 'track' : 'tracks'}</span></div><div id="dfsQrows">{currentTrack ? <><div className="dfsQsect">Now Playing</div><QueueRow track={currentTrack} active onClick={() => playIndex(currentIndex)} />{upcoming.length > 0 && <div className="dfsQsect">Next Up</div>}{upcoming.map((i) => <QueueRow key={`${trackKey(queue[i])}-${i}`} track={queue[i]} onClick={() => playIndex(i)}/>)}</> : queue.map((track, index) => <QueueRow key={`${trackKey(track)}-${index}`} track={track} onClick={() => playIndex(index)}/>)}</div></div></div>}
     <div id="toast" className={toastText && !toastDismissed ? 'visible' : ''} onPointerDown={toastPointerStart} onPointerMove={toastPointerMove} onPointerUp={toastPointerEnd} onPointerCancel={toastPointerEnd}>{toastText}</div>{(upNext || (radio && !nextTrack && currentTrack)) && currentTrack && !desktopPlayer && <div id="upnext" className={`tcard ${(upNext || (radio && !nextTrack)) && !upNextDismissed ? 'visible' : ''}`} onPointerDown={toastPointerStart} onPointerMove={toastPointerMove} onPointerUp={toastPointerEnd} onPointerCancel={toastPointerEnd}><span className="upnext-label">Up next</span><span className="upnext-art" style={{ background: coverBackground(displayNextTrack?.cover, displayNextTrack?.t) }}/><span className="upnext-copy"><b>{radioSearching ? 'Finding radio tracks…' : displayNextTrack?.t}</b><small>{radioSearching ? 'Radio' : displayNextTrack?.a}</small></span></div>}{download && <div id="dl" className="on"><span id="dllabel">{download.status === 'done' ? 'ready' : 'downloading'} {download.label}</span><div id="dlbar"><i id="dlfill" style={{ width: `${download.pct}%` }}/></div><span id="dlpct">{Math.round(download.pct)}%</span></div>}<audio ref={audioRef} preload="auto" />

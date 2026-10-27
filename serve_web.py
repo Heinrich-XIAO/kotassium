@@ -1172,6 +1172,38 @@ def handle_post(path, params, raw, hdr):
             return 200, "application/json", json.dumps({"ok": True, "key": name.rsplit(".", 1)[0], "file": name}).encode(), None, False
         except Exception as e:
             return 400, "application/json", json.dumps({"error": str(e)[:200]}).encode(), None, False
+    if path == "/api/links/track":
+        # Add or drop the playing track in one playlist. Track identity is the
+        # same "title|artist" key the page uses, so membership round-trips.
+        try:
+            j = json.loads(raw.decode("utf-8", "replace") or "{}")
+        except Exception:
+            return 400, "application/json", b'{"error":"bad_json"}', None, False
+        url = str(j.get("url") or "")
+        op = j.get("op")
+        track = j.get("track")
+        if not url or op not in ("add", "remove") or not isinstance(track, dict) \
+                or not str(track.get("t") or "").strip():
+            return 400, "application/json", b'{"error":"bad_request"}', None, False
+        def tkey(t):
+            return (str(t.get("t") or "") + "|" + str(t.get("a") or "")) if isinstance(t, dict) else "|"
+        key = tkey(track)
+        with _lock:
+            links = read_links()
+            entry = next((e for e in links if (e.get("url") or "") == url), None)
+            if not entry:
+                return 404, "application/json", b'{"error":"not_found"}', None, False
+            tracks = list(entry.get("tracks") or [])
+            if op == "add":
+                if not any(tkey(t) == key for t in tracks):
+                    tracks.append(track)
+            else:
+                tracks = [t for t in tracks if tkey(t) != key]
+            entry["tracks"] = tracks
+            entry["count"] = len(tracks)
+            write_links(links)
+        return 200, "application/json", json.dumps(
+            {"ok": True, "count": len(tracks), "contains": op == "add"}).encode(), None, False
     return 404, "text/plain", b"nope", None, False
 
 def handle(path, params, hdr):
@@ -1331,6 +1363,18 @@ def handle(path, params, hdr):
             if isinstance(t, dict) and t.get("cover"):
                 t["cover"] = cover_local(t["cover"])
         return 200, "application/json", json.dumps(result).encode(), None, False
+    if path == "/api/links/contains":
+        # The playback bar's save button needs "which playlists hold this
+        # track?" across the whole library at once - /api/links stays slim,
+        # so answer it here in one pass over links.json.
+        want = one("t") + "|" + one("a")
+        contains = {}
+        for e in read_links():
+            key = e.get("url") or e.get("name") or ""
+            contains[key] = any(isinstance(t, dict) and
+                                (str(t.get("t") or "") + "|" + str(t.get("a") or "")) == want
+                                for t in (e.get("tracks") or []))
+        return 200, "application/json", json.dumps({"contains": contains}).encode(), None, False
     if path == "/api/health":
         return 200, "application/json", json.dumps({"ok": True, "app": "kotassium", "pid": os.getpid()}).encode(), None, False
     if path == "/api/ytdl":
