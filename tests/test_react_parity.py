@@ -148,7 +148,8 @@ class ReactParityTests(unittest.TestCase):
     def test_bottom_play_button_uses_a_smaller_optically_centered_triangle(self):
         self.assertIn("fullscreen ? 26 : 16", self.app)
         css = read("web/index.html")
-        self.assertIn('#playb svg[viewBox="0 0 16 16"]{transform:translateX(1px)}', css)
+        # the glyph is centred in its own viewBox; no CSS nudge may push it off-centre
+        self.assertNotIn('#playb svg[viewBox="0 0 16 16"]{transform', css)
 
     def test_cover_frames_have_even_borders_and_clip_square_artwork(self):
         css = read("web/index.html")
@@ -199,7 +200,6 @@ class ReactParityTests(unittest.TestCase):
         current_css = current_css.replace('#fsTxt b{display:block;white-space:nowrap;', '#fsTxt b{display:block;font-size:22px;font-weight:800;white-space:nowrap;', 1)
         for weight, value in (("heavy", "800"), ("bold", "700"), ("semibold", "600"), ("medium", "500"), ("regular", "400")):
             current_css = current_css.replace(f"var(--font-weight-{weight})", value)
-        current_css = current_css.replace('#playb svg[viewBox="0 0 16 16"]{transform:translateX(1px)}\n', "", 1)
         current_css = current_css.replace("#rside .volume-row{width:auto;gap:4px}\n#rside .volume-row .aicon{width:24px;height:24px;padding:0}\n", "", 1)
         current_css = current_css.replace("#rside #vol{width:112px;", "#vol{width:90px;")
         reference_css = reference_css.replace('#btns button[aria-label="Radio"],#btns button[aria-label="Collapse player"]{display:none}', '#btns button[aria-label="Radio"]{display:none}')
