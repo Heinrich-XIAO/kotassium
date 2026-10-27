@@ -282,5 +282,219 @@ class InstallGuardTests(unittest.TestCase):
             updater.SUPPORTED, updater.can_install = real_s, real_c
 
 
+class SilentInstallTests(unittest.TestCase):
+    """One click downloads, then the app replaces itself without asking."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self._real_cache = updater.cache_dir
+        updater.cache_dir = lambda: self.tmp
+        self.addCleanup(setattr, updater, "cache_dir", self._real_cache)
+
+    def _patch(self, name, value):
+        real = getattr(updater, name)
+        setattr(updater, name, value)
+        self.addCleanup(setattr, updater, name, real)
+        return real
+
+    def _snapshot_state(self):
+        with updater._lock:
+            saved = dict(updater._state)
+            updater._state.update(state="idle", pct=0, error=None)
+        self.addCleanup(lambda: (updater._lock.acquire(),
+                                 updater._state.clear(),
+                                 updater._state.update(saved),
+                                 updater._lock.release()))
+
+    def test_swap_script_backs_up_replaces_and_reopens(self):
+        script = updater.swap_script("/tmp/stage/Kotassium.new.app",
+                                     "/Applications/Kotassium.app")
+        self.assertIn("NEW=/tmp/stage/Kotassium.new.app", script)
+        self.assertIn("TARGET=/Applications/Kotassium.app", script)
+        self.assertIn("/usr/bin/pgrep -x Kotassium", script)      # waits out the quit
+        self.assertIn('/usr/bin/ditto "$TARGET" "$STAGED"', script)  # keeps .old
+        self.assertIn('/bin/mv "$STAGED" "$PREVIOUS"', script)
+        self.assertIn('[ ! -x "$NEW/Contents/MacOS/Kotassium" ]', script)
+        self.assertIn('/usr/bin/ditto "$NEW" "$TARGET"', script)
+        self.assertIn('/usr/bin/open "$TARGET"', script)          # reopens it
+        self.assertIn('report "could not install the update"', script)
+        self.assertIn(os.path.join(self.tmp, "install-failed.txt"), script)
+
+    def test_swap_script_quotes_paths_with_spaces(self):
+        script = updater.swap_script("/Users/Jane Doe/update/Kotassium.new.app",
+                                     "/Applications/Kotassium.app")
+        self.assertIn("NEW='/Users/Jane Doe/update/Kotassium.new.app'", script)
+
+    def test_stage_app_unpacks_the_bundle_into_the_cache(self):
+        seen = []
+
+        def fake_run(cmd, **kwargs):
+            seen.append(cmd)
+            if "--expand-full" in cmd:
+                app = os.path.join(cmd[3], "Kotassium.app", "Contents", "MacOS")
+                os.makedirs(app)
+                with open(os.path.join(app, "Kotassium"), "w") as f:
+                    f.write("#!/bin/sh\n")
+            return subprocess.CompletedProcess(cmd, 0)
+
+        real_run = updater.subprocess.run
+        updater.subprocess.run = fake_run
+        self.addCleanup(setattr, updater.subprocess, "run", real_run)
+        dest = os.path.join(self.tmp, "Kotassium.new.app")
+        out = updater.stage_app("/tmp/update.pkg", dest)
+        self.assertEqual(out, dest)
+        self.assertTrue(os.path.isfile(os.path.join(dest, "Contents", "MacOS",
+                                                     "Kotassium")))
+        self.assertFalse(os.path.exists(dest + ".work"))   # scratch cleaned up
+        self.assertIn("--expand-full", seen[0])
+
+    def test_stage_app_unpacks_the_payload_when_expand_full_is_missing(self):
+        def fake_run(cmd, **kwargs):
+            if "--expand-full" in cmd:       # old pkgutil without the flag
+                raise subprocess.CalledProcessError(64, cmd)
+            if "--expand" in cmd:
+                os.makedirs(cmd[3], exist_ok=True)   # pkgutil creates it
+                with open(os.path.join(cmd[3], "Payload"), "wb") as f:
+                    f.write(b"\x1f\x8b\x08\x00")
+                return subprocess.CompletedProcess(cmd, 0)
+            app = os.path.join(cmd[5], "Kotassium.app", "Contents", "MacOS")
+            os.makedirs(app)
+            with open(os.path.join(app, "Kotassium"), "w") as f:
+                f.write("#!/bin/sh\n")
+            return subprocess.CompletedProcess(cmd, 0)
+
+        real_run = updater.subprocess.run
+        updater.subprocess.run = fake_run
+        self.addCleanup(setattr, updater.subprocess, "run", real_run)
+        dest = os.path.join(self.tmp, "staged.app")
+        out = updater.stage_app("/tmp/update.pkg", dest)
+        self.assertEqual(out, dest)
+        self.assertTrue(os.path.isfile(os.path.join(dest, "Contents", "MacOS",
+                                                     "Kotassium")))
+
+    def test_stage_app_rejects_a_package_without_the_app(self):
+        def fake_run(cmd, **kwargs):
+            os.makedirs(os.path.join(cmd[3], "empty")) if "--expand-full" in cmd else None
+            return subprocess.CompletedProcess(cmd, 0)
+
+        real_run = updater.subprocess.run
+        updater.subprocess.run = fake_run
+        self.addCleanup(setattr, updater.subprocess, "run", real_run)
+        with self.assertRaises(RuntimeError):
+            updater.stage_app("/tmp/update.pkg", os.path.join(self.tmp, "x.app"))
+
+    def test_payload_cmd_reads_the_package_compression(self):
+        payload = os.path.join(self.tmp, "Payload")
+        with open(payload, "wb") as f:
+            f.write(b"\x1f\x8b\x08")
+        self.assertIn("gzip -dc", updater._payload_cmd(payload, "/tmp/out")[2])
+        with open(payload, "wb") as f:
+            f.write(b"070707\x00")
+        self.assertIn("cpio -idm", updater._payload_cmd(payload, "/tmp/out")[2])
+        with open(payload, "wb") as f:
+            f.write(b"pbzx")
+        with self.assertRaises(RuntimeError):
+            updater._payload_cmd(payload, "/tmp/out")
+
+    def test_install_quits_and_hands_the_swap_to_a_detached_helper(self):
+        popen, quits, watched = [], [], []
+        staged = os.path.join(self.tmp, "Kotassium.new.app")
+        os.makedirs(staged)
+        self._patch("download", lambda asset, sums, progress=None: "/tmp/update.pkg")
+        self._patch("can_swap", lambda: True)
+        self._patch("stage_app", lambda package: staged)
+        self._patch("quit_running_app", lambda: quits.append(1))
+        self._patch("_watch_helper", lambda: watched.append(1))
+        real_popen = updater.subprocess.Popen
+        updater.subprocess.Popen = lambda args, **kwargs: popen.append((args, kwargs))
+        self.addCleanup(setattr, updater.subprocess, "Popen", real_popen)
+        self._snapshot_state()
+        updater.install(RELEASE["assets"][0], RELEASE["assets"][2])
+        self.assertEqual(updater.status()["state"], "installing")
+        self.assertEqual(len(popen), 1)                 # one detached helper
+        args, kwargs = popen[0]
+        self.assertEqual(args, ["/bin/sh", os.path.join(self.tmp, "swap.sh")])
+        self.assertTrue(kwargs["start_new_session"])    # survives our exit
+        self.assertNotIn("Installer", json.dumps(args))
+        self.assertEqual(quits, [1])                    # the app leaves by itself
+        self.assertEqual(watched, [1])                  # failures stay reportable
+        with open(os.path.join(self.tmp, "swap.sh")) as f:
+            body = f.read()
+        self.assertIn("NEW=" + staged, body)
+        self.assertIn("/Applications/Kotassium.app", body)
+
+    def test_install_falls_back_to_macos_installer_when_it_cannot_swap(self):
+        popen, staged = [], []
+        self._patch("download", lambda asset, sums, progress=None: "/tmp/update.pkg")
+        self._patch("stage_app", lambda package: staged.append(package))
+        real_popen = updater.subprocess.Popen
+        updater.subprocess.Popen = lambda args, **kwargs: popen.append((args, kwargs))
+        self.addCleanup(setattr, updater.subprocess, "Popen", real_popen)
+        self._snapshot_state()
+        # a location we cannot replace in place: never unpacked, Installer asked
+        self._patch("can_swap", lambda: False)
+        updater.install(RELEASE["assets"][0], RELEASE["assets"][2])
+        self.assertEqual(staged, [])
+        self.assertEqual(popen[0][0],
+                         ["/usr/bin/open", "-a", "Installer", "/tmp/update.pkg"])
+        self.assertEqual(updater.status()["state"], "ready")
+        # an unpackable package falls back the same way
+        popen.clear()
+        updater.can_swap = lambda: True
+
+        def explode(package):
+            raise RuntimeError("unsupported package payload")
+
+        updater.stage_app = explode
+        updater.install(RELEASE["assets"][0], RELEASE["assets"][2])
+        self.assertEqual(popen[0][0],
+                         ["/usr/bin/open", "-a", "Installer", "/tmp/update.pkg"])
+        self.assertEqual(updater.status()["state"], "ready")
+
+    def test_helper_report_becomes_an_error_message_while_still_running(self):
+        with open(os.path.join(self.tmp, "install-failed.txt"), "w") as f:
+            f.write("Kotassium did not quit, so the update was not installed\n")
+        self._snapshot_state()
+        with updater._lock:
+            updater._state.update(state="installing", pct=100)
+        updater._watch_helper()
+        self.assertEqual(updater.status()["state"], "error")
+        self.assertIn("did not quit", updater.status()["error"])
+
+    def test_check_async_reports_a_failed_swap_instead_of_checking(self):
+        calls = []
+        self._patch("latest_release",
+                    lambda: calls.append(1) or json.loads(json.dumps(RELEASE)))
+        with open(os.path.join(self.tmp, "install-failed.txt"), "w") as f:
+            f.write("Kotassium did not quit, so the update was not installed\n")
+        self._snapshot_state()
+        st = updater.check_async()
+        self.assertEqual(st["state"], "error")
+        self.assertIn("Kotassium did not quit", st["error"])
+        self.assertFalse(st["available"])
+        self.assertEqual(calls, [])   # it reports, it does not ask GitHub
+        self.assertFalse(os.path.exists(os.path.join(self.tmp,
+                                                      "install-failed.txt")))
+
+    def test_can_swap_only_where_the_bundle_is_replaceable(self):
+        real_app, real_access = updater.app_path, updater.os.access
+        try:
+            updater.app_path = lambda: None
+            self.assertFalse(updater.can_swap())
+            updater.app_path = lambda: "/Volumes/Kotassium/Kotassium.app"
+            self.assertFalse(updater.can_swap())
+            updater.app_path = lambda: (
+                "/Users/x/Library/AppTranslocation/abc/Kotassium.app")
+            self.assertFalse(updater.can_swap())
+            updater.app_path = lambda: "/Applications/Kotassium.app"
+            updater.os.access = lambda path, mode: path == "/Applications"
+            self.assertTrue(updater.can_swap())
+            updater.os.access = lambda path, mode: False
+            self.assertFalse(updater.can_swap())
+        finally:
+            updater.app_path, updater.os.access = real_app, real_access
+
+
 if __name__ == "__main__":
     unittest.main()

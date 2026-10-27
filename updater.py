@@ -2,13 +2,16 @@
 
 The PKG on the release page is the same artifact this installs, so the update
 path is: check the releases API, download the PKG for this architecture,
-verify it against the published SHA256SUMS, then open it with macOS Installer.
-The package asks before quitting a running Kotassium and owns the app replacement.
+verify it against the published SHA256SUMS, unpack it and swap the app in
+behind the scenes - one click on the download button, no further dialogs. A
+detached helper waits for the quit, keeps the old bundle as Kotassium.app.old,
+moves the new one in and reopens it. macOS Installer stays as the fallback
+for locations we cannot replace ourselves, keeping its own confirmation.
 
 Only runs when frozen (inside Kotassium.app). On Linux and when running from a
 source checkout it reports `supported: false` and the UI hides the banner.
 """
-import hashlib, json, os, plistlib, platform, re, subprocess, sys
+import hashlib, json, os, plistlib, platform, re, shlex, shutil, subprocess, sys
 import threading, time, urllib.request
 
 REPO = "Heinrich-XIAO/kotassium"
@@ -220,20 +223,262 @@ def download(asset, sums_asset=None, progress=None):
 
 # ---------------------------------------------------------------- install
 
+def failure_path():
+    """Where the swap helper writes a reason when something goes wrong."""
+    return os.path.join(cache_dir(), "install-failed.txt")
+
+
+def take_failure():
+    """Read and clear a swap failure reported by the helper (None if none)."""
+    try:
+        with open(failure_path(), "r", encoding="utf-8", errors="replace") as f:
+            text = f.read().strip()
+        os.unlink(failure_path())
+        return text or None
+    except OSError:
+        return None
+
+
+def can_swap():
+    """True when this app can be replaced in place, without macOS Installer.
+
+    The helper moves bundles as the logged-in user, so the folder holding the
+    app has to be writable (/Applications is group-admin writable, which
+    covers every copy a PKG install produced). Translocated and
+    disk-image copies still need the installer.
+    """
+    app = app_path()
+    if not app:
+        return False
+    if "/AppTranslocation/" in app or app.startswith("/Volumes/"):
+        return False
+    return os.access(os.path.dirname(app), os.W_OK)
+
+
+def _bundle_in(root):
+    """The Kotassium.app inside an unpacked package, whatever its layout."""
+    for dirpath, _dirs, _files in os.walk(root):
+        if (os.path.basename(dirpath).endswith(".app") and
+                os.path.isfile(os.path.join(dirpath, "Contents", "MacOS",
+                                            "Kotassium"))):
+            return dirpath
+    return None
+
+
+def _payload_cmd(payload, dest):
+    """Shell pipeline unpacking a package Payload (cpio) into dest."""
+    with open(payload, "rb") as f:
+        head = f.read(2)
+    if head == b"\x1f\x8b":      # gzip, what pkgbuild writes
+        return ["/bin/sh", "-c",
+                '/usr/bin/gzip -dc "$1" | (cd "$2" && /usr/bin/cpio -idm)',
+                "sh", payload, dest]
+    if head == b"07":            # already a bare cpio archive
+        return ["/bin/sh", "-c", '(cd "$2" && /usr/bin/cpio -idm) < "$1"',
+                "sh", payload, dest]
+    raise RuntimeError("unsupported package payload for %s"
+                       % os.path.basename(payload))
+
+
+def stage_app(package, dest=None):
+    """Unpack Kotassium.app from a verified package into the cache dir.
+
+    No root and no Installer: pkgutil expands the package the way the
+    installer would and the bundle is moved out as plain files. Raises when
+    the package cannot be unpacked, which sends install() to macOS Installer.
+    """
+    dest = dest or os.path.join(cache_dir(), "Kotassium.new.app")
+    work = dest + ".work"
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work)
+    try:
+        expanded = os.path.join(work, "expanded")
+        bundle = None
+        try:
+            subprocess.run(["/usr/sbin/pkgutil", "--expand-full", package,
+                            expanded], check=True, capture_output=True,
+                           stdin=subprocess.DEVNULL)
+            bundle = _bundle_in(expanded)
+        except (OSError, subprocess.CalledProcessError):
+            bundle = None
+        if bundle is None:
+            # Older macOS has no --expand-full: expand the package and unpack
+            # its payload ourselves (gzip-compressed cpio, what pkgbuild writes).
+            shutil.rmtree(expanded, ignore_errors=True)
+            subprocess.run(["/usr/sbin/pkgutil", "--expand", package, expanded],
+                           check=True, capture_output=True,
+                           stdin=subprocess.DEVNULL)
+            for dirpath, _dirs, files in os.walk(expanded):
+                if "Payload" in files:
+                    payload = os.path.join(dirpath, "Payload")
+                    break
+            else:
+                raise RuntimeError("no payload in %s" % os.path.basename(package))
+            payload_dir = os.path.join(work, "payload")
+            os.makedirs(payload_dir)
+            subprocess.run(_payload_cmd(payload, payload_dir),
+                           check=True, capture_output=True,
+                           stdin=subprocess.DEVNULL)
+            bundle = _bundle_in(payload_dir)
+        if bundle is None:
+            raise RuntimeError("no Kotassium.app inside %s"
+                               % os.path.basename(package))
+        shutil.rmtree(dest, ignore_errors=True)
+        shutil.move(bundle, dest)
+        return dest
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def swap_script(new_app, target=None):
+    """Shell that finishes the update once this process is gone.
+
+    The helper runs detached: it waits for the quit, keeps the current app as
+    Kotassium.app.old (the copy the recovery panel restores), replaces the
+    target, reopens it and reports any failure into the cache so the next
+    launch can show why the update did not happen.
+    """
+    target = target or (app_path() or "/Applications/Kotassium.app")
+    quote = shlex.quote
+    return """#!/bin/sh
+# Kotassium silent update - generated by updater.py, runs after the quit.
+set -u
+NEW=%(new)s
+TARGET=%(target)s
+PREVIOUS="$TARGET.old"
+FAIL=%(fail)s
+report() { printf '%%s\\n' "$1" > "$FAIL"; }
+
+# 1. wait for the updater's quit request to take effect (about a minute)
+n=0
+while /usr/bin/pgrep -x Kotassium >/dev/null 2>&1; do
+    n=$((n + 1))
+    if [ "$n" -ge 120 ]; then
+        report "Kotassium did not quit, so the update was not installed"
+        exit 1
+    fi
+    /bin/sleep 0.5
+done
+
+# 2. never put a bundle we cannot open into place
+if [ ! -x "$NEW/Contents/MacOS/Kotassium" ]; then
+    report "the downloaded update is missing its app bundle"
+    exit 1
+fi
+
+# 3. keep the current app for "Restore previous version" (as preinstall does)
+STAGED="$TARGET.old.next"
+if [ -d "$TARGET" ]; then
+    /bin/rm -rf "$STAGED"
+    if ! /usr/bin/ditto "$TARGET" "$STAGED"; then
+        /bin/rm -rf "$STAGED"
+        report "could not back up the current app; the update was not installed"
+        exit 1
+    fi
+    /bin/rm -rf "$PREVIOUS"
+    /bin/mv "$STAGED" "$PREVIOUS"
+fi
+
+# 4. replace it, restoring the old app if anything about the new one is wrong
+/bin/rm -rf "$TARGET"
+if ! /usr/bin/ditto "$NEW" "$TARGET" || [ ! -x "$TARGET/Contents/MacOS/Kotassium" ]; then
+    /bin/rm -rf "$TARGET"
+    if [ -d "$PREVIOUS" ]; then
+        /usr/bin/ditto "$PREVIOUS" "$TARGET"
+    fi
+    report "could not install the update"
+    exit 1
+fi
+/bin/rm -rf "$NEW"
+/bin/rm -f "$FAIL"
+
+# 5. reopen the new version
+/usr/bin/open "$TARGET"
+exit 0
+""" % {"new": quote(new_app), "target": quote(target),
+        "fail": quote(failure_path())}
+
+
+def quit_running_app():
+    """Ask the app to quit; the helper waits for the process to disappear.
+
+    The same Apple event the package preinstall script sends, so the page and
+    the server shut down before anything is replaced.
+    """
+    try:
+        subprocess.run(["/usr/bin/osascript", "-e",
+                        'tell application id "app.kotassium.desktop" to quit'],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=15, check=False)
+    except Exception:
+        pass
+
+
+def _watch_helper():
+    """Turn a helper report into an error message while we are still alive.
+
+    The helper only fails if the quit never took effect, in which case the
+    app is still running and the page gets to say what went wrong instead of
+    spinning on "installing update..." forever.
+    """
+    end = time.time() + 90
+    while time.time() < end:
+        time.sleep(1)
+        text = take_failure()
+        if text:
+            with _lock:
+                if _state.get("state") in ("installing", "ready"):
+                    _state.update(state="error", error=text[:300], pct=0)
+            return
+
+
+def _open_installer(package):
+    """Fallback: let macOS Installer own the replacement, dialogs and all."""
+    subprocess.Popen(["/usr/bin/open", "-a", "Installer", package],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+    with _lock:
+        _state.update(state="ready", pct=100)
+
+
 def install(asset, sums_asset=None):
-    """Download and verify a package, then open it in macOS Installer."""
+    """Download, verify and install an update in one click.
+
+    The package is unpacked and swapped in behind the scenes: stage the new
+    bundle, hand a detached helper the replacement, quit. Only when the app
+    cannot be replaced in place (read-only location, unpackable package)
+    does macOS Installer take over, asking before quitting the running app.
+    """
     with _lock:
         _state.update(state="downloading", pct=0, error=None)
     try:
         package = download(asset, sums_asset,
                            progress=lambda p: _state.update(pct=p))
+    except Exception as e:
         with _lock:
-            _state.update(state="installing", pct=100)
-        subprocess.Popen(["/usr/bin/open", "-a", "Installer", package],
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True)
-        with _lock:
-            _state.update(state="ready", pct=100)
+            _state.update(state="error", error=str(e)[:300], pct=0)
+        return
+    with _lock:
+        _state.update(state="installing", pct=100)
+    staged = None
+    if can_swap():
+        try:
+            staged = stage_app(package)
+        except Exception:
+            staged = None
+    if staged is None:
+        _open_installer(package)
+        return
+    try:
+        script = os.path.join(cache_dir(), "swap.sh")
+        with open(script, "w", encoding="utf-8") as f:
+            f.write(swap_script(staged))
+        os.chmod(script, 0o755)
+        subprocess.Popen(["/bin/sh", script], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+        threading.Thread(target=_watch_helper, daemon=True).start()
+        quit_running_app()
     except Exception as e:
         with _lock:
             _state.update(state="error", error=str(e)[:300], pct=0)
@@ -266,12 +511,18 @@ def check_async():
     Never runs alongside another check (one click = one GitHub request, and
     the anonymous quota is 60/hour) and never disturbs an install in
     progress: while a download is running its own state is more interesting
-    than a fresh check.
+    than a fresh check. A swap helper that failed after the last quit wrote
+    its reason to the cache; that is reported instead of checking, so the
+    user learns on the next launch why the app is still the old version.
     """
+    pending = take_failure()
     with _lock:
         run = _state.get("state") not in ("checking", "downloading",
                                           "installing", "ready")
-        if run:
+        if pending:
+            _state.update(state="error", error=pending[:300], available=False)
+            run = False
+        elif run:
             _state.update(state="checking", error=None)
     if run:
         threading.Thread(target=check, daemon=True).start()

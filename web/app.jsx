@@ -1064,7 +1064,7 @@ function App() {
     setDesktopPlayer((value) => !value);
     setDesktopIdle(false);
   }, [desktopPlayer, currentTrack]);
-  const pollUpdate = useCallback(() => API('/api/update').then((st) => { setUpdateState(st); if (st.supported) setUpdateMessage(st.available ? `Kotassium ${st.latest} is available` : ''); return st; }).catch(() => {}), []);
+  const pollUpdate = useCallback(() => API('/api/update').then((st) => { setUpdateState(st); if (st.supported) setUpdateMessage(st.state === 'error' && st.error ? st.error : st.available ? `Kotassium ${st.latest} is available` : ''); return st; }).catch(() => {}), []);
   const updateSteps = useCallback((current, latest) => {
     const from = String(current || '').match(/\d+/g), to = String(latest || '').match(/\d+/g);
     if (!from || !to) return 'a new version';

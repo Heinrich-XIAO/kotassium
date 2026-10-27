@@ -338,6 +338,24 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("st.available) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateStepsText(st.version, st.latest)})", app)
         self.assertIn("else if (st.available) setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateStepsText(st.version, st.latest)})", app)
 
+    def test_macos_update_swaps_the_bundle_in_one_click(self):
+        # The download button is the only interaction: unpack the verified
+        # package, quit, swap the bundle behind the scenes, reopen it.
+        updater = read("updater.py")
+        self.assertIn("def stage_app(", updater)
+        self.assertIn('"--expand-full"', updater)
+        self.assertIn("def swap_script(", updater)
+        self.assertIn("/usr/bin/pgrep -x Kotassium", updater)
+        self.assertIn('tell application id "app.kotassium.desktop" to quit', updater)
+        self.assertIn("install-failed.txt", updater)
+        # a failed swap is reported on the next launch, not swallowed
+        self.assertIn("st.state === 'error' && st.error ? st.error", read("web/app.jsx"))
+        # macOS Installer remains the fallback, confirmation dialog and all
+        self.assertIn('["/usr/bin/open", "-a", "Installer", package]', updater)
+        preinstall = read("macos-pkg-scripts/preinstall")
+        self.assertIn('display dialog "Kotassium is currently running', preinstall)
+        self.assertIn('/bin/mv "$STAGED" "$PREVIOUS"', preinstall)
+
     def test_desktop_queue_scrollbar_is_subtle(self):
         page = read("web/index.html")
         self.assertIn("#dfsQueue #dfsQrows{scrollbar-width:thin;scrollbar-color:#ffffff18 transparent}", page)

@@ -189,12 +189,14 @@ Downloads and state live outside the repo in `~/Music/Kotassium`
   latest release. The top-right pill is a single morphing button, like T3
   Code's updater: a circular **⟳ check** icon when it has not found an update
   (tap it to re-check GitHub on demand), a spinning arrow while the check is
-  in flight, and a **⬇ download** icon when a newer PKG exists. It downloads
-  the build for its architecture, checks it against the release's
-  `SHA256SUMS`, then opens macOS Installer. The package asks before quitting a
-  running app, saves the prior bundle as `/Applications/Kotassium.app.old` for
-  recovery when installed in `/Applications`, and installs the new version
-  there. If recovery is needed, its recovery panel provides instructions to
+  in flight, and a **⬇ download** icon when a newer PKG exists. One click on
+  it downloads the build for its architecture, checks it against the
+  release's `SHA256SUMS`, unpacks the package, waits for the app to quit,
+  saves the prior bundle as `/Applications/Kotassium.app.old` for recovery
+  when installed in `/Applications`, replaces the app and reopens it — no
+  further dialogs. (An app sitting where it cannot replace itself falls back
+  to macOS Installer, which asks before quitting as usual.) If recovery is
+  needed, its recovery panel provides instructions to
   restore the saved bundle. Only frozen macOS app builds report
   `supported: true`; the web and Linux builds hide the pill.
 - **Persistent storage.** The window uses `private_mode=False`, so the

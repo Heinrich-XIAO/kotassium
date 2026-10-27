@@ -131,15 +131,21 @@ of these lines as the message's last line:
 - Tests: `venv/bin/python -m unittest discover -s tests`, plus
   `dbus-run-session -- desktop-venv/bin/python -m unittest tests.test_mpris`
   and `xvfb-run -a desktop-venv/bin/python tools/ui_check.py`.
-- Updates are installer-package based (`updater.py`): the public repo's latest
-  release is checked at launch and on demand from the page's pill, the PKG is
-  verified against `SHA256SUMS`, and macOS Installer handles replacement. Its
-  preinstall script asks before quitting a running Kotassium and saves the
-  previous bundle as `/Applications/Kotassium.app.old` for recovery when
-  installed in `/Applications`; the recovery endpoint displays Finder restore
-  instructions rather than modifying the root-owned app from the user process.
-  `updater.check_async()` runs a check on a
-  background thread and returns immediately with `state: "checking"`; it is
+- Updates are installer-package based (`updater.py`), and one click on the
+  download button finishes them: the public repo's latest release is checked
+  at launch and on demand from the page's pill, the PKG is verified against
+  `SHA256SUMS`, then `stage_app()` unpacks it with `pkgutil` (no root) and a
+  detached helper waits for the quit, keeps the previous bundle as
+  `/Applications/Kotassium.app.old` for recovery when installed in
+  `/Applications`, moves the staged bundle in and reopens it. macOS Installer
+  is only the fallback when the bundle cannot be replaced in place
+  (read-only location, unpackable package): its preinstall script then asks
+  before quitting a running Kotassium; the recovery endpoint displays Finder
+  restore instructions rather than modifying the root-owned app from the user
+  process. A helper failure is written next to the cache and reported on the
+  next launch. `updater.check_async()` runs a check on a
+  background thread and returns immediately with `state: "checking"` — unless
+  such a failure is pending, which it reports instead — and it is
   single-flight (one click = one GitHub request, so it never stacks a second
   thread and never clobbers an install in progress). The page polls
   `GET /api/update` until the state settles. `POST /api/update/check` triggers
