@@ -137,7 +137,14 @@ of these lines as the message's last line:
   `SHA256SUMS`, then `stage_app()` unpacks it with `pkgutil` (no root) and a
   detached helper waits for the quit, keeps the previous bundle as
   `/Applications/Kotassium.app.old` for recovery when installed in
-  `/Applications`, moves the staged bundle in and reopens it. macOS Installer
+  `/Applications`, moves the staged bundle in and reopens it. The helper waits
+  about fifteen seconds for the clean quit and then stops the app itself
+  (TERM, then KILL), so nothing after the download click is left waiting on a
+  person; it only writes a failure when the process cannot be stopped at all.
+  `start_install()` installs the release the last check already found — no
+  second GitHub request at click time — and claims `state: "downloading"`
+  before the response goes out, so the page starts polling immediately, and a
+  refusal to start comes back with `error` for the pill to show. macOS Installer
   is only the fallback when the bundle cannot be replaced in place
   (read-only location, unpackable package): its preinstall script then asks
   before quitting a running Kotassium; the recovery endpoint displays Finder

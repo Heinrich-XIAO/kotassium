@@ -355,6 +355,12 @@ class WrapperTests(unittest.TestCase):
         preinstall = read("macos-pkg-scripts/preinstall")
         self.assertIn('display dialog "Kotassium is currently running', preinstall)
         self.assertIn('/bin/mv "$STAGED" "$PREVIOUS"', preinstall)
+        # nothing after that click may go quiet: the response the page polls
+        # from already says what is happening, and a refusal to start says why
+        self.assertIn('state="downloading", pct=0, error=None', updater)
+        self.assertIn("const started = await postJSON('/api/update', {})",
+                      read("web/app.jsx"))
+        self.assertIn("const why = started?.error || st?.error", read("web/app.jsx"))
 
     def test_desktop_queue_scrollbar_is_subtle(self):
         page = read("web/index.html")

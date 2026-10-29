@@ -24,6 +24,11 @@ _lock = threading.Lock()
 _state = {"state": "idle", "pct": 0, "error": None, "available": False,
           "latest": None, "url": None, "notes": None, "checked": 0}
 _worker = None
+# The release the last check found, kept so the download click has everything
+# it needs: the pill is offering exactly that build, and querying GitHub a
+# second time when the button is pressed is one more request that can fail and
+# leave the click doing nothing.
+_release = None
 
 # ---------------------------------------------------------------- paths
 
@@ -141,6 +146,7 @@ def asset_for(release, machine=None):
 
 def check():
     """Fetch the latest release and update the shared state."""
+    global _release
     with _lock:
         _state.update(state="checking", error=None)
     try:
@@ -149,6 +155,8 @@ def check():
         package, _ = asset_for(rel)
         avail = newer(tag, current_version()) and bool(package)
         with _lock:
+            if avail:
+                _release = rel
             _state.update(state="idle", latest=tag.lstrip("v"), url=rel.get("html_url"),
                           notes=(rel.get("body") or "")[:2000], available=avail,
                           checked=int(time.time()), error=None if package else
@@ -336,7 +344,9 @@ def swap_script(new_app, target=None):
     The helper runs detached: it waits for the quit, keeps the current app as
     Kotassium.app.old (the copy the recovery panel restores), replaces the
     target, reopens it and reports any failure into the cache so the next
-    launch can show why the update did not happen.
+    launch can show why the update did not happen. The quit itself is not left
+    to chance: an app that has not left within a few seconds is asked to go,
+    then made to, so the update never stalls waiting for someone to act.
     """
     target = target or (app_path() or "/Applications/Kotassium.app")
     quote = shlex.quote
@@ -349,24 +359,45 @@ PREVIOUS="$TARGET.old"
 FAIL=%(fail)s
 report() { printf '%%s\\n' "$1" > "$FAIL"; }
 
-# 1. wait for the updater's quit request to take effect (about a minute)
+# 1. wait for the updater's quit request to take effect (about 15 seconds)
 n=0
 while /usr/bin/pgrep -x Kotassium >/dev/null 2>&1; do
     n=$((n + 1))
-    if [ "$n" -ge 120 ]; then
-        report "Kotassium did not quit, so the update was not installed"
-        exit 1
+    if [ "$n" -ge 30 ]; then
+        break
     fi
     /bin/sleep 0.5
 done
 
-# 2. never put a bundle we cannot open into place
+# 2. it is still here: ask it to leave, then make it - nothing after the
+#    download click is allowed to need a person
+if /usr/bin/pgrep -x Kotassium >/dev/null 2>&1; then
+    /bin/kill -TERM $(/usr/bin/pgrep -x Kotassium) 2>/dev/null
+    m=0
+    while /usr/bin/pgrep -x Kotassium >/dev/null 2>&1; do
+        m=$((m + 1))
+        if [ "$m" -ge 20 ]; then
+            /bin/kill -KILL $(/usr/bin/pgrep -x Kotassium) 2>/dev/null
+            /bin/sleep 2
+            break
+        fi
+        /bin/sleep 0.5
+    done
+fi
+
+# 3. give up only if the app genuinely cannot be stopped
+if /usr/bin/pgrep -x Kotassium >/dev/null 2>&1; then
+    report "Kotassium did not quit, so the update was not installed"
+    exit 1
+fi
+
+# 4. never put a bundle we cannot open into place
 if [ ! -x "$NEW/Contents/MacOS/Kotassium" ]; then
     report "the downloaded update is missing its app bundle"
     exit 1
 fi
 
-# 3. keep the current app for "Restore previous version" (as preinstall does)
+# 5. keep the current app for "Restore previous version" (as preinstall does)
 STAGED="$TARGET.old.next"
 if [ -d "$TARGET" ]; then
     /bin/rm -rf "$STAGED"
@@ -379,7 +410,7 @@ if [ -d "$TARGET" ]; then
     /bin/mv "$STAGED" "$PREVIOUS"
 fi
 
-# 4. replace it, restoring the old app if anything about the new one is wrong
+# 6. replace it, restoring the old app if anything about the new one is wrong
 /bin/rm -rf "$TARGET"
 if ! /usr/bin/ditto "$NEW" "$TARGET" || [ ! -x "$TARGET/Contents/MacOS/Kotassium" ]; then
     /bin/rm -rf "$TARGET"
@@ -392,7 +423,7 @@ fi
 /bin/rm -rf "$NEW"
 /bin/rm -f "$FAIL"
 
-# 5. reopen the new version
+# 7. reopen the new version
 /usr/bin/open "$TARGET"
 exit 0
 """ % {"new": quote(new_app), "target": quote(target),
@@ -484,6 +515,22 @@ def install(asset, sums_asset=None):
             _state.update(state="error", error=str(e)[:300], pct=0)
 
 
+def _release_for_install():
+    """The release the download click should install.
+
+    Prefers the one the last check found - that is the build the pill is
+    offering - and only asks GitHub again when there is nothing usable in
+    hand (first click of a session, or the app was updated since).
+    """
+    with _lock:
+        rel = _release
+    if rel:
+        package, _ = asset_for(rel)
+        if package and newer(rel.get("tag_name") or "", current_version()):
+            return rel
+    return latest_release()
+
+
 def start_install():
     """Kick off an install in the background (idempotent while running)."""
     global _worker
@@ -495,10 +542,14 @@ def start_install():
     with _lock:
         if _worker and _worker.is_alive():
             return dict(_state)
-    rel = latest_release()
+    rel = _release_for_install()
     package, sums = asset_for(rel)
     if not package:
         raise RuntimeError("no build for this Mac in %s" % (rel.get("tag_name") or "release"))
+    # Claim the downloading state before the response goes out: the page starts
+    # polling on it, and it must not race the worker thread's first statement.
+    with _lock:
+        _state.update(state="downloading", pct=0, error=None)
     _worker = threading.Thread(target=install, args=(package, sums), daemon=True)
     _worker.start()
     return status()

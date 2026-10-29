@@ -477,6 +477,64 @@ class SilentInstallTests(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.tmp,
                                                       "install-failed.txt")))
 
+    def test_check_keeps_the_release_the_download_button_offers(self):
+        # The pill is offering a specific build; the click installs that one
+        # from what the check already fetched, so a GitHub hiccup between the
+        # two cannot leave the button doing nothing.
+        self._snapshot_state()
+        real_release = updater._release
+        updater._release = None
+        self.addCleanup(setattr, updater, "_release", real_release)
+        self._patch("latest_release", lambda: json.loads(json.dumps(RELEASE)))
+        self._patch("current_version", lambda: "2.0.0")
+        st = updater.check()
+        self.assertTrue(st["available"])
+        self._patch("latest_release", lambda: (_ for _ in ()).throw(OSError("offline")))
+        self.assertEqual(updater._release_for_install()["tag_name"], "v2.1.0")
+        # nothing usable cached (first click of a session): one fresh request
+        updater._release = None
+        calls = []
+        self._patch("latest_release",
+                    lambda: calls.append(1) or json.loads(json.dumps(RELEASE)))
+        self.assertEqual(updater._release_for_install()["tag_name"], "v2.1.0")
+        self.assertEqual(calls, [1])
+
+    def test_start_install_answers_downloading_without_asking_github_again(self):
+        # The page starts polling on this response, so it has to say
+        # "downloading" right away and must not spend another request getting
+        # there - the anonymous quota is 60/hour and a failure here used to
+        # swallow the click silently.
+        self._snapshot_state()
+        seen = []
+        real_release, real_worker = updater._release, updater._worker
+        updater._release = json.loads(json.dumps(RELEASE))
+        updater._worker = None
+        self.addCleanup(setattr, updater, "_release", real_release)
+        self.addCleanup(setattr, updater, "_worker", real_worker)
+        self._patch("SUPPORTED", True)
+        self._patch("can_install", lambda: True)
+        self._patch("install", lambda package, sums: seen.append((package, sums)))
+        self._patch("latest_release", lambda: (_ for _ in ()).throw(
+            AssertionError("the download click must not query GitHub again")))
+        st = updater.start_install()
+        self.assertEqual(st["state"], "downloading")
+        updater._worker.join(3)
+        self.assertEqual(len(seen), 1)
+        self.assertTrue(seen[0][0]["name"].endswith(".pkg"))
+        self.assertEqual(updater.status()["state"], "downloading")
+
+    def test_swap_script_finishes_even_if_the_app_refuses_to_quit(self):
+        # It waits for the clean quit first...
+        script = updater.swap_script("/tmp/stage/Kotassium.new.app",
+                                     "/Applications/Kotassium.app")
+        self.assertIn('if [ "$n" -ge 30 ]', script)
+        # ...then stops the app itself rather than leaving the update parked
+        # on somebody's desk, and only reports failure if it cannot be stopped
+        self.assertIn("/bin/kill -TERM", script)
+        self.assertIn("/bin/kill -KILL", script)
+        self.assertIn('report "Kotassium did not quit, so the update was not installed"',
+                      script)
+
     def test_can_swap_only_where_the_bundle_is_replaceable(self):
         real_app, real_access = updater.app_path, updater.os.access
         try:

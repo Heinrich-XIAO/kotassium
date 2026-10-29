@@ -190,13 +190,15 @@ Downloads and state live outside the repo in `~/Music/Kotassium`
   Code's updater: a circular **⟳ check** icon when it has not found an update
   (tap it to re-check GitHub on demand), a spinning arrow while the check is
   in flight, and a **⬇ download** icon when a newer PKG exists. One click on
-  it downloads the build for its architecture, checks it against the
-  release's `SHA256SUMS`, unpacks the package, waits for the app to quit,
-  saves the prior bundle as `/Applications/Kotassium.app.old` for recovery
-  when installed in `/Applications`, replaces the app and reopens it — no
-  further dialogs. (An app sitting where it cannot replace itself falls back
-  to macOS Installer, which asks before quitting as usual.) If recovery is
-  needed, its recovery panel provides instructions to
+  it downloads the build for its architecture (the one the check already
+  found — no second GitHub request), checks it against the release's
+  `SHA256SUMS`, unpacks the package, waits for the app to quit — stopping it
+  after a few seconds if it does not leave by itself — saves the prior bundle
+  as `/Applications/Kotassium.app.old` for recovery when installed in
+  `/Applications`, replaces the app and reopens it — no further dialogs, and
+  nothing left waiting on you. (An app sitting where it cannot replace itself
+  falls back to macOS Installer, which asks before quitting as usual.) If
+  recovery is needed, its recovery panel provides instructions to
   restore the saved bundle. Only frozen macOS app builds report
   `supported: true`; the web and Linux builds hide the pill.
 - **Persistent storage.** The window uses `private_mode=False`, so the
