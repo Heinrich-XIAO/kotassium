@@ -16,11 +16,14 @@ const shuffledExcept = (length, excluded) => {
   }
   return order;
 };
-// no-repeat keeps the tile inside the padding box: these covers carry a 1px
-// border, so a repeating tile would bleed the gradient's bright first stop into
-// the border ring as a bright stripe along the bottom and right.
-const gradient = (name) => { const h = hue(name); return `linear-gradient(135deg,hsl(${h},70%,38%),hsl(${(h + 40) % 360},60%,20%)) no-repeat`; };
-const escStyle = (url) => `url("${String(url || '').replace(/["'<>)]/g, (c) => encodeURIComponent(c))}") center/cover no-repeat`;
+// These covers carry a 1px translucent border, and index.html keeps the paint
+// out of that ring with background-clip:padding-box — but the inline
+// `background:` shorthand resets background-clip, so the clip has to be
+// repeated in the string itself. Without it the gradient runs under the border
+// and its bright first stop shows as a bright green corner in the ring.
+// no-repeat keeps a repeated tile inside the same box.
+const gradient = (name) => { const h = hue(name); return `linear-gradient(135deg,hsl(${h},70%,38%),hsl(${(h + 40) % 360},60%,20%)) no-repeat padding-box`; };
+const escStyle = (url) => `url("${String(url || '').replace(/["'<>)]/g, (c) => encodeURIComponent(c))}") center/cover no-repeat padding-box`;
 function Icon({ name, size = 20, children }) {
   const viewBox = ['add', 'play', 'pause', 'prev', 'next'].includes(name) ? '0 0 16 16' : '0 0 24 24';
   const p = {
@@ -1078,7 +1081,7 @@ function App() {
   const startUpdate = useCallback(async () => { setUpdateBusy(true); try { const started = await postJSON('/api/update', {}); const st = await pollUpdate(); if (st?.state === 'installing' || st?.state === 'downloading') setUpdateMessage(st.state === 'downloading' ? `downloading update ${Math.round(st.pct || 0)}%` : 'installing update…'); else { const why = started?.error || st?.error; if (why) { setUpdateMessage(why); toast(why); } } } catch { toast('could not start the update'); } finally { setUpdateBusy(false); } }, [pollUpdate, toast]);
 
   const imageStyle = (url, name) => ({ background: url ? resolveCover(url) : gradient(name) });
-  const coverBackground = (url, name) => url ? (coverMap[url] ? `url("/cover/${encodeURIComponent(coverMap[url])}") center/cover no-repeat` : escStyle(url)) : gradient(name);
+  const coverBackground = (url, name) => url ? (coverMap[url] ? `url("/cover/${encodeURIComponent(coverMap[url])}") center/cover no-repeat padding-box` : escStyle(url)) : gradient(name);
   const volumeIcon = <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>{muted ? <><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></> : volume <= 0.01 ? null : volume < 0.5 ? <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/> : <><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></>}</>;
   const icon = (name, size = 20) => <Icon name={name} size={size}>{name === 'volume' ? volumeIcon : null}</Icon>;
   const seekHandlers = () => ({
