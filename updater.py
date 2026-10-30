@@ -4,9 +4,10 @@ The PKG on the release page is the same artifact this installs, so the update
 path is: check the releases API, download the PKG for this architecture,
 verify it against the published SHA256SUMS, unpack it and swap the app in
 behind the scenes - one click on the download button, no further dialogs. A
-detached helper waits for the quit, keeps the old bundle as Kotassium.app.old,
-moves the new one in and reopens it. macOS Installer stays as the fallback
-for locations we cannot replace ourselves, keeping its own confirmation.
+detached helper waits for the quit, moves the old bundle aside as
+Kotassium.app.old, renames the new one into its place and reopens it. macOS
+Installer stays as the fallback for locations we cannot replace ourselves,
+keeping its own confirmation.
 
 Only runs when frozen (inside Kotassium.app). On Linux and when running from a
 source checkout it reports `supported: false` and the UI hides the banner.
@@ -250,10 +251,12 @@ def take_failure():
 def can_swap():
     """True when this app can be replaced in place, without macOS Installer.
 
-    The helper moves bundles as the logged-in user, so the folder holding the
-    app has to be writable (/Applications is group-admin writable, which
-    covers every copy a PKG install produced). Translocated and
-    disk-image copies still need the installer.
+    The helper renames bundles as the logged-in user, so only the folder
+    holding the app has to be writable (/Applications is group-admin
+    writable, which covers every copy a PKG install produced) - the bundle's
+    own ownership never matters, because nothing is deleted in place or
+    copied over it. Translocated and disk-image copies still need the
+    installer.
     """
     app = app_path()
     if not app:
@@ -341,12 +344,19 @@ def stage_app(package, dest=None):
 def swap_script(new_app, target=None):
     """Shell that finishes the update once this process is gone.
 
-    The helper runs detached: it waits for the quit, keeps the current app as
-    Kotassium.app.old (the copy the recovery panel restores), replaces the
-    target, reopens it and reports any failure into the cache so the next
-    launch can show why the update did not happen. The quit itself is not left
-    to chance: an app that has not left within a few seconds is asked to go,
-    then made to, so the update never stalls waiting for someone to act.
+    The helper runs detached: it waits for the quit, parks the current app as
+    Kotassium.app.old (the copy the recovery panel restores), moves the staged
+    bundle into its place, reopens it and reports any failure into the cache so
+    the next launch can show why the update did not happen. The quit itself is
+    not left to chance: an app that has not left within a few seconds is asked
+    to go, then made to, so the update never stalls waiting for someone to act.
+
+    The old app is renamed aside rather than deleted and the new one renamed
+    in rather than copied over it. A PKG install leaves the bundle root-owned:
+    deleting that in place fails for the logged-in user, and copying over the
+    files it cannot write is what used to end the update with "could not
+    install the update". A rename only needs the write bit on the folder
+    holding the app, which is exactly what can_swap() asks for.
     """
     target = target or (app_path() or "/Applications/Kotassium.app")
     quote = shlex.quote
@@ -397,30 +407,33 @@ if [ ! -x "$NEW/Contents/MacOS/Kotassium" ]; then
     exit 1
 fi
 
-# 5. keep the current app for "Restore previous version" (as preinstall does)
-STAGED="$TARGET.old.next"
-if [ -d "$TARGET" ]; then
-    /bin/rm -rf "$STAGED"
-    if ! /usr/bin/ditto "$TARGET" "$STAGED"; then
-        /bin/rm -rf "$STAGED"
+# 5. keep the current app for "Restore previous version" (as preinstall does).
+#    It is moved aside, never deleted in place: renaming needs only the write
+#    bit on the folder holding it - which an admin user has even when the
+#    bundle is root-owned, as a PKG install leaves it - while deleting a
+#    root-owned bundle fails, leaving the copy nothing it is allowed to write.
+if [ -e "$PREVIOUS" ]; then
+    /bin/rm -rf "$PREVIOUS" 2>/dev/null
+    if [ -e "$PREVIOUS" ] && ! /bin/mv "$PREVIOUS" "$PREVIOUS.stale.$$"; then
         report "could not back up the current app; the update was not installed"
         exit 1
     fi
-    /bin/rm -rf "$PREVIOUS"
-    /bin/mv "$STAGED" "$PREVIOUS"
+fi
+if [ -d "$TARGET" ] && ! /bin/mv "$TARGET" "$PREVIOUS"; then
+    report "could not back up the current app; the update was not installed"
+    exit 1
 fi
 
-# 6. replace it, restoring the old app if anything about the new one is wrong
-/bin/rm -rf "$TARGET"
-if ! /usr/bin/ditto "$NEW" "$TARGET" || [ ! -x "$TARGET/Contents/MacOS/Kotassium" ]; then
-    /bin/rm -rf "$TARGET"
+# 6. move the new bundle into the place the old one just left, putting the old
+#    one back if anything about the new one is wrong
+if ! /bin/mv "$NEW" "$TARGET" || [ ! -x "$TARGET/Contents/MacOS/Kotassium" ]; then
+    /bin/rm -rf "$TARGET" 2>/dev/null
     if [ -d "$PREVIOUS" ]; then
-        /usr/bin/ditto "$PREVIOUS" "$TARGET"
+        /bin/mv "$PREVIOUS" "$TARGET"
     fi
     report "could not install the update"
     exit 1
 fi
-/bin/rm -rf "$NEW"
 /bin/rm -f "$FAIL"
 
 # 7. reopen the new version

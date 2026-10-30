@@ -135,9 +135,16 @@ of these lines as the message's last line:
   download button finishes them: the public repo's latest release is checked
   at launch and on demand from the page's pill, the PKG is verified against
   `SHA256SUMS`, then `stage_app()` unpacks it with `pkgutil` (no root) and a
-  detached helper waits for the quit, keeps the previous bundle as
+  detached helper waits for the quit, moves the previous bundle aside as
   `/Applications/Kotassium.app.old` for recovery when installed in
-  `/Applications`, moves the staged bundle in and reopens it. The helper waits
+  `/Applications`, renames the staged bundle into its place and reopens it.
+  The swap is two renames, never a delete-and-copy: a PKG install leaves the
+  installed bundle root-owned, which the logged-in user can neither delete in
+  place nor copy over — that is what made every update die with "could not
+  install the update". A rename needs only the write bit on the folder holding
+  the app, which is exactly what `can_swap()` asks for, and an unremovable
+  `.old` is parked as `.old.stale.<pid>` instead of blocking the update. The
+  helper waits
   about fifteen seconds for the clean quit and then stops the app itself
   (TERM, then KILL), so nothing after the download click is left waiting on a
   person; it only writes a failure when the process cannot be stopped at all.

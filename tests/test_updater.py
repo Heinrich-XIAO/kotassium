@@ -313,13 +313,32 @@ class SilentInstallTests(unittest.TestCase):
         self.assertIn("NEW=/tmp/stage/Kotassium.new.app", script)
         self.assertIn("TARGET=/Applications/Kotassium.app", script)
         self.assertIn("/usr/bin/pgrep -x Kotassium", script)      # waits out the quit
-        self.assertIn('/usr/bin/ditto "$TARGET" "$STAGED"', script)  # keeps .old
-        self.assertIn('/bin/mv "$STAGED" "$PREVIOUS"', script)
+        self.assertIn('/bin/mv "$TARGET" "$PREVIOUS"', script)     # parks the old app
+        self.assertIn('/bin/mv "$NEW" "$TARGET"', script)          # moves the new one in
         self.assertIn('[ ! -x "$NEW/Contents/MacOS/Kotassium" ]', script)
-        self.assertIn('/usr/bin/ditto "$NEW" "$TARGET"', script)
+        self.assertIn('/bin/mv "$PREVIOUS" "$TARGET"', script)     # puts it back
         self.assertIn('/usr/bin/open "$TARGET"', script)          # reopens it
         self.assertIn('report "could not install the update"', script)
         self.assertIn(os.path.join(self.tmp, "install-failed.txt"), script)
+
+    def test_swap_script_never_replaces_the_app_in_place(self):
+        # A PKG install leaves /Applications/Kotassium.app root-owned: rm -rf
+        # on it fails for the logged-in user, so a helper that deleted it in
+        # place and then copied the new bundle over it had nothing it was
+        # allowed to write, and every update ended with "could not install the
+        # update". Renaming needs only the write bit on the folder holding the
+        # app - the same thing can_swap() asks for - so the swap is two renames.
+        script = updater.swap_script("/tmp/stage/Kotassium.new.app",
+                                     "/Applications/Kotassium.app")
+        self.assertNotIn('/usr/bin/ditto "$NEW" "$TARGET"', script)
+        self.assertNotIn('.old.next', script)      # no copy-then-move dance
+        # the only deletion of the target is the clean-up of a failed copy
+        self.assertEqual(script.count('/bin/rm -rf "$TARGET"'), 1)
+        self.assertLess(script.index('/bin/mv "$NEW" "$TARGET"'),
+                        script.index('/bin/rm -rf "$TARGET"'))
+        # a root-owned .old cannot be removed, so it is parked instead of
+        # left for mv to move the new backup *into*
+        self.assertIn('"$PREVIOUS.stale.$$"', script)
 
     def test_swap_script_quotes_paths_with_spaces(self):
         script = updater.swap_script("/Users/Jane Doe/update/Kotassium.new.app",
