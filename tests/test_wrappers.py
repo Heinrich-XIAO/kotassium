@@ -378,21 +378,20 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("#main::-webkit-scrollbar,#sideList::-webkit-scrollbar{width:0}", page)
         self.assertIn("#main::-webkit-scrollbar,#sideList::-webkit-scrollbar{display:none}", page)
 
-    def test_up_next_toast_places_white_heading_above_track_details(self):
+    def test_up_next_uses_the_shared_dismissible_toast_style(self):
         app = read("web/app.jsx")
         page = read("web/index.html")
-        self.assertIn("grid-template-columns:36px minmax(0,1fr)", page)
-        self.assertIn("grid-template-rows:auto auto", page)
-        self.assertIn("#upnext .upnext-label{grid-column:1/-1", page)
-        self.assertIn("<span className=\"upnext-label\">Up next</span>", app)
-        self.assertNotIn("text-transform:uppercase", re.sub(r"\.link-eyebrow\{[^}]*\}", "", page))
-        self.assertIn(".dfsQsect{font-size:var(--font-size-section);color:#8a8a8a;font-weight:var(--font-weight-bold)", page)
-        self.assertIn(".settings-label{margin:0 0 8px 2px;font-size:var(--font-size-section);font-weight:var(--font-weight-bold);color:#8f8f8f}", page)
-        self.assertIn('h1,h2,h3{font-family:var(--font-ui);font-weight:var(--font-weight-bold);letter-spacing:-.02em}', page)
-        self.assertIn('body{background:#000;color:#fff;font-family:var(--font-ui);font-size:var(--font-size-body);font-weight:var(--font-weight-regular);', page)
-        self.assertIn('.settings-head h2,.link-dialog-copy h2{font-size:var(--font-size-title);font-weight:var(--font-weight-bold);letter-spacing:-.02em}', page)
-        self.assertIn("#upnext .upnext-art{grid-column:1;grid-row:2", page)
-        self.assertIn("#upnext .upnext-copy{grid-column:2;grid-row:2", page)
+        self.assertIn('className="toast-card toast-upnext"', app)
+        self.assertIn('aria-label="Dismiss up next notification"', app)
+        self.assertIn("upNextGone.current = true; setUpNext(false); setUpNextDismissed(true);", app)
+        self.assertIn(".toast-viewport{position:fixed;top:max(72px,calc(env(safe-area-inset-top) + 64px));right:16px", page)
+        self.assertIn(".toast-card{position:relative;display:flex;align-items:center;gap:12px", page)
+        self.assertIn(".toast-success .toast-icon", page)
+        self.assertIn(".toast-error .toast-icon", page)
+        self.assertIn('className="toast-progress" role="progressbar"', app)
+        self.assertNotIn("#toast{bottom:", page)
+        self.assertNotIn("#dl{position:fixed;bottom:", page)
+        self.assertNotIn('id="dllabel"', app)
 
     def test_custom_tooltips_and_lucide_update_and_settings_controls(self):
         app = read("web/app.jsx")

@@ -167,10 +167,10 @@ function App() {
   const [linkValue, setLinkValue] = useState('');
   const [bgDownload, setBgDownload] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [toastText, setToastText] = useState('');
+  const [toastItems, setToastItems] = useState([]);
+  const toastItemsRef = useRef([]);
   const [upNext, setUpNext] = useState(false);
   const upNextGone = useRef(false);
-  const [toastDismissed, setToastDismissed] = useState(false);
   const [upNextDismissed, setUpNextDismissed] = useState(false);
   const [download, setDownload] = useState(null);
   const [mobilePlayer, setMobilePlayer] = useState(false);
@@ -182,21 +182,41 @@ function App() {
   const [updateBusy, setUpdateBusy] = useState(false);
   const updateCheckManual = useRef(false);
   const updateStatusTimer = useRef(0);
-  const toastTimer = useRef(0);
-  const toastGesture = useRef({ active: false, startX: 0, startY: 0, deltaX: 0, dismissed: false, previousOpacity: '' });
+  const toastTimers = useRef(new Map());
   const dragStart = useRef(null);
   const mobileGesture = useRef({ startX: 0, startY: 0, target: null, queueScrollTop: 0, moved: false, openedBySwipe: false, closeTimer: 0 });
   const suppressTapUntil = useRef(0);
   const lastUpNextTrack = useRef('');
   const currentTrack = currentIndex >= 0 ? queue[currentIndex] : null;
   const duration = actualDuration || (currentTrack?.ms ? currentTrack.ms / 1000 : 0);
-  const toast = useCallback((message) => {
-    toastGesture.current.dismissed = false;
-    setToastDismissed(false);
-    setToastText(message);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastText(''), 3000);
+  const dismissToast = useCallback((id) => {
+    clearTimeout(toastTimers.current.get(id));
+    toastTimers.current.delete(id);
+    const next = toastItemsRef.current.filter((item) => item.id !== id);
+    toastItemsRef.current = next;
+    setToastItems(next);
   }, []);
+  const toast = useCallback((message) => {
+    const text = String(message || '');
+    const lower = text.toLowerCase();
+    const variant = /could not|couldn't|failed|failure|error|unable|no source|not found/.test(lower)
+      ? 'error'
+      : /added|removed|saved|finished|ready/.test(lower) ? 'success' : 'default';
+    const existing = toastItemsRef.current.find((item) => item.message === text);
+    const id = existing?.id || `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    clearTimeout(toastTimers.current.get(id));
+    const next = [{ id, message: text, variant }, ...toastItemsRef.current.filter((item) => item.id !== id)].slice(0, 4);
+    toastItemsRef.current.forEach((item) => {
+      if (!next.some((current) => current.id === item.id)) {
+        clearTimeout(toastTimers.current.get(item.id));
+        toastTimers.current.delete(item.id);
+      }
+    });
+    toastItemsRef.current = next;
+    setToastItems(next);
+    const timer = setTimeout(() => dismissToast(id), variant === 'error' ? 5200 : 4000);
+    toastTimers.current.set(id, timer);
+  }, [dismissToast]);
   // Playback bar: a Spotify-style add-to-playlist control. The button's green
   // state tracks the playlist that is open; the menu manages every playlist.
   const inCurrentPlaylist = !!(currentTrack && view.type === 'playlist'
@@ -242,50 +262,6 @@ function App() {
     };
   }, [saveOpen]);
   useEffect(() => { setSaveOpen(false); setSaveContains(null); }, [currentTrack?.t, currentTrack?.a]);
-  const toastPointerStart = (event) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    const node = event.currentTarget;
-    toastGesture.current = { ...toastGesture.current, active: true, startX: event.clientX, startY: event.clientY, deltaX: 0, dismissed: false, previousOpacity: node.style.opacity || '' };
-    node._drag = true;
-    try { node.setPointerCapture(event.pointerId); } catch {}
-    if (node.id === 'toast') clearTimeout(toastTimer.current);
-  };
-  const toastPointerMove = (event) => {
-    const gesture = toastGesture.current;
-    if (!gesture.active) return;
-    const dx = event.clientX - gesture.startX, dy = event.clientY - gesture.startY;
-    if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
-    if (dx <= 0 || Math.abs(dx) <= Math.abs(dy)) {
-      gesture.active = false; event.currentTarget._drag = false;
-      if (event.currentTarget.id === 'toast') toastTimer.current = setTimeout(() => setToastText(''), 3000);
-      return;
-    }
-    event.preventDefault();
-    gesture.deltaX = dx;
-    event.currentTarget.style.transition = 'none';
-    event.currentTarget.style.transform = `translateX(${dx}px)`;
-    event.currentTarget.style.opacity = String(Math.max(0, 1 - dx / 140));
-  };
-  const toastPointerEnd = (event) => {
-    const gesture = toastGesture.current;
-    if (!gesture.active) return;
-    gesture.active = false;
-    const node = event.currentTarget;
-    node.style.transition = 'transform .25s cubic-bezier(.2,.8,.2,1),opacity .25s';
-    if (gesture.deltaX > 70) {
-      gesture.dismissed = true;
-      node.style.transform = 'translateX(150%)';
-      node.style.opacity = '0';
-      setTimeout(() => {
-        node.style.transform = ''; node.style.transition = ''; node._drag = false;
-        if (node.id === 'upnext') { upNextGone.current = true; setUpNext(false); }
-        else { setToastDismissed(true); setToastText(''); }
-      }, 250);
-    } else {
-      node.style.transform = ''; node.style.opacity = gesture.previousOpacity; node._drag = false;
-      if (node.id === 'toast') toastTimer.current = setTimeout(() => setToastText(''), 3000);
-    }
-  };
   const warmCover = useCallback((url) => {
     if (!url || url.startsWith('/cover/') || coverCacheRef.current[url]) return;
     coverCacheRef.current[url] = 'pending';
@@ -711,9 +687,18 @@ function App() {
       let mtime = 0;
       const check = () => API('/api/mtime').then((j) => { if (mtime && j.mtime && j.mtime !== mtime) location.reload(); mtime = j.mtime || mtime; }).catch(() => {});
       check(); const timer = setInterval(check, 2000);
-      return () => { alive = false; clearInterval(timer); clearTimeout(toastTimer.current); };
+      return () => {
+        alive = false;
+        clearInterval(timer);
+        toastTimers.current.forEach(clearTimeout);
+        toastTimers.current.clear();
+      };
     }
-    return () => { alive = false; clearTimeout(toastTimer.current); };
+    return () => {
+      alive = false;
+      toastTimers.current.forEach(clearTimeout);
+      toastTimers.current.clear();
+    };
   }, [loadLinks]);
 
   useEffect(() => {
@@ -1180,7 +1165,23 @@ function App() {
     <footer id="bar" onTouchStart={(e) => gestureStart(e, 'bar')} onTouchMove={(e) => gestureMove(e, 'bar')} onTouchEnd={(e) => gestureEnd(e, 'bar')} onTouchCancel={(e) => gestureEnd(e, 'bar')} onClickCapture={suppressGestureClick}><div className="barfull" style={{ display: 'contents' }}><div id="nowp"><button id="nowc" onClick={mobileOpen} data-tooltip="Open player" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)} /><div id="nowt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div>{currentTrack && <div className="nowsave-wrap"><button id="nowsave" className={inCurrentPlaylist ? 'on' : ''} onClick={toggleSaveMenu} aria-label="Add to playlist" aria-expanded={saveOpen} data-tooltip={inCurrentPlaylist ? 'Saved to this playlist' : 'Add to playlist'}><Icon name={inCurrentPlaylist ? 'check' : 'add'} size={15}/></button>{saveOpen && <div className="save-menu" role="dialog" aria-label="Add to playlist"><div className="save-head"><b>Add to playlist</b><button className="save-close" onClick={() => setSaveOpen(false)} aria-label="Close"><Icon name="close" size={14}/></button></div><div className="save-list">{links.length ? links.map((l) => { const inIt = !!(saveContains && saveContains[l.url || l.name]); return <button key={l.url || l.name} className={`save-row ${inIt ? 'in' : ''}`} onClick={() => togglePlaylistMembership(l)} aria-pressed={inIt}><span className="save-name">{l.name || '?'}</span><span className="save-mark"><Icon name={inIt ? 'check' : 'add'} size={13}/></span></button>; }) : <p className="save-empty">No playlists yet - add one with the + button in your library.</p>}</div></div>}</div>}</div><div id="ctr">{controls()}{progress()}</div><div id="rside">{volumeRow()}<button id="dfsBtn" disabled={!currentTrack} className="aicon desktop-fullscreen" onClick={toggleDesktop} data-tooltip={desktopPlayer ? 'Exit full screen' : 'Full screen'} aria-label={desktopPlayer ? 'Exit full screen' : 'Full screen'}><Icon name={desktopPlayer ? 'exitFullscreen' : 'fullscreen'}/></button></div></div></footer>
     <div id="fs" className={mobilePlayer ? 'on' : ''} onTouchStart={(e) => gestureStart(e, 'fs')} onTouchMove={(e) => gestureMove(e, 'fs')} onTouchEnd={(e) => gestureEnd(e, 'fs')} onTouchCancel={(e) => gestureEnd(e, 'fs')} onClickCapture={suppressGestureClick}><div id="fsGrip" onClick={mobileClose}/><div id="fsHead"><span id="fsPl">{playingPlaylist || 'Now playing'}</span></div><div id="fsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)}/><div id="fsTxt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div><div id="fsQueue" style={{ display: upcoming.length ? '' : 'none' }}><div id="fsQhead"><b>Up next</b><span id="fsQcount">{upcoming.length} {upcoming.length === 1 ? 'track' : 'tracks'}</span></div><div id="fsQrows">{upcoming.map((i, n) => <div className="fsQrow" key={`${trackKey(queue[i])}-${i}`} onClick={() => playIndex(i)}><span className="fsQn">{n + 1}</span><span className="fsQcov" style={{ background: coverBackground(queue[i]?.cover, queue[i]?.t) }}/><span className="fsQt"><b>{queue[i]?.t}</b><small>{queue[i]?.a}</small></span><span className="fsQtime">{fmt(queue[i]?.ms)}</span></div>)}</div></div><div id="fsIsland">{progress(true)}{controls(true)}{volumeRow(true)}</div></div>
     {desktopPlayer && <div id="dfs" className={`open ${desktopIdle ? 'idle' : ''}`} onMouseMove={() => setDesktopIdle(false)}><div id="dfsMain"><div id="dfsTop"><span id="dfsTopTitle">{playingPlaylist || 'Now playing'}</span><button id="dfsExit" onClick={() => setDesktopPlayer(false)} data-tooltip="Exit full screen"><Icon name="exitFullscreen" size={18}/></button></div><div id="dfsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }}/><div id="dfsInfo"><b id="dfsTitle">{currentTrack?.t || 'Choose a playlist to listen'}</b><small id="dfsArtist">{currentTrack?.a || 'nothing playing'}</small></div></div><div id="dfsQueue" style={{ display: queue.length ? '' : 'none' }}><div id="dfsQhead"><b>Queue</b><span id="dfsQcount">{queue.length} {queue.length === 1 ? 'track' : 'tracks'}</span></div><div id="dfsQrows">{currentTrack ? <><div className="dfsQsect">Now Playing</div><QueueRow track={currentTrack} active onClick={() => playIndex(currentIndex)} />{upcoming.length > 0 && <div className="dfsQsect">Next Up</div>}{upcoming.map((i) => <QueueRow key={`${trackKey(queue[i])}-${i}`} track={queue[i]} onClick={() => playIndex(i)}/>)}</> : queue.map((track, index) => <QueueRow key={`${trackKey(track)}-${index}`} track={track} onClick={() => playIndex(index)}/>)}</div></div></div>}
-    <div id="toast" className={toastText && !toastDismissed ? 'visible' : ''} onPointerDown={toastPointerStart} onPointerMove={toastPointerMove} onPointerUp={toastPointerEnd} onPointerCancel={toastPointerEnd}>{toastText}</div>{(upNext || (radio && !nextTrack && currentTrack)) && currentTrack && !desktopPlayer && <div id="upnext" className={`tcard ${(upNext || (radio && !nextTrack)) && !upNextDismissed ? 'visible' : ''}`} onPointerDown={toastPointerStart} onPointerMove={toastPointerMove} onPointerUp={toastPointerEnd} onPointerCancel={toastPointerEnd}><span className="upnext-label">Up next</span><span className="upnext-art" style={{ background: coverBackground(displayNextTrack?.cover, displayNextTrack?.t) }}/><span className="upnext-copy"><b>{radioSearching ? 'Finding radio tracks…' : displayNextTrack?.t}</b><small>{radioSearching ? 'Radio' : displayNextTrack?.a}</small></span></div>}{download && <div id="dl" className="on"><span id="dllabel">{download.status === 'done' ? 'ready' : 'downloading'} {download.label}</span><div id="dlbar"><i id="dlfill" style={{ width: `${download.pct}%` }}/></div><span id="dlpct">{Math.round(download.pct)}%</span></div>}<audio ref={audioRef} preload="auto" />
+    <div id="toast" className="toast-viewport" aria-label="Notifications" aria-live="polite">
+      {download && <div className="toast-card toast-download" role="status">
+        <span className="toast-icon" aria-hidden="true"><i className="toast-spinner"/></span>
+        <div className="toast-body"><b>{download.status === 'done' ? 'Download ready' : download.status === 'queued' ? 'Starting download' : 'Downloading'}</b><span>{download.label || 'Track'}</span><div className="toast-progress" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(download.pct)}><i style={{ width: `${download.pct}%` }}/></div></div>
+        <small className="toast-percent">{Math.round(download.pct)}%</small>
+      </div>}
+      {(upNext || (radio && !nextTrack && currentTrack)) && currentTrack && !desktopPlayer && !upNextDismissed && <div id="upnext" className="toast-card toast-upnext" role="status">
+        <span className="toast-icon toast-upnext-icon" aria-hidden="true">♫</span>
+        <div className="toast-body"><b>Up next</b><span>{radioSearching ? 'Finding radio tracks…' : `${displayNextTrack?.t || ''}${displayNextTrack?.a ? ` · ${displayNextTrack.a}` : ''}`}</span></div>
+        <button className="toast-close" type="button" aria-label="Dismiss up next notification" onClick={() => { upNextGone.current = true; setUpNext(false); setUpNextDismissed(true); }}><Icon name="close" size={15}/></button>
+      </div>}
+      {toastItems.map((item) => <div key={item.id} className={`toast-card toast-${item.variant}`} role={item.variant === 'error' ? 'alert' : 'status'}>
+        <span className="toast-icon" aria-hidden="true">{item.variant === 'success' ? '✓' : item.variant === 'error' ? '!' : '•'}</span>
+        <p className="toast-message">{item.message}</p>
+        <button className="toast-close" type="button" aria-label="Dismiss notification" onClick={() => dismissToast(item.id)}><Icon name="close" size={15}/></button>
+      </div>)}
+    </div><audio ref={audioRef} preload="auto" />
 
   </>;
 }

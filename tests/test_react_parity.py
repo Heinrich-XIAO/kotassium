@@ -99,12 +99,13 @@ class ReactParityTests(unittest.TestCase):
         app_ids = set(re.findall(r'''\bid=["']([A-Za-z][\w-]*)["']''', self.app))
         dynamic_ids = set(re.findall(r"\bid=\{[^}]*?['\"]([A-Za-z][\w-]*)['\"]", self.app))
         dynamic_control_ids = {"btns", "shufb", "prevb", "playb", "nextb", "repeatb", "prow", "curt", "prog", "progf", "tott", "volIcon", "vol", "volf", "thumbstrip", "fsBtns", "fsShuf", "fsprev", "fsPlay", "fsPlayIcon", "fsnext", "fsRepeat", "fsSeek", "fsCur", "fsProg", "fsProgf", "fsTot", "fsVol", "volIcon2", "fsVolBar", "fsVolFill"}
-        intentional_replacements = {"pbIcon", "fsPlayIcon", "repeatIcon", "fsTitle", "fsArtist", "au", "addBox", "qBrowse", "qDiv"}
+        intentional_replacements = {"pbIcon", "fsPlayIcon", "repeatIcon", "fsTitle", "fsArtist", "au", "addBox", "qBrowse", "qDiv", "dl", "dllabel", "dlbar", "dlfill", "dlpct"}
         self.assertEqual(set(), original_ids - app_ids - dynamic_ids - dynamic_control_ids - intentional_replacements)
 
-    def test_swiping_up_next_dismisses_until_track_or_notice_changes(self):
-        self.assertIn("if (node.id === 'upnext') { upNextGone.current = true; setUpNext(false); }", self.app)
+    def test_up_next_toast_can_be_dismissed_until_track_or_notice_changes(self):
+        self.assertIn("upNextGone.current = true; setUpNext(false); setUpNextDismissed(true);", self.app)
         self.assertIn("upNextGone.current = false", self.app)
+        self.assertIn('className="toast-card toast-upnext"', self.app)
         self.assertIn("const displayNextTrack = nextTrack || (radio && currentIndex >= 0 ? queue[currentIndex] : null)", self.app)
 
     def test_replayed_tracks_reuse_the_cached_source_without_searching(self):
@@ -183,8 +184,9 @@ class ReactParityTests(unittest.TestCase):
         update_start = current_css.index("#upd{")
         update_end = current_css.index("#empty{", update_start)
         current_css = current_css[:update_start] + current_css[update_end:]
-        reference_css = "\n".join(line for line in reference_css.splitlines() if "#upnext" not in line) + "\n"
-        current_css = "\n".join(line for line in current_css.splitlines() if "#upnext" not in line) + "\n"
+        notification_css = ("#upnext", "#toast", "#dl", "#dllabel", "#dlbar", "#dlfill", "#dlpct", ".tcard", ".toast-", ".toast-viewport", ".toast-card", "@keyframes toast", "/* toasts:", "each dismissible", "/* Compact Sonner")
+        reference_css = "\n".join(line for line in reference_css.splitlines() if not any(selector in line for selector in notification_css)) + "\n"
+        current_css = "\n".join(line for line in current_css.splitlines() if not any(selector in line for selector in notification_css)) + "\n"
         collapsed_player_css = ("#bar.collapsed", "#bar .collbtn", "#thumbstrip", ".thumb")
         reference_css = "\n".join(line for line in reference_css.splitlines() if not any(selector in line for selector in collapsed_player_css + ("#side.collapsed #addBox", "#addBox"))) + "\n"
         current_css = "\n".join(line for line in current_css.splitlines() if not any(selector in line for selector in ("#mid.resizing #side", "#sideResize", "#side.collapsed #addBox", "#addBox"))) + "\n"
@@ -221,9 +223,10 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn('<div id="root"></div>', current)
         self.assertIn('<script src="/app.js" defer></script>', current)
 
-    def test_reference_gestures_and_submit_interactions_remain(self):
-        self.assertIn("node.setPointerCapture(event.pointerId)", self.app)
-        self.assertIn("node.style.transform = 'translateX(150%)'", self.app)
+    def test_toasts_are_individually_dismissible_and_player_gestures_remain(self):
+        self.assertIn('aria-label="Dismiss notification"', self.app)
+        self.assertIn("onClick={() => dismissToast(item.id)}", self.app)
+        self.assertIn("setTimeout(() => dismissToast(id)", self.app)
         self.assertIn("onTouchStart={(e) => gestureStart(e, 'bar')}", self.app)
         self.assertIn("onTouchStart={(e) => gestureStart(e, 'fs')}", self.app)
         self.assertIn("onTouchStart={(e) => gestureStart(e, 'side')}", self.app)
