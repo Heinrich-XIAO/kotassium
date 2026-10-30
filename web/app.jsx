@@ -32,7 +32,9 @@ function Icon({ name, size = 20, children }) {
     search: <><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></>,
     close: <><path d="m5 5 14 14M19 5 5 19"/></>,
     browse: <path d="M3 4.5h13v2H3zM3 8.25h13v2H3zM3 12h18v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z" fill="currentColor" stroke="none" />,
-    add: <path d="M8 1.5a.75.75 0 0 1 1.5 0v5h5a.75.75 0 0 1 0 1.5h-5v5a.75.75 0 0 1-1.5 0V8H3a.75.75 0 0 1 0-1.5h5v-5z" fill="currentColor" stroke="none" />,
+    // the plus is drawn 1.5..14.5 on both axes so its optical centre lands on
+    // the viewBox centre (8,8) - the earlier path sat 0.75 up and to the right.
+    add: <path d="M7.25 2.25a.75.75 0 0 1 1.5 0v5h5a.75.75 0 0 1 0 1.5h-5v5a.75.75 0 0 1-1.5 0V8.75H2.25a.75.75 0 0 1 0-1.5h5v-5z" fill="currentColor" stroke="none" />,
     check: <path d="M4.5 12.5l5 5 10-11"/>,
     play: <path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(-1.145 0)" fill="currentColor" stroke="none" />,
     pause: <path d="M4.8 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z" transform="translate(0 -1)" fill="currentColor" stroke="none" />,
