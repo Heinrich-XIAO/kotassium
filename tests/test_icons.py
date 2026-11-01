@@ -28,14 +28,15 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 # transport glyphs did.
 PURE_PATH_GLYPHS = ("library", "home", "browse", "add", "check", "close", "play", "pause", "prev", "next")
 
-# Two glyphs carry a deliberate optical offset. The play triangle reads pulled
-# towards its base, so its ink sits 0.75 to the right. The tick's stroke bulges
-# at the round join where its arms meet, further than the cap on the long arm,
-# so the drawn glyph sat 0.50 low and 0.25 right at 13px (measured in pixels,
-# in a headless browser); 0.92 and 0.46 glyph units take that out, and because
-# the correction lives in the coordinates it holds at 16px too.
-OPTICAL_X = {"play": 12.75, "check": 11.54}
-OPTICAL_Y = {"check": 11.08}
+# One glyph carries a deliberate optical offset: the play triangle reads pulled
+# towards its base, so its ink sits 0.75 to the right. The tick had one too - 0.92
+# up and 0.46 left, correcting the bulge of its vertex join - and it is gone:
+# that correction moved the silhouette 0.62px high at 16px in #nowsave, where it
+# alternates with the perfectly symmetric plus, so the pair never lined up. A
+# glyph's box centre is what the eye compares against a round button; the uneven
+# mass of a tick or a triangle is the shape and stays where the shape puts it.
+OPTICAL_X = {"play": 12.75}
+OPTICAL_Y = {}
 
 
 def load_measurer():
@@ -95,6 +96,18 @@ class IconCentringTests(unittest.TestCase):
                 centre_x, centre_y = (left + right) / 2, (top + bottom) / 2
                 self.assertAlmostEqual(centre_y, OPTICAL_Y.get(name, 12.0), delta=0.05)
                 self.assertAlmostEqual(centre_x, OPTICAL_X.get(name, 12.0), delta=0.05)
+
+    def test_save_menu_mark_icon_lands_on_whole_pixels(self):
+        """The 22px ring's 1px border leaves a 20px content box, so a 13px glyph
+        sat on a 3.5px inset: half covered on every edge, which rasterised the
+        plus and the tick both about half a pixel off the ring's centre. With
+        matching parity the inset is whole and both sit on the same grid."""
+        css = read("web/index.html")
+        source = read("web/app.jsx")
+        ring = int(re.search(r"\.save-mark\{width:(\d+)px", css).group(1))
+        border = int(re.search(r"\.save-mark\{[^}]*border:(\d+)px", css).group(1))
+        icon = int(re.search(r'className="save-mark"><Icon name=\{inIt \? \'check\' : \'add\'\} size=\{(\d+)\}', source).group(1))
+        self.assertEqual((ring - 2 * border - icon) % 2, 0, f"{icon}px glyph in a {ring}px ring sits half a pixel off")
 
     def test_glyphs_fit_inside_the_box(self):
         """A glyph pushed out of its box is the failure mode a nudge causes."""
