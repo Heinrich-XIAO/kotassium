@@ -212,6 +212,23 @@ of these lines as the message's last line:
   video - a second file for the same song. `GET` returns only ids whose file
   is still in `LIB`; the page reports a pairing when an id starts playing and
   forgets one when its candidate turns out to be the wrong track.
+- **Picking the upload is `rank_videos`, not the nearest length.** The page
+  asked for a YouTube search and played whichever result ran closest to the
+  track's expected duration; searching ASGORE played a concert recording or a
+  "VS CHAOS KING" animation over the official soundtrack, because length is
+  the one thing a parody, a lyrics video, a 1-hour loop and a different song
+  on the same soundtrack all get right. The page now sends its title/artist/
+  length hints with `pick=1` and `serve_web.rank_videos` weighs them the right
+  way round: title coverage and the artist's own channel (exact, or `- Topic`;
+  a channel that merely contains the artist's name is a fan page) identify the
+  recording, words added before or beyond the title mark a take on it or the
+  next track on the album, the markers in `_YT_TAKE` cover the usual "parody /
+  lyrics / 1 hour / live" cases, and duration only corroborates - a tracklist
+  can describe a different master, so it never outvotes the title. `pick=1` is
+  only for resolving one known track: without it `/api/search` returns
+  YouTube's own order for the visible result list. `tests/test_search_rank.py`
+  pins this on the ASGORE payload that produced the report; tune the weights
+  against it and the probe songs, never by nudging a single case.
 - The page reports now-playing to `POST /api/nowplaying`; `desktop.py` polls it
   for MPRIS and notifications. Media keys/MPRIS are Linux-only.
 - Desktop binds `127.0.0.1`. `--lan` / `--host 0.0.0.0` is the only way to

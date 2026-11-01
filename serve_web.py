@@ -869,6 +869,108 @@ def ng_search(q, t="", a=""):
                     "cover": c["cover"], "full": True})
     return {"results": out}
 
+# Markers that mean "this is somebody's take on the song", not the song. A
+# parody, a lyrics animation or a 1-hour loop of the fight theme can sit within
+# a few seconds of the original's length, so length alone cannot tell them
+# apart - the title and the channel can.
+_YT_TAKE = re.compile(r"\b(?:parody|cover(?:ed)?|remix|nightcore|karaoke|instrumental|"
+                      r"8-?bit|chiptune|midi|re-?animated|animation|animated|lyrics?|"
+                      r"extended|slowed|speed\s?up|sped\s?up|mashup|live|concert|"
+                      r"symphon(?:y|ic)|orchestra(?:l)?|performance|rehearsal|soundcheck|"
+                      r"reaction|tutorial|"
+                      r"remake|re-?creation|replica|tribute|medley|meme|"
+                      r"\d+\s?hours?)\b", re.I)
+
+_YT_TOPIC = re.compile(r"\s*-\s*topic$", re.I)
+
+# Words a title may add without changing what the recording is. Anything else
+# it adds - "(From the Basement)", "Grammys rehearsal", "with lyrics" - makes
+# it a different take on the song, so the string that is just the track wins.
+_YT_PLAIN = set("""official audio video music hd hq 4k 8k lyrics lyric visualizer mv
+                   remaster remastered explicit clean full song soundtrack ost
+                   original from the a an of and by with feat ft featuring prod
+                   excerpt clip""".split())
+
+def rank_videos(videos, title, artist="", dur=0):
+    """Order YouTube candidates for a track whose title/artist/length we know.
+
+    The page used to sort these by |duration - expected| and play the closest,
+    which throws away everything YouTube's own ranking and the track know
+    about the song: searching ASGORE, where the official upload is the first
+    result, played a concert recording or a "VS CHAOS KING" animation because
+    one of them ran two seconds nearer the expected length.
+
+    So the evidence is weighed the right way round. Agreement on the title and
+    on the channel are what identify the recording; duration only corroborates
+    it, and a wildly different length is a reason to distrust a candidate that
+    the title otherwise likes rather than a reason to prefer it. `dur` is only
+    a hint - a tracklist's length can be from a different master - so it never
+    outvotes the title.
+    """
+    ntitle, nartist = _ng_norm(title), _ng_norm(artist)
+    want_t = [w for w in ntitle.split() if len(w) > 1]
+    scored = []
+    for pos, v in enumerate(videos):
+        ct = _ng_norm(v.get("title") or "")
+        ca = _ng_norm(v.get("artist") or "")
+        s = 0.0
+        if want_t and not any(w in ct for w in want_t):
+            # Not the song at all: the artist's channel alone must not lift a
+            # different track above candidates that name this one.
+            s -= 2.5
+        if want_t:
+            # Coverage, not substring: "asgore" appears in every candidate here,
+            # so what separates them is the rest of the title.
+            s += 3.0 * sum(1 for w in want_t if w in ct) / len(want_t)
+            if ct == ntitle or ct.endswith(" " + ntitle) or ct.startswith(ntitle + " "):
+                s += 1.0        # "077. ASGORE (UNDERTALE Soundtrack)" style uploads
+        if nartist and ca:
+            # The artist's own channel is the strongest single signal, but a
+            # channel that merely mentions the artist ("Kendrick Lamar
+            # Spotlight") is a fan page, not the artist.
+            if ca == nartist or _YT_TOPIC.sub("", ca).strip() == nartist:
+                s += 2.5
+            elif ca in nartist:
+                s += 1.5        # "toby fox" for a track credited "Toby Fox, X"
+            elif nartist in ca:
+                s += 1.2
+            if _YT_TOPIC.search(v.get("artist") or ""):
+                s += 0.4        # "X - Topic": the label's own auto-upload, but not "X"
+        for field in (ct, ca):
+            if _YT_TAKE.search(field):
+                s -= 2.0
+                break
+        if want_t:
+            known = set(want_t) | set(nartist.split()) | _YT_PLAIN
+            # Brackets are where uploaders put album metadata, so their words
+            # are not evidence of a different take; the markers above still
+            # catch "(with lyrics)" and friends.
+            words = re.sub(r"[(\[][^)\]]*[)\]]", " ", ct).split()
+            extra = [w for w in words if w not in known]
+            # Two words are how official uploads carry album metadata - "077.",
+            # the game's name - so only the third one starts to look like a
+            # different take on the song.
+            s -= min(2.5, 0.55 * max(0, len(extra) - 2))
+            # Words *before* the title mean a longer title, which is how the
+            # next song in a soundtrack looks: "Field of Hopes and Dreams" is
+            # not "Hopes and Dreams". Album numbers and the artist's name in
+            # front of its own title ("077. ...", "Daft Punk - Get Lucky") are
+            # not that.
+            first = next((i for i, w in enumerate(words) if w in want_t), None)
+            if first:
+                s -= 0.9 * len([w for w in words[:first]
+                                if w not in known and not w.isdigit()])
+        d = v.get("dur") or 0
+        if dur and d:
+            off = abs(d - dur) / float(max(dur, 1))
+            s -= min(2.0, 2.0 * off)
+            if off > 0.4:
+                s -= 1.0        # a minute out is a different recording of the song
+        s -= 0.03 * pos         # YouTube's own order breaks the ties
+        scored.append((s, pos, v))
+    scored.sort(key=lambda t: (-t[0], t[1]))
+    return [v for _, _, v in scored]
+
 def ng_resolve(mid):
     """The CDN mp3 for a Newgrounds audio id, plus what the page knows."""
     mid = re.sub(r"\D", "", str(mid or ""))
@@ -1310,6 +1412,14 @@ def handle(path, params, hdr):
         return 200, "text/html; charset=utf-8", (html + rollback_panel + recovery_script).encode(), None, False
     if path == "/api/search":
         q, src = one("q"), one("src", "all")
+        # pick=1 means "I am asking for one known track, give me the original":
+        # t/a/d are the page's title, artist and length hints, and the YouTube
+        # lane ranks on them instead of leaving the page to sort by duration.
+        pick = one("pick") == "1"
+        try:
+            want_dur = float(one("d") or 0)
+        except ValueError:
+            want_dur = 0.0
         out, errs = [], {}
         lanes = []
         if src not in ("deezer", "archive", "newgrounds", "soundcloud"):
@@ -1331,6 +1441,13 @@ def handle(path, params, hdr):
                 out.extend(j.get("results", []))
             except Exception as e:
                 errs[name] = str(e)[:90]
+        if pick and one("t"):
+            # Only the YouTube lane is reordered: the others already rank on the
+            # same hints themselves (ng_search), or are single-track lookups.
+            yt = [v for v in out if v.get("source") == "youtube"]
+            if yt:
+                out = rank_videos(yt, one("t"), one("a"), want_dur) + \
+                      [v for v in out if v.get("source") != "youtube"]
         return 200, "application/json", json.dumps({"results": out, "errors": errs}).encode(), None, False
     if path == "/api/play":
         src, tid = one("src"), one("id")

@@ -494,10 +494,13 @@ function App() {
   const playTrackRef = useRef(null);
   const findCandidates = useCallback(async (track) => {
     const q = `${track.a ? `${track.a} ` : ''}${track.t || ''}`;
-    const response = await API(`/api/search?src=youtube&q=${encodeURIComponent(q)}`);
-    const target = (Number(track.ms) || 0) / 1000;
-    const videos = (response.results || []).filter((r) => r.source === 'youtube').map((r, i) => ({ ...r, _order: i, _delta: target && r.dur ? Math.abs(r.dur - target) : Infinity }))
-      .sort((a, b) => a._delta - b._delta || a._order - b._order).slice(0, 8);
+    // pick=1 hands the title/artist/length hints to the server, which ranks the
+    // YouTube results on them (rank_videos in serve_web.py). Sorting here by
+    // |duration - expected| played parodies, covers and concert recordings that
+    // happened to run closer to the expected length than the original.
+    const target = Math.round((Number(track.ms) || 0) / 1000);
+    const response = await API(`/api/search?src=youtube&pick=1&q=${encodeURIComponent(q)}&t=${encodeURIComponent(track.t || '')}&a=${encodeURIComponent(track.a || '')}&d=${target}`);
+    const videos = (response.results || []).filter((r) => r.source === 'youtube').slice(0, 8);
     if (videos.length) return videos;
     if (track.source === 'newgrounds' && track.id) return [{ ...track, source: 'newgrounds' }];
     if (track.source === 'soundcloud' && track.id) return [{ ...track, source: 'soundcloud' }];
