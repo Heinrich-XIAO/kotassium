@@ -41,16 +41,24 @@ function Icon({ name, size = 20, children }) {
     search: <><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></>,
     close: <><path d="m5 5 14 14M19 5 5 19"/></>,
     browse: <path d="M3 3.75L16 3.75L16 5.75L3 5.75ZM3 7.5L16 7.5L16 9.5L3 9.5ZM3 11.25L21 11.25L21 18.75A1.5 1.5 0 0 1 19.5 20.25L4.5 20.25A1.5 1.5 0 0 1 3 18.75Z" fill="currentColor" stroke="none" />,
-    add: <path d="M10.875 3.375A1.125 1.125 0 0 1 13.125 3.375L13.125 10.875L20.625 10.875A1.125 1.125 0 0 1 20.625 13.125L13.125 13.125L13.125 20.625A1.125 1.125 0 0 1 10.875 20.625L10.875 13.125L3.375 13.125A1.125 1.125 0 0 1 3.375 10.875L10.875 10.875L10.875 3.375Z" fill="currentColor" stroke="none" />,
-    // The tick's ink box is centred on 12,12 like every other glyph, because
-    // the box - not the ink mass - is what the eye lines up against a round
-    // button: the plus it replaces in #nowsave is symmetric, and a tick whose
-    // silhouette sits high next to it reads off-centre. Its vertex join does
-    // make the mass sit about 0.4px low-right at 16px, and that part is the
-    // shape, the same way the play triangle's mass sits left of its base; no
-    // nudge. An earlier 0.92/0.46 unit correction did exactly that and put the
-    // box 0.62px high in the same button.
-    check: <path d="M4.5 12.5l5 5 10-11"/>,
+    // `plus` and `check` are lucide's own path data (24 grid, stroke 2, round
+    // caps), as are search, close, shuffle, repeat, volume and the fullscreen
+    // glyphs above: two hand-drawn glyphs next to a set of library ones is how
+    // the pair ended up not matching each other. An earlier drawn plus was
+    // filled and 17.25 units wide against a stroked 15-unit tick, so the two
+    // marks in one ring had different weights, different corner rounding and
+    // different ink sizes. Both are now the library's, drawn with the svg
+    // attributes the wrapper already applies.
+    //
+    // lucide centres `plus` exactly (ink 4..20 both ways) and draws `check`
+    // half a unit above the box centre - its own optical call, kept rather
+    // than re-tuned: a tick's ink weight sits below its box centre, so any
+    // tick is a trade between the silhouette and the mass, and the library
+    // splits it. That is ~0.3px of box and ~0.1px of mass at 14px; centring
+    // the box instead (as this glyph did before) moved the mass 0.44px low,
+    // which is what read as "still slightly off" next to a symmetric plus.
+    add: <path d="M12 5v14M5 12h14" />,
+    check: <path d="M20 6 9 17l-5-5" />,
     // the triangle needs its ink 0.75 right of centre: a box-centred play
     // glyph reads pulled towards its base, which is exactly what the old
     // -1.145 nudge made worse.

@@ -28,15 +28,17 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 # transport glyphs did.
 PURE_PATH_GLYPHS = ("library", "home", "browse", "add", "check", "close", "play", "pause", "prev", "next")
 
-# One glyph carries a deliberate optical offset: the play triangle reads pulled
-# towards its base, so its ink sits 0.75 to the right. The tick had one too - 0.92
-# up and 0.46 left, correcting the bulge of its vertex join - and it is gone:
-# that correction moved the silhouette 0.62px high at 16px in #nowsave, where it
-# alternates with the perfectly symmetric plus, so the pair never lined up. A
-# glyph's box centre is what the eye compares against a round button; the uneven
-# mass of a tick or a triangle is the shape and stays where the shape puts it.
+# Two glyphs carry a deliberate optical offset, both from the icon set rather
+# than from a nudge of ours. The play triangle reads pulled towards its base, so
+# its ink sits 0.75 to the right. The tick is lucide's own `check`, which the
+# library draws half a unit above the box centre; a tick's ink weight always
+# sits below its box centre, so every tick is a trade between the silhouette and
+# the mass, and the library's split is the documented one. Re-centring the box
+# (which this file used to assert) moved the mass 0.44px low at 14px in #nowsave,
+# where it alternates with a perfectly symmetric plus, and that is what read as
+# "still slightly off".
 OPTICAL_X = {"play": 12.75}
-OPTICAL_Y = {}
+OPTICAL_Y = {"check": 11.5}
 
 
 def load_measurer():
@@ -96,6 +98,18 @@ class IconCentringTests(unittest.TestCase):
                 centre_x, centre_y = (left + right) / 2, (top + bottom) / 2
                 self.assertAlmostEqual(centre_y, OPTICAL_Y.get(name, 12.0), delta=0.05)
                 self.assertAlmostEqual(centre_x, OPTICAL_X.get(name, 12.0), delta=0.05)
+
+    def test_marks_alternating_in_one_button_share_one_icon_set(self):
+        """#nowsave and the save rows swap `add` for `check` in the same box, so the
+        two must be drawn alike: lucide's path data for both, one stroke weight,
+        no fill override that would make one heavier than the other."""
+        for name in ("add", "check"):
+            with self.subTest(glyph=name):
+                entry = self.glyphs[name]
+                self.assertNotIn("fill=", entry, "one mark filled and one stroked is two weights")
+                self.assertNotIn("stroke=", entry, "the wrapper's stroke is the shared one")
+        self.assertIn('d="M12 5v14M5 12h14"', self.glyphs["add"])
+        self.assertIn('d="M20 6 9 17l-5-5"', self.glyphs["check"])
 
     def test_save_menu_mark_icon_lands_on_whole_pixels(self):
         """The 22px ring's 1px border leaves a 20px content box, so a 13px glyph

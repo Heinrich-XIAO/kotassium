@@ -510,8 +510,12 @@ body.dfs #dfsQueue{display:flex}
 /* playback bar: the Spotify-style add-to-playlist control and its picker */
 #nowp{position:relative}
 .nowsave-wrap{position:relative;flex:none}
-#nowsave{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:#ffffff0f;border:1px solid #ffffff14;padding:0;transition:color .15s,background .15s,transform .15s}
-#nowsave:hover{color:#fff;background:#ffffff1c;transform:scale(1.05)}
+#nowsave{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:#ffffff0f;border:1px solid #ffffff14;padding:0;transition:color .15s,background .15s,box-shadow .15s}
+/* Hover grows the ring, not the svg: a scale here resampled the 16px glyph to
+   16.8px, so its ink landed on fractional device pixels and the plus and the
+   tick both went soft and off-grid exactly while the button was under the
+   pointer. The halo reads as the same lift and keeps the glyph on the grid. */
+#nowsave:hover{color:#fff;background:#ffffff1c;box-shadow:0 0 0 3px #ffffff0f}
 #nowsave.on{background:#1ed760;border-color:#1ed760;color:#07140a}
 #nowsave.on:hover{background:#3be477;border-color:#3be477}
 #nowsave:focus-visible{outline:2px solid #1ed760;outline-offset:2px}
