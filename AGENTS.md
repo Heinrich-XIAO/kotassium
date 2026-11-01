@@ -126,9 +126,15 @@ of these lines as the message's last line:
   `tools/next-version.sh` for the same patch bump and starts immediately. It
   reuses the app bundle py2app produced last time - py2app packages the
   interpreter, pyobjc and pywebview, none of which depend on our sources -
-  and `tools/update-macos-bundle.py` overlays the files this commit owns
-  (every root module, byte-compared after copying, plus `web/`, `assets/`, the
-  icon and the version stamp) before re-signing. `build-macos.sh` rebuilds from
+  and `tools/update-macos-bundle.py` brings the bundle up to this commit before
+  re-signing: this build's modules (the ones `setup-macos.py` lists) go to
+  `Contents/Resources/app/`, which `desktop.py` puts first on `sys.path` because
+  py2app compiles the copies it packs instead of leaving them loose; the loose
+  `desktop.py` is replaced where it is, `web/`, `assets/`, the icon and the
+  version stamp are replaced whole, and every module is byte-compared after
+  copying. `--selftest` reports where `serve_web` was imported from and the
+  smoke test fails the build unless a reused bundle says `Resources/app`, so
+  shadowing that silently did not take effect cannot ship. `build-macos.sh` rebuilds from
   scratch whenever the helper does not recognise the bundle, and the CI cache is
   only saved after the smoke test passed. **Bump the `v1` in that cache key in
   `build.yml` when a dependency is added** - a stale bundle fails the smoke test
