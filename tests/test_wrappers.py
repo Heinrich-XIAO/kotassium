@@ -235,7 +235,15 @@ class WrapperTests(unittest.TestCase):
         for workflow in (auto_release, tag_release):
             self.assertNotIn("publish-macos-legacy-dmg", workflow)
             self.assertNotIn("arm64.dmg", workflow)
-            self.assertIn('filename: Kotassium-${{ needs.version.outputs.version }}-arm64.pkg', workflow)
+        # A named cut still publishes the verified PKG from a separate job; the
+        # rolling release attaches it from the build job itself so the download
+        # does not wait for a third runner, but it is still the same file.
+        self.assertIn('filename: Kotassium-${{ needs.version.outputs.version }}-arm64.pkg', tag_release)
+        self.assertIn("publish: true", auto_release)
+        self.assertNotIn("publish-macos:", auto_release)
+        self.assertIn("tools/await-preflight.sh", build)
+        self.assertIn('tools/publish-release.sh "${{ steps.ver.outputs.version }}"', build)
+        self.assertIn("-${{ matrix.arch }}.pkg", build)
         self.assertIn(".pkg", read(".github/release-body.md"))
 
     def test_platform_builds_ship_the_compiled_page_bundle(self):
@@ -305,27 +313,34 @@ class WrapperTests(unittest.TestCase):
         build = read(".github/workflows/build.yml")
         preflight = read(".github/workflows/preflight.yml")
         publisher = read(".github/workflows/publish-artifact.yml")
+        release = read("tools/publish-release.sh")
         for workflow in (auto, manual):
             self.assertIn("uses: ./.github/workflows/preflight.yml", workflow)
             self.assertIn("needs: version", workflow)
-            self.assertIn("needs: [version, preflight, macos]", workflow)
             self.assertIn("needs: [version, preflight, android]", workflow)
             self.assertNotIn("needs: [version, build]", workflow)
-            self.assertIn("uses: ./.github/workflows/publish-artifact.yml", workflow)
             self.assertIn("cancel-builds-on-preflight-failure", workflow)
             self.assertIn('needs.preflight.result == \'failure\'', workflow)
             self.assertIn('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}', workflow)
             self.assertIn('gh run cancel "$GITHUB_RUN_ID"', workflow)
+        # A named cut publishes each platform from a job that depends on
+        # preflight. A rolling release publishes the PKG from the macOS build
+        # itself - it waits for preflight's verdict in place
+        # (tools/await-preflight.sh) - and keeps the gated job for the APK.
+        self.assertIn("needs: [version, preflight, macos]", manual)
+        self.assertIn("uses: ./.github/workflows/publish-artifact.yml", manual)
+        self.assertNotIn("needs: [version, preflight, macos]", auto)
+        self.assertIn("uses: ./.github/workflows/publish-artifact.yml", auto)
         self.assertIn("inputs.platform == 'macos'", build)
         self.assertIn("inputs.platform == 'android'", build)
         self.assertNotIn("npm ci", preflight)
-        self.assertIn("needs: [version, preflight, macos]", auto)
         self.assertIn("needs: [version, preflight, android]", auto)
         self.assertIn("actions: write", auto)
         self.assertIn("actions: write", manual)
         self.assertIn("concurrency:", publisher)
-        self.assertIn("gh release upload", publisher)
-        self.assertIn("sha256sum", publisher)
+        self.assertIn("tools/publish-release.sh", publisher)
+        self.assertIn("gh release upload", release)
+        self.assertIn("sha256sum", release)
 
     def test_update_button_keeps_manual_recheck_separate_from_install(self):
         app = read("web/app.jsx")

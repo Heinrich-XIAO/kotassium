@@ -33,13 +33,7 @@ jobs:
       - name: Next version
         id: ver
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            TAGS=$(git ls-remote --tags --refs origin 'v*' | awk -F/ '{print $NF}')
-            test -n "$TAGS" || { echo "no tags found on origin" >&2; exit 1; }
-            VERSION=$(python3 .github/next_version.py $TAGS)
-          fi
+          VERSION=$(tools/next-version.sh "${{ inputs.version }}")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "publishing $VERSION"
 
@@ -59,13 +53,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
+  # The macOS build no longer waits for the `version` job: it resolves the same
+  # patch bump itself (tools/next-version.sh) and publishes the PKG as soon as
+  # it is verified, waiting only on preflight's verdict. That is ~20s off the
+  # time between a push and a downloadable PKG.
   macos:
     name: build Apple Silicon PKG
-    needs: version
     uses: ./.github/workflows/build.yml
     with:
-      version: ${{ needs.version.outputs.version }}
       platform: macos
+      publish: true
       macos: '[{"runner":"macos-15","arch":"arm64"}]'
     secrets: inherit
 
@@ -76,17 +73,6 @@ jobs:
     with:
       version: ${{ needs.version.outputs.version }}
       platform: android
-    secrets: inherit
-
-  publish-macos:
-    name: publish or attach Apple Silicon PKG
-    needs: [version, preflight, macos]
-    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.macos.result == 'success' }}
-    uses: ./.github/workflows/publish-artifact.yml
-    with:
-      version: ${{ needs.version.outputs.version }}
-      artifact: Kotassium-arm64
-      filename: Kotassium-${{ needs.version.outputs.version }}-arm64.pkg
     secrets: inherit
 
   publish-android:

@@ -18,13 +18,17 @@ if [ ! -x desktop-venv/bin/python ]; then
     fi
 fi
 
-desktop-venv/bin/python -m pip install --quiet --upgrade pip
-if [ "$(uname -s)" = "Darwin" ]; then
-    # pywebview 5.3's JavaScript bridge breaks in py2app's zipped package;
-    # 5.4 is the first release with the py2app resource fix.
-    desktop-venv/bin/python -m pip install --quiet 'pywebview>=5.4'
-else
-    desktop-venv/bin/python -m pip install --quiet pywebview
+# The venv is cached in CI and normally already has it; pip is only worth
+# its several seconds when something is actually missing.
+if ! desktop-venv/bin/python -c "import webview" 2>/dev/null; then
+    desktop-venv/bin/python -m pip install --quiet --upgrade pip
+    if [ "$(uname -s)" = "Darwin" ]; then
+        # pywebview 5.3's JavaScript bridge breaks in py2app's zipped package;
+        # 5.4 is the first release with the py2app resource fix.
+        desktop-venv/bin/python -m pip install --quiet 'pywebview>=5.4'
+    else
+        desktop-venv/bin/python -m pip install --quiet pywebview
+    fi
 fi
 
 if [ "$(uname -s)" = "Darwin" ]; then

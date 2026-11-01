@@ -11,13 +11,19 @@ on:
   workflow_call:
     inputs:
       version:
-        description: Version stamped into the app bundle
-        required: true
+        description: Version stamped into the app bundle (blank = bump the newest tag)
+        required: false
         type: string
+        default: ""
       platform:
         description: Which platform artifact to build
         required: true
         type: string
+      publish:
+        description: Publish the PKG from the build job instead of uploading it
+        required: false
+        type: boolean
+        default: false
       macos:
         description: JSON matrix (runner + arch) of the macOS builds
         required: false
@@ -34,8 +40,12 @@ on:
       ANDROID_KEY_ALIAS:
         required: false
 
+# contents: write is what tools/publish-release.sh needs (only used when the
+# caller asks for `publish:`); actions: read is what tools/await-preflight.sh
+# reads this run's preflight job through.
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 jobs:
   macos:
@@ -74,14 +84,34 @@ jobs:
           path: vendor/yt-dlp
           key: yt-dlp-macos-${{ runner.arch }}-latest
 
+      # Computed here rather than taken from the `version` job so the macOS
+      # build starts straight away; a rolling release passes no version and
+      # tools/next-version.sh answers the same patch bump that job would.
       - name: Version
         id: ver
-        run: echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+        run: |
+          VERSION=$(tools/next-version.sh "${{ inputs.version }}")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "building $VERSION"
+
+      # py2app is the expensive half of this job and it only depends on the
+      # interpreter and the requirements, not on our sources: reuse the bundle
+      # it produced last time and let tools/update-macos-bundle.py replace the
+      # files this commit owns. Bump the `v1` in this key when a dependency is
+      # added - a stale bundle fails the smoke test below, so it cannot ship,
+      # but bumping it is how you fix it instead of waiting for a red run.
+      - name: Restore the built app bundle
+        id: bundle
+        uses: actions/cache/restore@v4
+        with:
+          path: dist/Kotassium.app
+          key: app-macos-${{ runner.arch }}-py312-v1-${{ hashFiles('setup-macos.py', 'requirements-macos-build.txt', 'setup.sh') }}
 
       - name: Build the app bundle
         env:
           KOTASSIUM_VERSION: ${{ steps.ver.outputs.version }}
           KOTASSIUM_URL: ${{ vars.KOTASSIUM_URL }}
+          KOTASSIUM_REUSE_BUNDLE: ${{ steps.bundle.outputs.cache-hit == 'true' && '1' || '' }}
         run: |
           mkdir -p vendor
           if [ ! -x vendor/yt-dlp ]; then
@@ -118,6 +148,15 @@ jobs:
           done
           curl -fsS http://127.0.0.1:8421/ | grep -qi "<title>Kotassium"
           kill "$PID"
+
+      # Saved only after the smoke test above passed, so a bundle that cannot
+      # run is never the one the next release starts from.
+      - name: Cache the app bundle
+        uses: actions/cache/save@v4
+        if: ${{ steps.bundle.outputs.cache-hit != 'true' }}
+        with:
+          path: dist/Kotassium.app
+          key: app-macos-${{ runner.arch }}-py312-v1-${{ hashFiles('setup-macos.py', 'requirements-macos-build.txt', 'setup.sh') }}
 
       - name: Make the PKG
         env:
@@ -157,7 +196,22 @@ jobs:
           grep -q 'display dialog' "$PREINSTALL"
           test -x macos-pkg-scripts/preinstall
 
+      # A rolling release publishes the PKG here, one step after it is verified,
+      # instead of handing it to a third runner through an artifact. Preflight
+      # runs in parallel, so this waits for its verdict first: nothing is
+      # published that the preflight job has not passed.
+      - name: Publish the PKG
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ github.sha }}
+        run: |
+          tools/await-preflight.sh
+          tools/publish-release.sh "${{ steps.ver.outputs.version }}" \
+            "Kotassium-${{ steps.ver.outputs.version }}-${{ matrix.arch }}.pkg"
+
       - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.publish }}
         with:
           name: Kotassium-${{ matrix.arch }}
           path: Kotassium-*.pkg

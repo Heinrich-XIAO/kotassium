@@ -1,5 +1,11 @@
 name: Publish release artifact
 
+# Publish a built artifact that a caller asked to be kept out of the release
+# until preflight passed (the tag path). A rolling release does not come through
+# here: its build job publishes the PKG itself, waiting on preflight in-place
+# (tools/await-preflight.sh). Both paths attach files with the same script, so
+# SHA256SUMS is written one way only.
+
 on:
   workflow_call:
     inputs:
@@ -34,38 +40,13 @@ jobs:
           name: ${{ inputs.artifact }}
           path: incoming
 
-      - name: Prepare artifact and checksum
-        env:
-          FILENAME: ${{ inputs.filename }}
-        run: |
-          mkdir -p upload
-          FILE=$(find incoming -maxdepth 1 -type f -print -quit)
-          test -n "$FILE"
-          cp "$FILE" "upload/$FILENAME"
-          cd upload
-          sha256sum "$FILENAME" > new-checksum
-
-      - name: Create release or attach artifact
+      - name: Publish the artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
-          FILENAME: ${{ inputs.filename }}
           TARGET: ${{ github.sha }}
         run: |
-          TAG="v$VERSION"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            mkdir -p existing
-            if gh release download "$TAG" --pattern SHA256SUMS --dir existing; then
-              awk -v name="$FILENAME" '$2 != name { print }' existing/SHA256SUMS > upload/SHA256SUMS
-            else
-              : > upload/SHA256SUMS
-            fi
-            cat upload/new-checksum >> upload/SHA256SUMS
-            gh release upload "$TAG" "upload/$FILENAME" upload/SHA256SUMS --clobber
-          else
-            mv upload/new-checksum upload/SHA256SUMS
-            gh release create "$TAG" "upload/$FILENAME" upload/SHA256SUMS \
-              --title "$TAG" \
-              --notes-file .github/release-body.md \
-              --target "$TARGET"
-          fi
+          FILE=$(find incoming -maxdepth 1 -type f -print -quit)
+          test -n "$FILE"
+          mkdir -p upload
+          cp "$FILE" "upload/${{ inputs.filename }}"
+          tools/publish-release.sh "${{ inputs.version }}" "upload/${{ inputs.filename }}"
