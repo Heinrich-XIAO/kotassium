@@ -315,11 +315,30 @@ class SilentInstallTests(unittest.TestCase):
         self.assertIn("/usr/bin/pgrep -x Kotassium", script)      # waits out the quit
         self.assertIn('/bin/mv "$TARGET" "$PREVIOUS"', script)     # parks the old app
         self.assertIn('/bin/mv "$NEW" "$TARGET"', script)          # moves the new one in
-        self.assertIn('[ ! -x "$NEW/Contents/MacOS/Kotassium" ]', script)
+        self.assertIn('APP_BIN="$NEW/Contents/MacOS/Kotassium"', script)
         self.assertIn('/bin/mv "$PREVIOUS" "$TARGET"', script)     # puts it back
         self.assertIn('/usr/bin/open "$TARGET"', script)          # reopens it
-        self.assertIn('report "could not install the update"', script)
+        self.assertIn('report "could not install the update: $WHY"', script)
         self.assertIn(os.path.join(self.tmp, "install-failed.txt"), script)
+
+    def test_swap_script_says_why_and_keeps_a_log(self):
+        # "could not install the update" on its own is what left a real user
+        # with no way to tell a permissions problem from a broken download.
+        # The helper carries the failing command's own message into the
+        # report, keeps a log of every step, repairs the exec bit that
+        # unpacking can drop, and hands the verified package to root-run
+        # Installer when the folder is not writable at all.
+        script = updater.swap_script("/tmp/stage/Kotassium.new.app",
+                                     "/Applications/Kotassium.app",
+                                     package="/tmp/update.pkg")
+        self.assertIn('WHY=$(detail "$OUT")', script)
+        self.assertIn('detail "$OUT"', script)              # earlier steps too
+        self.assertIn('/bin/chmod 755 "$APP_BIN"', script)  # repair, do not abort
+        self.assertIn(os.path.join(self.tmp, "install.log"), script)
+        self.assertIn("PKG=/tmp/update.pkg", script)
+        self.assertIn('/usr/bin/open -a Installer', script)
+        self.assertIn('[ ! -w "$HOLD" ]', script)
+        self.assertIn('/usr/bin/dirname "$TARGET"', script)
 
     def test_swap_script_never_replaces_the_app_in_place(self):
         # A PKG install leaves /Applications/Kotassium.app root-owned: rm -rf
@@ -367,6 +386,25 @@ class SilentInstallTests(unittest.TestCase):
                                                      "Kotassium")))
         self.assertFalse(os.path.exists(dest + ".work"))   # scratch cleaned up
         self.assertIn("--expand-full", seen[0])
+        # the fake writes the binary 0644 like an expander that loses the
+        # package's modes; staging has to give the bit back
+        self.assertTrue(os.access(os.path.join(dest, "Contents", "MacOS",
+                                               "Kotassium"), os.X_OK))
+
+    def test_ensure_runnable_only_touches_unrunnable_binaries(self):
+        bundle = os.path.join(self.tmp, "Kotassium.app")
+        macos = os.path.join(bundle, "Contents", "MacOS")
+        os.makedirs(macos)
+        dead = os.path.join(macos, "Kotassium")
+        live = os.path.join(macos, "helper")
+        for path, mode in ((dead, 0o644), (live, 0o755)):
+            with open(path, "w") as f:
+                f.write("#!/bin/sh\n")
+            os.chmod(path, mode)
+        self.assertEqual(updater.ensure_runnable(bundle), ["Kotassium"])
+        self.assertTrue(os.access(dead, os.X_OK))
+        self.assertTrue(os.access(live, os.X_OK))
+        self.assertEqual(updater.ensure_runnable(os.path.join(self.tmp, "nope.app")), [])
 
     def test_stage_app_unpacks_the_payload_when_expand_full_is_missing(self):
         def fake_run(cmd, **kwargs):
@@ -441,6 +479,7 @@ class SilentInstallTests(unittest.TestCase):
         with open(os.path.join(self.tmp, "swap.sh")) as f:
             body = f.read()
         self.assertIn("NEW=" + staged, body)
+        self.assertIn("PKG=/tmp/update.pkg", body)      # root fallback has the package
         self.assertIn("/Applications/Kotassium.app", body)
 
     def test_install_falls_back_to_macos_installer_when_it_cannot_swap(self):

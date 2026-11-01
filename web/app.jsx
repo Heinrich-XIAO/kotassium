@@ -1055,6 +1055,19 @@ function App() {
     setDesktopIdle(false);
   }, [desktopPlayer, currentTrack]);
   const pollUpdate = useCallback(() => API('/api/update').then((st) => { setUpdateState(st); if (st.supported) setUpdateMessage(st.state === 'error' && st.error ? st.error : st.available ? `Kotassium ${st.latest} is available` : ''); return st; }).catch(() => {}), []);
+  // Settings shows which version this is, and it can be opened before the
+  // launch poll has run - or on a phone/browser, which never polls at all -
+  // so the status is fetched again whenever the dialog opens. GET /api/update
+  // is local: it asks the server, never GitHub.
+  useEffect(() => { if (settingsOpen) pollUpdate(); }, [settingsOpen, pollUpdate]);
+  const appVersion = useMemo(() => {
+    const raw = String(updateState?.version ?? '').trim().replace(/^v/i, '');
+    return /^\d/.test(raw) && raw !== '0' ? raw : '';
+  }, [updateState]);
+  const versionLabel = appVersion || (updateState ? 'development build' : '…');
+  const versionNote = updateState?.available ? `Version ${updateState.latest} is available`
+    : (updateState?.state === 'error' && updateState.error) ? updateState.error
+    : updateState?.supported ? 'Updates are checked at launch' : '';
   const updateSteps = useCallback((current, latest) => {
     const from = String(current || '').match(/\d+/g), to = String(latest || '').match(/\d+/g);
     if (!from || !to) return 'a new version';
@@ -1142,6 +1155,12 @@ function App() {
             <h3 className="settings-label">Workspace</h3>
             <div className="settings-card">
               <div className="setting-row"><div className="setting-copy"><b>Compact library</b><small>Show playlist covers only in the sidebar</small></div><button className={`setting-switch ${collapsed ? 'enabled' : ''}`} role="switch" aria-checked={collapsed} aria-label="Compact library" onClick={() => setCollapsed((value) => { const next = !value; try { localStorage.setItem('kot_side_collapsed', next ? '1' : '0'); } catch {} return next; })}><i/></button></div>
+            </div>
+          </section>
+          <section className="settings-group">
+            <h3 className="settings-label">About</h3>
+            <div className="settings-card">
+              <div className="setting-row"><div className="setting-copy"><b>Kotassium version</b>{versionNote ? <small>{versionNote}</small> : null}</div><span id="appVersion" className="setting-value">{versionLabel}</span></div>
             </div>
           </section>
           {updateState?.supported && <section className="settings-group">

@@ -148,7 +148,15 @@ of these lines as the message's last line:
   about fifteen seconds for the clean quit and then stops the app itself
   (TERM, then KILL), so nothing after the download click is left waiting on a
   person; it only writes a failure when the process cannot be stopped at all.
-  `start_install()` installs the release the last check already found — no
+  Every step of the helper is appended to
+  `~/Library/Caches/Kotassium/update/install.log`, a failure carries the
+  failing command's own message into the report (never a bare "could not
+  install the update"), and the executable bit that package expansion can
+  drop is restored instead of refusing the bundle. When the folder holding
+  the app is not writable — or the swap fails anyway — the helper hands the
+  verified PKG to macOS Installer, which runs as root, so an update finishes
+  instead of dead-ending. `start_install()` installs the release the last
+  check already found — no
   second GitHub request at click time — and claims `state: "downloading"`
   before the response goes out, so the page starts polling immediately, and a
   refusal to start comes back with `error` for the pill to show. macOS Installer
@@ -163,7 +171,10 @@ of these lines as the message's last line:
   single-flight (one click = one GitHub request, so it never stacks a second
   thread and never clobbers an install in progress). The page polls
   `GET /api/update` until the state settles. `POST /api/update/check` triggers
-  that manual check. The top-right pill is one morphing button — ⟳ check (idle)
+  that manual check. The top-right  pill is one morphing button — ⟳ check (idle)
   → ⟳ spin (checking) → ⬇ download (update available) → Restart/Retry — and
-  only frozen macOS builds report `supported`; the page hides the pill
+  the Settings dialog's About row shows the current version (from
+  `/api/update`, or "development build" for a source checkout), refreshing
+  the status whenever the dialog opens. The About row is on every platform;
+  only frozen macOS builds report `supported`, and the page hides the pill
   everywhere else.

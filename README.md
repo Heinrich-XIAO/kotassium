@@ -198,11 +198,19 @@ Downloads and state live outside the repo in `~/Music/Kotassium`
   `/Applications`, renames the new one into its place and reopens it — no
   further dialogs, and nothing left waiting on you. Both moves are renames
   rather than a delete-and-copy, which is what lets it replace a PKG-installed
-  (root-owned) app without ever touching a file it may not write. (An app sitting where it cannot replace itself
-  falls back to macOS Installer, which asks before quitting as usual.) If
-  recovery is needed, its recovery panel provides instructions to
-  restore the saved bundle. Only frozen macOS app builds report
-  `supported: true`; the web and Linux builds hide the pill.
+  (root-owned) app without ever touching a file it may not write. An app
+  sitting where it cannot replace itself — or a swap that fails anyway —
+  hands the same verified package to macOS Installer, which asks before
+  quitting as usual. Every step goes to
+  `~/Library/Caches/Kotassium/update/install.log`, and a failed update names
+  the command that failed and what it said rather than only "could not
+  install the update". If recovery is needed, its recovery panel provides
+  instructions to restore the saved bundle. Only frozen macOS app builds
+  report `supported: true`; the web and Linux builds hide the pill.
+- **Version in Settings.** Settings → About shows the version this build is
+  (`CFBundleShortVersionString` in the app bundle, from the server's
+  `/api/update`), or "development build" for a source checkout, plus the last
+  update error when there is one.
 - **Persistent storage.** The window uses `private_mode=False`, so the
   YouTube-id cache, volume, shuffle and repeat survive restarts (pywebview's
   default private mode makes `localStorage` null).
