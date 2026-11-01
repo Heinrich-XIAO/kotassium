@@ -168,6 +168,18 @@ class ReactParityTests(unittest.TestCase):
         self.assertNotIn("#playb:hover{transform", css)
         self.assertNotIn("#fsPlay:hover{transform", css)
 
+    def test_hovering_a_playlist_cover_darkens_its_corners_too(self):
+        # Measured at 8x (tools/page_shot.sh + playwright-core): the veil was an
+        # ::after with `border-radius:inherit` - 4px - but it is painted into
+        # the padding box, which the cover's 1px border rounds to 3px. It could
+        # not reach the corner, so each one kept a 1px crescent of undarkened
+        # artwork: 82 against a 59 interior at the top-left corner, 64 against
+        # 44 at the top-right. An inset shadow is rounded by the box it fills,
+        # so the corners now measure 59 and 48 like their neighbours.
+        css = read("web/index.html")
+        self.assertIn(".pitem:hover .pcover{box-shadow:inset 0 0 0 999px #0007}", css)
+        self.assertNotIn(".pcover:after", css)
+
     def test_cover_frames_have_even_borders_and_clip_square_artwork(self):
         css = read("web/index.html")
         self.assertIn(".pcover,.ccover,#plx,#nowc,.track-cover,#dfsArt,#fsArt{border:1px solid #ffffff18;overflow:hidden;background-clip:padding-box}", css)
@@ -250,6 +262,11 @@ class ReactParityTests(unittest.TestCase):
         reference_css = reference_css.replace("transition:transform .06s}\n#playb:hover{transform:scale(1.06)}", "transition:box-shadow .06s}\n#playb:hover{box-shadow:0 0 0 1px #fff}", 1)
         reference_css = reference_css.replace("#playb:disabled{opacity:.35;background:#fff;color:#000;transform:none;cursor:default}", "#playb:disabled{opacity:.35;background:#fff;color:#000;box-shadow:none;cursor:default}", 1)
         reference_css = reference_css.replace("display:grid;place-items:center;transition:transform .06s}\n#fsBtns .aicon{flex:none}\n#fsPlay:hover{transform:scale(1.05)}", "display:grid;place-items:center;transition:box-shadow .06s}\n#fsBtns .aicon{flex:none}\n#fsPlay:hover{box-shadow:0 0 0 1.5px #fff}", 1)
+        # The hover veil on a sidebar cover: a pseudo-element painted its
+        # padding box with a 4px radius, but the cover's 1px border leaves that
+        # box a 3px radius, so a 1px crescent of undarkened artwork survived at
+        # every corner. An inset shadow is rounded by the box it fills.
+        reference_css = reference_css.replace('.pitem:hover .pcover:after{content:"";position:absolute;inset:0;background:#0007;border-radius:inherit}', ".pitem:hover .pcover{box-shadow:inset 0 0 0 999px #0007}", 1)
         reference_css = re.sub(r"\n{2,}", "\n", reference_css)
         current_css = re.sub(r"\n{2,}", "\n", current_css)
         self.assertEqual(reference_css, current_css)

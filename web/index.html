@@ -72,7 +72,7 @@ svg{display:block}
 .pitem:hover{background:#ffffff14}
 .pitem.active{background:#ffffff1f}
 .pcover{width:44px;height:44px;border-radius:4px;flex:none;display:grid;place-items:center;font-weight:var(--font-weight-heavy);font-size:18px;position:relative;cursor:pointer}
-.pitem:hover .pcover:after{content:"";position:absolute;inset:0;background:#0007;border-radius:inherit}
+.pitem:hover .pcover{box-shadow:inset 0 0 0 999px #0007}
 .pcoverPlay{position:absolute;inset:0;z-index:1;display:grid;place-items:center;color:#fff;opacity:0;transition:opacity .12s}
 .pitem:hover .pcoverPlay,.pcoverPlay:focus-visible{opacity:1}
 #side.collapsed .pcoverPlay svg{width:22px;height:22px}
