@@ -45,7 +45,10 @@ svg{display:block}
 #sideHead #libBtn:hover{color:#fff;background:#ffffff14}
 .top-lib{display:none!important}
 #sideHead b{color:#b3b3b3;display:flex;align-items:center;gap:6px}
-#addBtn{width:26px;height:26px;color:#b3b3b3;display:grid;place-items:center;cursor:pointer}
+/* padding:0 matters: the shared button padding (1px 6px) leaves a 14px content
+   box for a 17px glyph, so the icon could only centre inside the content box
+   and sat 1.5px right of the button's centre. */
+#addBtn{width:26px;height:26px;color:#b3b3b3;display:grid;place-items:center;cursor:pointer;padding:0}
 #addBtn:hover{color:#fff}
 #collSide{width:26px;height:26px;color:#b3b3b3;display:grid;place-items:center;cursor:pointer;flex:none}
 #collSide:hover{color:#fff}
@@ -53,7 +56,13 @@ svg{display:block}
 #side.collapsed #sideHead{justify-content:center;padding:12px 0}
 #side.collapsed #sideHead #libBtn{display:grid!important}
 #side.collapsed #sideHead b,#side.collapsed #addBtn{display:none}
-#side.collapsed .pitem{justify-content:center;padding:6px 0;gap:0}
+/* The hover/active pill is the only border a collapsed row shows, so it has to
+   surround the cover evenly: 6px top and bottom against 2px at the sides read
+   as a thick bar above and below the artwork. 2px + a 48px cover fills the
+   52px the collapsed list gives us, exactly, and the margin puts back the
+   vertical rhythm the padding used to provide (2+4+4+2 = the 12px gap between
+   covers the old 6px padding gave). */
+#side.collapsed .pitem{justify-content:center;padding:2px;margin:4px 0 8px;gap:0}
 #side.collapsed .pmeta{display:none}
 #side.collapsed .pcover{width:48px;height:48px}
 #side.collapsed #empty{display:none}
@@ -500,7 +509,7 @@ body.dfs #dfsQueue{display:flex}
 /* playback bar: the Spotify-style add-to-playlist control and its picker */
 #nowp{position:relative}
 .nowsave-wrap{position:relative;flex:none}
-#nowsave{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:#ffffff0f;border:1px solid #ffffff14;transition:color .15s,background .15s,transform .15s}
+#nowsave{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:#ffffff0f;border:1px solid #ffffff14;padding:0;transition:color .15s,background .15s,transform .15s}
 #nowsave:hover{color:#fff;background:#ffffff1c;transform:scale(1.05)}
 #nowsave.on{background:#1ed760;border-color:#1ed760;color:#07140a}
 #nowsave.on:hover{background:#3be477;border-color:#3be477}

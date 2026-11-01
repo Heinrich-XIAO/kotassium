@@ -28,9 +28,14 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 # transport glyphs did.
 PURE_PATH_GLYPHS = ("library", "home", "browse", "add", "check", "close", "play", "pause", "prev", "next")
 
-# The play triangle is the one deliberate asymmetry: a box-centred triangle
-# reads pulled towards its base, so its ink sits 0.75 to the right.
-OPTICAL_X = {"play": 12.75}
+# Two glyphs carry a deliberate optical offset. The play triangle reads pulled
+# towards its base, so its ink sits 0.75 to the right. The tick's stroke bulges
+# at the round join where its arms meet, further than the cap on the long arm,
+# so the drawn glyph sat 0.50 low and 0.25 right at 13px (measured in pixels,
+# in a headless browser); 0.92 and 0.46 glyph units take that out, and because
+# the correction lives in the coordinates it holds at 16px too.
+OPTICAL_X = {"play": 12.75, "check": 11.54}
+OPTICAL_Y = {"check": 11.08}
 
 
 def load_measurer():
@@ -88,7 +93,7 @@ class IconCentringTests(unittest.TestCase):
                 data = re.search(r'd="([^"]+)"', self.glyphs[name]).group(1)
                 left, top, right, bottom = bbox(data)
                 centre_x, centre_y = (left + right) / 2, (top + bottom) / 2
-                self.assertAlmostEqual(centre_y, 12.0, delta=0.05)
+                self.assertAlmostEqual(centre_y, OPTICAL_Y.get(name, 12.0), delta=0.05)
                 self.assertAlmostEqual(centre_x, OPTICAL_X.get(name, 12.0), delta=0.05)
 
     def test_glyphs_fit_inside_the_box(self):

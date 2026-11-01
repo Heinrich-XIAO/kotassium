@@ -72,6 +72,11 @@ of these lines as the message's last line:
   Then `serve_web.py` with a throwaway `KOTASSIUM_LIB` and
   `chrome-headless-shell --no-sandbox --user-data-dir=/tmp/p --window-size=W,H
   --virtual-time-budget=6000 --screenshot=out.png http://127.0.0.1:PORT/`.
+  For anything that needs a click, a hover or a computed style, install
+  `npm i --no-save --no-package-lock playwright-core` (no browser download) and
+  launch the same shell with `chromium.launch({executablePath: SHELL_BIN})`;
+  that is how two 1.5px icon offsets were found, which no box model reports
+  correctly because the glyph was overflowing its own content box.
   Measure the PNG with Pillow (`venv/bin/pip install pillow`) instead of
   describing it; cross-check against `tools/icon_bbox.py`, which is what the
   rendered glyph should agree with. Proof it works: the 44px card play disc

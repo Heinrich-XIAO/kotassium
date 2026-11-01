@@ -217,6 +217,14 @@ class ReactParityTests(unittest.TestCase):
         reference_css = reference_css.replace('#btns button[aria-label="Radio"],#btns button[aria-label="Collapse player"]{display:none}', '#btns button[aria-label="Radio"]{display:none}')
         reference_css = reference_css.replace('.dfsQsect{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8a8a8a;font-weight:700;padding:16px 20px 6px}', '.dfsQsect{font-size:11px;color:#8a8a8a;font-weight:700;padding:16px 20px 6px}')
         reference_css = reference_css.replace('.settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#8f8f8f}', '.settings-label{margin:0 0 8px 2px;font-size:11px;font-weight:700;color:#8f8f8f}')
+        # A note written next to a rule is documentation, not rendering, so it
+        # is compared by its declarations only.
+        strip_comments = lambda css: re.sub(r"[ \t]*/\*.*?\*/\n?", "", css, flags=re.S)
+        reference_css = strip_comments(reference_css)
+        current_css = strip_comments(current_css)
+        reference_css = reference_css.replace("#addBtn{width:26px;height:26px;color:#b3b3b3;display:grid;place-items:center;cursor:pointer}", "#addBtn{width:26px;height:26px;color:#b3b3b3;display:grid;place-items:center;cursor:pointer;padding:0}", 1)
+        reference_css = reference_css.replace("border:1px solid #ffffff14;transition:color .15s,background .15s,transform .15s}", "border:1px solid #ffffff14;padding:0;transition:color .15s,background .15s,transform .15s}", 1)
+        reference_css = reference_css.replace("#side.collapsed .pitem{justify-content:center;padding:6px 0;gap:0}", "#side.collapsed .pitem{justify-content:center;padding:2px;margin:4px 0 8px;gap:0}", 1)
         reference_css = re.sub(r"\n{2,}", "\n", reference_css)
         current_css = re.sub(r"\n{2,}", "\n", current_css)
         self.assertEqual(reference_css, current_css)
@@ -241,6 +249,24 @@ class ReactParityTests(unittest.TestCase):
         self.assertNotIn("toast('Could not open playlist')", self.app)
         self.assertIn('job.then((value) => value !== false, () => false)', self.app)
         self.assertIn("startQueueRef.current(tracks, item.name || 'Playlist', index)", self.app)
+
+    def test_sidebar_add_icon_and_collapsed_pill_are_centred(self):
+        # Both were measured in a real engine (tools/page_shot.sh + playwright):
+        # the add glyph sat 1.5px right of its button's centre because the
+        # shared button padding left a 14px content box for a 17px glyph, and a
+        # collapsed row showed 6px of highlight above and below the cover
+        # against 2px at the sides, which reads as a thick bar not a frame.
+        css = re.search(r"<style>(.*?)</style>", read("web/index.html"), re.S).group(1)
+        # A fixed-width round icon button inherits the shared button padding
+        # (1px 6px) and then cannot centre its glyph: the pad eats the width it
+        # needs. Both of these measured ~1.5px right until padding went to 0,
+        # and the glyph is now even-sized so 26px leaves 4px either side.
+        self.assertIn("cursor:pointer;padding:0}", css)
+        self.assertIn("#nowsave{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:#ffffff0f;border:1px solid #ffffff14;padding:0;", css)
+        self.assertIn("<Icon name=\"add\" size={18}/></button>", self.app)
+        self.assertIn("<Icon name={inCurrentPlaylist ? 'check' : 'add'} size={16}/></button>", self.app)
+        self.assertIn("#side.collapsed .pitem{justify-content:center;padding:2px;margin:4px 0 8px;gap:0}", css)
+        self.assertNotIn("padding:6px 0;gap:0}", css)
 
     def test_a_check_with_no_build_for_this_mac_says_so_instead_of_spinning(self):
         # updater.check() answers state=idle with
