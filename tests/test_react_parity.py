@@ -242,6 +242,19 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn('job.then((value) => value !== false, () => false)', self.app)
         self.assertIn("startQueueRef.current(tracks, item.name || 'Playlist', index)", self.app)
 
+    def test_a_check_with_no_build_for_this_mac_says_so_instead_of_spinning(self):
+        # updater.check() answers state=idle with
+        # error="no build for this Mac in vX" when the newest release has no
+        # .pkg - the exact answer every release gave while the macOS runners
+        # were retired. The pill only reacted to an error *state*, matched
+        # neither remaining branch, and so sat on "Checking for updates…" with
+        # nothing left to replace it.
+        self.assertNotIn("else if (!st.error) {", self.app)
+        self.assertNotIn("updateCheckManual.current && !st.error", self.app)
+        self.assertEqual(self.app.count("else if (st.error || st.state === 'error')"), 2)
+        # A rejected check used to leave the same message behind for ever.
+        self.assertIn("setUpdateMessage('could not check for updates')", self.app)
+
     def test_warm_up_lane_is_handed_a_function_not_a_promise(self):
         # asInteractive(fn) awaits fn(). Invoking the arrow at the call site
         # (`asInteractive((async () => {...})())`) passed a promise instead, so

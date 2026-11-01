@@ -892,9 +892,14 @@ function App() {
       if (st.state === 'downloading') setUpdateMessage(`downloading update ${Math.round(st.pct || 0)}%`);
       else if (st.state === 'installing') setUpdateMessage('installing update…');
       else if (st.state === 'checking') setUpdateMessage('Checking for updates…');
-      else if (st.state === 'error') setUpdateMessage(st.error || 'update failed');
+      // A check can finish with an answer the pill has to relay even though
+      // nothing failed: the latest release carrying no build for this Mac is
+      // reported as state=idle plus an error message, and the old condition
+      // here matched neither branch - so the pill sat on "Checking for
+      // updates…" for ever.
+      else if (st.error || st.state === 'error') { updateCheckManual.current = false; setUpdateMessage(st.error || 'update failed'); }
       else if (st.available) setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateStepsText(st.version, st.latest)})${st.can_install === false ? ' — move it to Applications to update' : ''}`);
-      else if (updateCheckManual.current && !st.error) {
+      else if (updateCheckManual.current) {
         updateCheckManual.current = false;
         setUpdateMessage(`Kotassium ${st.version || ''} is up to date`);
         clearTimeout(updateStatusTimer.current);
@@ -1210,7 +1215,7 @@ function App() {
     const count = a[0] !== b[0] || a[1] !== b[1] ? 1 : Math.max(1, b[2] - a[2]);
     return `${count} version${count === 1 ? '' : 's'} forward`;
   }, []);
-  const checkUpdate = useCallback(async () => { updateCheckManual.current = true; clearTimeout(updateStatusTimer.current); setUpdateBusy(true); setUpdateMessage('Checking for updates…'); try { const st = await postJSON('/api/update/check', {}); setUpdateState(st); if (st.state === 'checking') setUpdateMessage('Checking for updates…'); else if (st.state === 'error') { updateCheckManual.current = false; setUpdateMessage(st.error || 'update failed'); } else if (st.available) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateStepsText(st.version, st.latest)})${st.can_install === false ? ' — move it to Applications to update' : ''}`); } else if (!st.error) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.version || ''} is up to date`); updateStatusTimer.current = setTimeout(() => setUpdateMessage(''), 4000); } } catch { updateCheckManual.current = false; toast('could not check for updates'); } finally { setUpdateBusy(false); } }, [toast]);
+  const checkUpdate = useCallback(async () => { updateCheckManual.current = true; clearTimeout(updateStatusTimer.current); setUpdateBusy(true); setUpdateMessage('Checking for updates…'); try { const st = await postJSON('/api/update/check', {}); setUpdateState(st); if (st.state === 'checking') setUpdateMessage('Checking for updates…'); else if (st.error || st.state === 'error') { updateCheckManual.current = false; setUpdateMessage(st.error || 'update failed'); } else if (st.available) { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.latest || 'A Kotassium update'} is available (${updateStepsText(st.version, st.latest)})${st.can_install === false ? ' — move it to Applications to update' : ''}`); } else { updateCheckManual.current = false; setUpdateMessage(`Kotassium ${st.version || ''} is up to date`); updateStatusTimer.current = setTimeout(() => setUpdateMessage(''), 4000); } } catch { updateCheckManual.current = false; setUpdateMessage('could not check for updates'); clearTimeout(updateStatusTimer.current); updateStatusTimer.current = setTimeout(() => setUpdateMessage((message) => message === 'could not check for updates' ? '' : message), 4000); toast('could not check for updates'); } finally { setUpdateBusy(false); } }, [toast]);
   const startUpdate = useCallback(async () => { setUpdateBusy(true); try { const started = await postJSON('/api/update', {}); const st = await pollUpdate(); if (st?.state === 'installing' || st?.state === 'downloading') setUpdateMessage(st.state === 'downloading' ? `downloading update ${Math.round(st.pct || 0)}%` : 'installing update…'); else { const why = started?.error || st?.error; if (why) { setUpdateMessage(why); toast(why); } } } catch { toast('could not start the update'); } finally { setUpdateBusy(false); } }, [pollUpdate, toast]);
 
   const imageStyle = (url, name) => ({ background: url ? resolveCover(url) : gradient(name) });
