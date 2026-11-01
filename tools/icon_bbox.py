@@ -1,10 +1,13 @@
 """Measure the ink box of an SVG path, without a browser.
 
 The page draws every icon from hand-written path data in ``web/app.jsx``, and
-the question "is this glyph centred?" has to be answerable in a build that has
-no browser (the agent sandbox has none, and neither does CI). This module
-reports the same box ``getBoundingClientRect()`` would, including the bulge of
-a rounded corner, so a glyph can be placed by arithmetic instead of by eye.
+the question "is this glyph centred?" has to be answerable without a build:
+this module answers it in milliseconds, in CI, and against the source rather
+than one rendering of it. It reports the same box ``getBoundingClientRect()``
+would, including the bulge of a rounded corner, so a glyph can be placed by
+arithmetic instead of by eye. It is not a substitute for pixels -
+``tools/page_shot.sh`` renders the page and that is the check to use when the
+question is what the result looks like.
 
 That distinction is exactly what went wrong before: a rounded triangle's apex
 arc reaches further out than its vertex, and ``getBoundingClientRect`` was used

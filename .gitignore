@@ -20,3 +20,4 @@ android/app/build/
 android/local.properties
 *.keystore
 *.jks
+artifacts/

@@ -44,9 +44,41 @@ of these lines as the message's last line:
   the thing is rendered at all before tuning it (a `settings` glyph that two
   rounds "centred" was drawn by nothing - the button uses lucide's
   `Settings2`, so `grep -c 'name="settings"'` was 0), and never report a visual
-  fix as verified without pixels. The cloud sandbox has no browser: say which
-  numbers and tests you checked, and ask for the one look only the user can
-  give.
+  fix as verified without pixels.
+- **You can get pixels. Do not claim otherwise.** This was recorded here as
+  "the cloud sandbox has no browser", and that sentence cost four rounds of
+  guessing: a browser is a download, not a system package. Nothing is
+  installed, but everything needed installs without root, and it takes about
+  as long as a test run. `npx --yes playwright@latest install --only-shell
+  chromium` puts a `chrome-headless-shell` in `~/.cache/ms-playwright`; it is
+  missing a dozen shared libraries and there is no root or font, so fetch them
+  unprivileged and unpack them somewhere private:
+
+  ```sh
+  apt-get -o Dir::State::lists=$HOME/.apt/lists -o Dir::Cache=$HOME/.apt/cache \
+          -o Dir::Etc::sourcelist=$HOME/.apt/sources.list \
+          -o Dir::Etc::sourceparts=/dev/null update    # sources.list: noble main universe
+  apt-get ... download libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+          libatspi2.0-0t64 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+          libasound2t64 libxkbcommon0 libxrender1 libxi6 fonts-liberation
+  for f in *.deb; do dpkg -x "$f" ~/sysroot/; done
+  export LD_LIBRARY_PATH=$HOME/sysroot/usr/lib/x86_64-linux-gnu   # add libs the
+  #   linker then asks for (libXrender, libXi, ...) until `ldd | grep 'not found'`
+  #   is empty - they are transitive, so iterate.
+  cp ~/sysroot/usr/share/fonts/**/*.ttf ~/.local/share/fonts/      # sans-serif or
+  #   every glyph renders as a box; there are no fonts at all in the image.
+  ```
+
+  Then `serve_web.py` with a throwaway `KOTASSIUM_LIB` and
+  `chrome-headless-shell --no-sandbox --user-data-dir=/tmp/p --window-size=W,H
+  --virtual-time-budget=6000 --screenshot=out.png http://127.0.0.1:PORT/`.
+  Measure the PNG with Pillow (`venv/bin/pip install pillow`) instead of
+  describing it; cross-check against `tools/icon_bbox.py`, which is what the
+  rendered glyph should agree with. Proof it works: the 44px card play disc
+  measures its ink box centre at 12.750 in glyph units, and the PNG shows the
+  box centred on the disc and the ink *mass* 0.4px left of it - the exact
+  asymmetry that makes a box-centred triangle read left. Keep screenshots in
+  `artifacts/` (gitignored), never in the repo proper.
 - **The page is the only UI.** `tests/test_wrappers.py` fails if `desktop.py`
   or `MainActivity.java` contains markup, styles, or chunks of the page. If
   something is wrong on Android, fix `web/index.html`.
