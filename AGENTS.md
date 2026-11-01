@@ -19,18 +19,34 @@ of these lines as the message's last line:
 - `COMMITTED AND PUSHED` — changes were committed and pushed to GitHub
 - `UNCOMMITTED` — changes exist locally but were not committed/pushed
 
-- **Icons are measured, not nudged.** Every glyph in `web/app.jsx`'s `Icon`
-  shares the `0 0 24 24` grid and carries its position in the path
-  coordinates. Never add a `transform` to a glyph: it is in user units, so it
+- **Icons: fix the geometry, never the nudge.** Every glyph in `web/app.jsx`'s
+  `Icon` shares the `0 0 24 24` grid and carries its position in the path
+  coordinates. A glyph may not carry a `transform`: it is in user units, so it
   centres that glyph at exactly one render size and misplaces it at every
-  other. Four "centre the glyph" commits in a row did that - CSS
+  other one. Four "centre the glyph" commits did that - CSS
   `translateX(1px)`, then `translate(0.6 0)`, then `translate(-1.145 0)` - and
   each was checked with `getBoundingClientRect`, which reports the ink *box*
-  and cannot see that a right-pointing triangle's mass sits at its base. Use
-  `tools/icon_bbox.py` to compute a path's ink box without a browser (fixtures
-  and arc bulges included) and let `tests/test_icons.py` pin each single-path
-  glyph's centre; the play triangle is the one deliberate asymmetry, 0.75
-  right of centre.
+  and is blind to a right-pointing triangle's mass sitting at its base, so the
+  glyph measured centred and read left. Measure with `tools/icon_bbox.py`
+  (stdlib, no browser, arc bulges included), put the number in the
+  coordinates, and let `tests/test_icons.py` pin it: it asserts one grid, zero
+  transforms, and every single-path glyph's ink centre. `play` is the one
+  deliberate asymmetry - 0.75 right of centre - and `OPTICAL_X` in that test is
+  its single knob.
+- **A visual problem gets a measurement, not a compensation.** When the user
+  says something "looks off", reproduce it as a number first, then fix it
+  where that value is defined: the glyph's own coordinates, the layout rule
+  itself. Do not layer a CSS transform, a margin or a negative offset on top of
+  the cause. Stacked compensations are how the play button ended up with a CSS
+  `translateX(1px)` *and* a path `translate(0.6 0)` at once - removing one left
+  the other's number wrong, and the glyph crossed to the far side of centre, so
+  the complaint survived the fix. Two more rules from the same episode: check
+  the thing is rendered at all before tuning it (a `settings` glyph that two
+  rounds "centred" was drawn by nothing - the button uses lucide's
+  `Settings2`, so `grep -c 'name="settings"'` was 0), and never report a visual
+  fix as verified without pixels. The cloud sandbox has no browser: say which
+  numbers and tests you checked, and ask for the one look only the user can
+  give.
 - **The page is the only UI.** `tests/test_wrappers.py` fails if `desktop.py`
   or `MainActivity.java` contains markup, styles, or chunks of the page. If
   something is wrong on Android, fix `web/index.html`.
@@ -146,8 +162,10 @@ of these lines as the message's last line:
   unittest suite, Python compilation checks and (when Node is installed) the
   page's JavaScript syntax check. It requires `yt-dlp` available to the chosen
   Python (`PYTHON=/path/to/python tools/agent-preflight.sh`); MPRIS tests skip
-  without a session bus. The shared release build workflow runs this same gate
-  before either platform build, so a failing preflight blocks publishing.
+  without a session bus. The suite includes `tests/test_icons.py`, so an icon
+  nudge or a second viewBox fails the gate instead of shipping. The shared
+  release build workflow runs this same gate before either platform build, so a
+  failing preflight blocks publishing.
 - Tests: `venv/bin/python -m unittest discover -s tests`, plus
   `dbus-run-session -- desktop-venv/bin/python -m unittest tests.test_mpris`
   and `xvfb-run -a desktop-venv/bin/python tools/ui_check.py`.
