@@ -878,10 +878,16 @@ _YT_TAKE = re.compile(r"\b(?:parody|cover(?:ed)?|remix|nightcore|karaoke|instrum
                       r"extended|slowed|speed\s?up|sped\s?up|mashup|live|concert|"
                       r"symphon(?:y|ic)|orchestra(?:l)?|performance|rehearsal|soundcheck|"
                       r"reaction|tutorial|"
+                      r"ver|version|mix|re-?edit|"
                       r"remake|re-?creation|replica|tribute|medley|meme|"
                       r"\d+\s?hours?)\b", re.I)
 
 _YT_TOPIC = re.compile(r"\s*-\s*topic$", re.I)
+
+# "(UNDERTALE Soundtrack)", "[Official Music Video]": album and format notes
+# that uploaders put in brackets and that say nothing about which recording it
+# is. Stripped from the raw title, before `_ng_norm` eats the brackets.
+_YT_BRACKETS = re.compile(r"\([^)]*\)|\[[^\]]*\]|\{[^}]*\}")
 
 # Words a title may add without changing what the recording is. Anything else
 # it adds - "(From the Basement)", "Grammys rehearsal", "with lyrics" - makes
@@ -901,11 +907,14 @@ def rank_videos(videos, title, artist="", dur=0):
     one of them ran two seconds nearer the expected length.
 
     So the evidence is weighed the right way round. Agreement on the title and
-    on the channel are what identify the recording; duration only corroborates
-    it, and a wildly different length is a reason to distrust a candidate that
-    the title otherwise likes rather than a reason to prefer it. `dur` is only
-    a hint - a tracklist's length can be from a different master - so it never
-    outvotes the title.
+    on the channel are what identify the recording; the length then decides
+    between candidates that describe it equally well - "HUMBLE." at the
+    tracklist's 177s over "Kendrick Lamar - HUMBLE." at 184s, both on the
+    artist's channel - and counts against one that is clearly a different cut.
+    `dur` is a hint (a tracklist can time a different master) and a length
+    alone never picks a candidate the title rejects, so its penalty saturates
+    just below the channel bonus: a stranger's exact-length reupload still
+    loses to the artist's own upload of a longer master.
     """
     ntitle, nartist = _ng_norm(title), _ng_norm(artist)
     want_t = [w for w in ntitle.split() if len(w) > 1]
@@ -944,8 +953,11 @@ def rank_videos(videos, title, artist="", dur=0):
             known = set(want_t) | set(nartist.split()) | _YT_PLAIN
             # Brackets are where uploaders put album metadata, so their words
             # are not evidence of a different take; the markers above still
-            # catch "(with lyrics)" and friends.
-            words = re.sub(r"[(\[][^)\]]*[)\]]", " ", ct).split()
+            # catch "(with lyrics)" and friends. Strip them from the raw title:
+            # `_ng_norm` turns "(" into a space, so doing it afterwards matches
+            # nothing and every soundtrack upload was paying for "DELTARUNE
+            # Chapter 2 Soundtrack" as five extra words.
+            words = _ng_norm(_YT_BRACKETS.sub(" ", v.get("title") or "")).split()
             extra = [w for w in words if w not in known]
             # Two words are how official uploads carry album metadata - "077.",
             # the game's name - so only the third one starts to look like a
@@ -962,10 +974,13 @@ def rank_videos(videos, title, artist="", dur=0):
                                 if w not in known and not w.isdigit()])
         d = v.get("dur") or 0
         if dur and d:
+            # Graded, not a threshold: a few seconds of slack costs little, a
+            # different cut costs the whole 2.2, and it saturates there so the
+            # 2.5 for the artist's own channel still outranks it. Saturating at
+            # 40% off keeps the penalty proportional to what a tracklist can be
+            # wrong by without turning a 2h DJ set into a reason to play it.
             off = abs(d - dur) / float(max(dur, 1))
-            s -= min(2.0, 2.0 * off)
-            if off > 0.4:
-                s -= 1.0        # a minute out is a different recording of the song
+            s -= 2.2 * min(1.0, off / 0.4)
         s -= 0.03 * pos         # YouTube's own order breaks the ties
         scored.append((s, pos, v))
     scored.sort(key=lambda t: (-t[0], t[1]))

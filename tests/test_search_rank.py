@@ -106,6 +106,38 @@ class RankTests(unittest.TestCase):
         self.assertEqual(serve_web.rank_videos(cands, "Weird Fishes / Arpeggi",
                                                "Radiohead", 318)[0]["id"], "live")
 
+    def test_length_decides_between_uploads_that_describe_the_track_equally(self):
+        # Both are the artist's channel and both name the track, so the length
+        # is the only thing left that separates them - YouTube's own order put
+        # the 184s upload first, and it is not the album cut.
+        cands = [
+            vid("long", "Kendrick Lamar - HUMBLE.", "Kendrick Lamar", 184),
+            vid("album", "HUMBLE.", "Kendrick Lamar", 177),
+        ]
+        ranked = serve_web.rank_videos(cands, "HUMBLE.", "Kendrick Lamar", 177)
+        self.assertEqual([v["id"] for v in ranked], ["album", "long"])
+
+    def test_length_is_graded_so_a_different_cut_sinks_further(self):
+        # A few seconds of slack is cheap, a re-edit is not. The cliff this
+        # replaced treated 40% and 41% off the same and 39% as almost right.
+        cands = [
+            vid("album", "HUMBLE.", "Kendrick Lamar", 177),
+            vid("slack", "HUMBLE.", "Kendrick Lamar", 190),
+            vid("cut", "HUMBLE.", "Kendrick Lamar", 354),
+        ]
+        ranked = serve_web.rank_videos(cands[::-1], "HUMBLE.", "Kendrick Lamar", 177)
+        self.assertEqual([v["id"] for v in ranked], ["album", "slack", "cut"])
+
+    def test_a_length_that_close_does_not_outvote_a_better_title(self):
+        # The opposite error: 2% too long on a stranger's channel is not a
+        # reason to leave the artist's own upload behind.
+        cands = [
+            vid("stranger", "ASGORE", "Fasgort", 159),
+            vid("artist", "077. ASGORE (UNDERTALE Soundtrack) - Toby Fox", "Toby Fox", 161),
+        ]
+        self.assertEqual(serve_web.rank_videos(cands, "ASGORE", "Toby Fox", 156)[0]["id"],
+                         "artist")
+
     def test_the_next_track_on_the_soundtrack_does_not_win(self):
         # "Field of Hopes and Dreams" contains every word of "Hopes and Dreams"
         # and runs closer to the requested length; it is still a different song.

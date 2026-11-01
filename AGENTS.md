@@ -222,9 +222,17 @@ of these lines as the message's last line:
   way round: title coverage and the artist's own channel (exact, or `- Topic`;
   a channel that merely contains the artist's name is a fan page) identify the
   recording, words added before or beyond the title mark a take on it or the
-  next track on the album, the markers in `_YT_TAKE` cover the usual "parody /
-  lyrics / 1 hour / live" cases, and duration only corroborates - a tracklist
-  can describe a different master, so it never outvotes the title. `pick=1` is
+  next track on the album, and the markers in `_YT_TAKE` cover the usual
+  "parody / lyrics / 1 hour / live / (Rhythm Ver.)" cases. The length is
+  graded evidence on top of that, not a threshold and not the only thing: it
+  separates candidates that describe the track equally well (the album cut at
+  the tracklist's 177s over a 184s upload on the same channel) and sinks a
+  different cut, but it saturates at 2.2 - just below the 2.5 for the artist's
+  channel - so a tracklist that times another master cannot throw the
+  artist's own upload out. Strip bracket metadata from the *raw* title: `_ng_norm`
+  already turns "(" into a space, so stripping afterwards matches nothing and
+  every soundtrack upload paid for "(DELTARUNE Chapter 2 Soundtrack)" as five
+  extra words. `pick=1` is
   only for resolving one known track: without it `/api/search` returns
   YouTube's own order for the visible result list. `tests/test_search_rank.py`
   pins this on the ASGORE payload that produced the report; tune the weights
