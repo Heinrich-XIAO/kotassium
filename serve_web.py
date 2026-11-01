@@ -147,10 +147,14 @@ def find_ytdlp():
     if exe:
         return [exe]
     try:
-        import yt_dlp  # noqa: F401
-        return [sys.executable, "-m", "yt_dlp"]
+        # Locate the module without importing it: a full import costs ~50MB of
+        # RSS at startup just to answer "can this install download?".
+        import importlib.util
+        if importlib.util.find_spec("yt_dlp") is not None:
+            return [sys.executable, "-m", "yt_dlp"]
     except Exception:
-        return None
+        pass
+    return None
 
 YTDLP = find_ytdlp()
 FFMPEG = which("ffmpeg")

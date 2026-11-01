@@ -114,6 +114,73 @@ function updateStepsText(current, latest) {
   return `${count} version${count === 1 ? '' : 's'} forward`;
 }
 
+// The seek bar reads the audio clock itself: letting every timeupdate
+// re-render the whole app (four times a second, forever) is what grew the
+// web content process's heap. This widget is a handful of nodes.
+function SeekBar({ audioRef, duration, handlers, full }) {
+  const [pos, setPos] = useState(0);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return undefined;
+    const onTime = () => setPos(audio.currentTime || 0);
+    const onReset = () => setPos(0);
+    audio.addEventListener('timeupdate', onTime);
+    audio.addEventListener('seeked', onTime);
+    audio.addEventListener('loadstart', onReset);
+    onTime();
+    return () => {
+      audio.removeEventListener('timeupdate', onTime);
+      audio.removeEventListener('seeked', onTime);
+      audio.removeEventListener('loadstart', onReset);
+    };
+  }, [audioRef]);
+  return <div className={full ? 'fs-seek' : ''} id={full ? 'fsSeek' : 'prow'}><span className="ptime" id={full ? 'fsCur' : 'curt'}>{secs(pos)}</span><div className={full ? 'fs-progress' : ''} id={full ? 'fsProg' : 'prog'} {...handlers}><i id={full ? 'fsProgf' : 'progf'} style={{ width: `${duration ? Math.min(100, pos / duration * 100) : 0}%` }} /></div><span className="ptime" id={full ? 'fsTot' : 'tott'}>{secs(duration)}</span></div>;
+}
+
+// Windowed list: only the rows near the viewport exist in the DOM. A long
+// playlist otherwise builds thousands of nodes - and one cover layer each -
+// in a single render, which is what let the web content process's heap grow
+// to hundreds of megabytes. Both .row and .srow are height:56px.
+const ROW_H = 56;
+const WINDOW_ROWS = 80; // below this, render everything: no listener, no spacers
+function WindowList({ count, renderRow }) {
+  const OVERSCAN = 10;
+  const hostRef = useRef(null);
+  const [range, setRange] = useState({ start: 0, end: Math.min(count, 40) });
+  useEffect(() => {
+    const scroller = document.getElementById('main');
+    const host = hostRef.current;
+    if (!scroller || !host) return undefined;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const hostTop = host.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      const relTop = scroller.scrollTop - hostTop;
+      const relBottom = relTop + scroller.clientHeight;
+      const start = Math.max(0, Math.floor(relTop / ROW_H) - OVERSCAN);
+      const end = Math.min(count, Math.ceil(relBottom / ROW_H) + OVERSCAN);
+      setRange((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    scroller.addEventListener('scroll', schedule, { passive: true });
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null;
+    if (observer) observer.observe(scroller);
+    update();
+    return () => {
+      scroller.removeEventListener('scroll', schedule);
+      if (observer) observer.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [count]);
+  const start = Math.min(range.start, count);
+  const end = Math.min(range.end, count);
+  return <div ref={hostRef}>
+    {start > 0 && <div style={{ height: start * ROW_H }} />}
+    {Array.from({ length: Math.max(0, end - start) }, (_, k) => renderRow(start + k))}
+    {end < count && <div style={{ height: (count - end) * ROW_H }} />}
+  </div>;
+}
+
 function App() {
   useEffect(() => { window.__kotReactReady?.(); }, []);
   const audioRef = useRef(null);
@@ -181,7 +248,6 @@ function App() {
   const [repeat, setRepeat] = useState(() => { try { const value = localStorage.getItem('kot_repeat'); return value === null ? 1 : Number(value); } catch { return 1; } });
   const [shuffleOrder, setShuffleOrder] = useState([]);
   const [shufflePos, setShufflePos] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
   const [actualDuration, setActualDuration] = useState(0);
   const [paused, setPaused] = useState(true);
   const [volume, setVolume] = useState(() => { try { const stored = localStorage.getItem('kot_vol'); if (stored === null) return 1; const v = Number(stored); return Number.isFinite(v) ? v * v : 1; } catch { return 1; } });
@@ -454,7 +520,7 @@ function App() {
     upNextGone.current = false;
     setUpNextDismissed(false);
     const epoch = ++playbackEpoch.current;
-    setCurrentTime(0); setActualDuration(0); setPaused(true);
+    setActualDuration(0); setPaused(true);
     const audio = audioRef.current;
     if (!audio) return;
     audio.pause(); audio.removeAttribute('src'); audio.load();
@@ -721,13 +787,22 @@ function App() {
       upNextGone.current = false;
       setUpNextDismissed(false);
     }
-    const shouldShow = !!(actualDuration && currentTime > 0 && actualDuration - currentTime <= 30 && (nextTrack || radio));
-    if (!shouldShow) {
-      setUpNextDismissed(false); upNextGone.current = false; setUpNext(false);
-    } else if (!upNextGone.current) {
-      setUpNext(true);
-    }
-  }, [actualDuration, currentTime, nextTrack, currentTrack, radio]);
+    // Read the audio clock on a slow tick instead of re-rendering the whole
+    // app from every timeupdate: a4-times-a-second full render is what let
+    // the web content process's heap grow to hundreds of megabytes.
+    const check = () => {
+      const pos = audioRef.current?.currentTime || 0;
+      const shouldShow = !!(actualDuration && pos > 0 && actualDuration - pos <= 30 && (nextTrack || radio));
+      if (!shouldShow) {
+        setUpNextDismissed(false); upNextGone.current = false; setUpNext(false);
+      } else if (!upNextGone.current) {
+        setUpNext(true);
+      }
+    };
+    check();
+    const timer = setInterval(check, 1000);
+    return () => clearInterval(timer);
+  }, [actualDuration, nextTrack, currentTrack, radio]);
 
   useEffect(() => {
     let alive = true;
@@ -771,6 +846,9 @@ function App() {
         return result;
       }).catch(() => null);
       warmedPlaylists.current.set(key, warmup);
+      // Keep only the newest few playlists' full track lists: retaining every
+      // playlist forever let the page's heap grow without bound.
+      while (warmedPlaylists.current.size > 6) warmedPlaylists.current.delete(warmedPlaylists.current.keys().next().value);
       warmup.then((full) => { if (!full && warmedPlaylists.current.get(key) === warmup) warmedPlaylists.current.delete(key); });
     });
   }, [links, shuffle]);
@@ -830,7 +908,6 @@ function App() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onTime = () => setCurrentTime(audio.currentTime || 0);
     const onPlay = () => setPaused(false);
     const onPause = () => setPaused(true);
     const onMeta = () => {
@@ -870,25 +947,32 @@ function App() {
       next();
     };
     const onError = () => { if (audio.currentSrc) toast('Audio source could not be played'); };
-    audio.addEventListener('timeupdate', onTime); audio.addEventListener('play', onPlay); audio.addEventListener('pause', onPause);
+    audio.addEventListener('play', onPlay); audio.addEventListener('pause', onPause);
     audio.addEventListener('loadedmetadata', onMeta); audio.addEventListener('ended', onEnded); audio.addEventListener('error', onError);
-    return () => { audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('play', onPlay); audio.removeEventListener('pause', onPause); audio.removeEventListener('loadedmetadata', onMeta); audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError); };
+    return () => { audio.removeEventListener('play', onPlay); audio.removeEventListener('pause', onPause); audio.removeEventListener('loadedmetadata', onMeta); audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError); };
   }, [queue, currentIndex, repeat, next, playTrack, startResolvedTrack, radio, fetchRadio, shufflePos, shuffleOrder, rememberId]);
 
   useEffect(() => {
-    if (!currentTrack) return;
-    const state = paused ? 'paused' : 'playing';
-    const key = `${trackKey(currentTrack)}|${state}`;
-    const now = Date.now();
-    if (key !== lastNowPlaying.current.key || now - lastNowPlaying.current.at >= 2500 || duration !== lastNowPlaying.current.duration) {
-      lastNowPlaying.current = { key, at: now, duration };
-      const payload = { t: currentTrack.t || '', a: currentTrack.a || '', album: currentTrack.album || '', cover: currentTrack.cover || '', ms: Math.round(duration * 1000) || currentTrack.ms || 0, pos: Math.round(currentTime * 1000), state, notify_track_changes: notifyTrackChanges };
-      postJSON('/api/nowplaying', payload).catch(() => {});
-    }
+    if (!currentTrack) return undefined;
+    // The server (MPRIS, notifications) only needs the position every few
+    // seconds; posting on every timeupdate re-rendered the whole app.
+    const send = () => {
+      const state = paused ? 'paused' : 'playing';
+      const key = `${trackKey(currentTrack)}|${state}`;
+      const now = Date.now();
+      if (key !== lastNowPlaying.current.key || now - lastNowPlaying.current.at >= 2500 || duration !== lastNowPlaying.current.duration) {
+        lastNowPlaying.current = { key, at: now, duration };
+        const payload = { t: currentTrack.t || '', a: currentTrack.a || '', album: currentTrack.album || '', cover: currentTrack.cover || '', ms: Math.round(duration * 1000) || currentTrack.ms || 0, pos: Math.round((audioRef.current?.currentTime || 0) * 1000), state, notify_track_changes: notifyTrackChanges };
+        postJSON('/api/nowplaying', payload).catch(() => {});
+      }
+    };
+    send();
     if ('mediaSession' in navigator && typeof MediaMetadata !== 'undefined') {
       try { navigator.mediaSession.metadata = new MediaMetadata({ title: currentTrack.t || '?', artist: currentTrack.a || '', album: currentTrack.album || '' }); } catch {}
     }
-  }, [currentTrack, currentTime, duration, paused, notifyTrackChanges]);
+    const timer = setInterval(send, 2500);
+    return () => clearInterval(timer);
+  }, [currentTrack, duration, paused, notifyTrackChanges]);
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     try {
@@ -1164,23 +1248,25 @@ function App() {
     return out;
   }, [queue, currentIndex, shuffle, shuffleOrder, shufflePos, repeat]);
 
-  const trackRows = (tracks, mode) => tracks.map((track, i) => {
+  const trackRow = (tracks, mode, i) => {
+    const track = tracks[i];
     const active = queue[currentIndex] && trackKey(queue[currentIndex]) === trackKey(track) && (mode === 'search' || playingPlaylist === view.name);
     return <div className={`${mode === 'search' ? 'srow' : 'row'}${active ? ' playing' : ''}`} key={`${trackKey(track)}-${i}`} onClick={() => mode === 'search' ? playIndex(i, tracks, '') : playIndex(i, tracks, view.name)}>
       {mode === 'search' ? <><button className="rbtn" data-tooltip="Play"><Icon name="play" size={15}/></button><div className="rtxt" style={{ flex: 1 }}><b>{track.t}</b><small>{track.a}</small></div><span className="stag">{track.source}</span>{track.full === false ? <span className="stream-only">stream only</span> : <span/>}<span/><span/></> : <><div><span className="trnum">{active ? <span className="bars"><i/><i/><i/><i/></span> : i + 1}</span></div><div className="rt"><div className="track-cover" style={{ background: coverBackground(track.cover, track.album || track.t) }} onMouseEnter={() => warmCover(track.cover)}></div><div className="rtxt"><b>{track.t}</b><small>{track.a}</small></div></div><div className="ralb">{track.album || ''}</div><div className="rdura">{fmt(track.ms)}</div></>}
     </div>;
-  });
+  };
+  const trackRows = (tracks, mode) => tracks.map((_, i) => trackRow(tracks, mode, i));
 
   const renderMain = () => {
-    if (view.type === 'playlist')    return <><div id="plhead" style={{ background: `linear-gradient(180deg,hsl(${hue(view.name)},65%,30%),hsl(${(hue(view.name) + 40) % 360},60%,22%) 60%,#12121200)` }}><div id="plx" style={imageStyle(null, view.name)}>{(view.name || '?').charAt(0)}</div><div className="plinfo"><small>Public Playlist</small><h1>{view.name}</h1><p>{playlist.length} song{playlist.length === 1 ? '' : 's'}</p></div></div><div id="plactions" className={plStuck ? 'stuck' : ''}><button id="bigplay" onClick={playList} data-tooltip="Play"><Icon name="play" size={28}/></button><b className="plstick">{view.name}</b><button id="shuf2" className={`aicon ${shuffle ? 'on' : ''}`} onClick={toggleShuffle} data-tooltip="Shuffle"><Icon name="shuffle" size={20}/></button><button id="rb2" className={`aicon ${repeat ? 'on' : ''}`} onClick={toggleRepeat} data-tooltip="Repeat"><Icon name="repeat" size={24}/></button></div><div id="tbl"><div className="tr-head"><span>#</span><span>Title</span><span>Album</span><span style={{ textAlign: 'right', color: '#b3b3b3' }}>Duration</span></div>{trackRows(playlist, 'playlist')}</div></>;
-    if (view.type === 'search') return <div id="search-results">{searching ? <div id="homeView"><h2>Searching “{view.query}”…</h2></div> : <><div id="homeView"><h2>Results for “{view.query}”</h2></div><div id="tbl" style={{ paddingTop: 0 }}>{results.length ? <><div className="tr-head"><span></span><span>Title</span><span>Source</span><span></span></div>{trackRows(results, 'search')}</> : <div id="empty">No results from any source.</div>}</div></>}</div>;
+    if (view.type === 'playlist')    return <><div id="plhead" style={{ background: `linear-gradient(180deg,hsl(${hue(view.name)},65%,30%),hsl(${(hue(view.name) + 40) % 360},60%,22%) 60%,#12121200)` }}><div id="plx" style={imageStyle(null, view.name)}>{(view.name || '?').charAt(0)}</div><div className="plinfo"><small>Public Playlist</small><h1>{view.name}</h1><p>{playlist.length} song{playlist.length === 1 ? '' : 's'}</p></div></div><div id="plactions" className={plStuck ? 'stuck' : ''}><button id="bigplay" onClick={playList} data-tooltip="Play"><Icon name="play" size={28}/></button><b className="plstick">{view.name}</b><button id="shuf2" className={`aicon ${shuffle ? 'on' : ''}`} onClick={toggleShuffle} data-tooltip="Shuffle"><Icon name="shuffle" size={20}/></button><button id="rb2" className={`aicon ${repeat ? 'on' : ''}`} onClick={toggleRepeat} data-tooltip="Repeat"><Icon name="repeat" size={24}/></button></div><div id="tbl"><div className="tr-head"><span>#</span><span>Title</span><span>Album</span><span style={{ textAlign: 'right', color: '#b3b3b3' }}>Duration</span></div>{playlist.length > WINDOW_ROWS ? <WindowList count={playlist.length} renderRow={(i) => trackRow(playlist, 'playlist', i)} /> : trackRows(playlist, 'playlist')}</div></>;
+    if (view.type === 'search') return <div id="search-results">{searching ? <div id="homeView"><h2>Searching “{view.query}”…</h2></div> : <><div id="homeView"><h2>Results for “{view.query}”</h2></div><div id="tbl" style={{ paddingTop: 0 }}>{results.length ? <><div className="tr-head"><span></span><span>Title</span><span>Source</span><span></span></div>{results.length > WINDOW_ROWS ? <WindowList count={results.length} renderRow={(i) => trackRow(results, 'search', i)} /> : trackRows(results, 'search')}</> : <div id="empty">No results from any source.</div>}</div></>}</div>;
     return <div id="homeView"><h2>Your playlists</h2>{links.length ? <div className="cardgrid">{links.map((p, i) => <article className="card" key={p.url || p.name} onClick={() => loadPlaylist(i)}><div className="ccover" style={{ background: coverBackground(p.cover || p.tracks?.[0]?.cover, p.name) }} onMouseEnter={() => warmCover(p.cover || p.tracks?.[0]?.cover)}><button id="cardPlay" className="card-play" data-tooltip={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={20}/></button></div><b>{p.name || '?'}</b><small>{p.total || p.count} songs</small></article>)}</div> : <div id="empty">No playlists yet - add one with the + button.</div>}</div>;
   };
 
   const repeatButton = (fullscreen = false) => <button id={fullscreen ? 'fsRepeat' : 'repeatb'} className={`aicon ${repeat ? 'on' : ''}`} onClick={toggleRepeat} data-tooltip={`Repeat ${repeat === 0 ? 'off' : repeat === 1 ? 'all' : 'one'}`} aria-label={`Repeat ${repeat === 0 ? 'off' : repeat === 1 ? 'all' : 'one'}`}>{repeat === 2 ? <Repeat1 size={fullscreen ? 24 : 18} strokeWidth={2}/> : <Repeat size={fullscreen ? 24 : 18} strokeWidth={2}/>}</button>;
   const controls = (fullscreen = false) => <div className={fullscreen ? 'fs-controls' : ''} id={fullscreen ? 'fsBtns' : 'btns'}><button id={fullscreen ? 'fsShuf' : 'shufb'} className={`aicon ${shuffle ? 'on' : ''}`} onClick={toggleShuffle} data-tooltip="Shuffle"><Icon name="shuffle" size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsprev' : 'prevb'} className="aicon" onClick={previous} disabled={!currentTrack || (currentIndex <= 0 && !(repeat === 1 && queue.length > 1))} data-tooltip="Previous"><Icon name="prev" size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsPlay' : 'playb'} className={fullscreen ? 'fs-play' : ''} onClick={togglePlay} disabled={!currentTrack} data-tooltip={paused ? 'Play' : 'Pause'}><Icon name={paused ? 'play' : 'pause'} size={fullscreen ? 26 : 16}/></button><button id={fullscreen ? 'fsnext' : 'nextb'} className="aicon" onClick={next} data-tooltip="Next" disabled={!currentTrack || (nextIndex < 0 && !radio)}><Icon name="next" size={fullscreen ? 24 : 20}/></button>{repeatButton(fullscreen)}</div>;
   const volumeRow = (full = false) => <div id={full ? 'fsVol' : undefined} className={full ? 'fs-volume' : 'volume-row'}><button className="aicon" onClick={toggleVolume} data-tooltip="Volume"><span id={full ? 'volIcon2' : 'volIcon'}>{icon('volume', full ? 24 : 20)}</span></button><div className={full ? 'fs-volume-bar' : ''} id={full ? 'fsVolBar' : 'vol'} {...volumeHandlers()}><i id={full ? 'fsVolFill' : 'volf'} style={{ width: `${(muted ? 0 : Math.sqrt(volume)) * 100}%` }} /></div></div>;
-  const progress = (full = false) => <div className={full ? 'fs-seek' : ''} id={full ? 'fsSeek' : 'prow'}><span className="ptime" id={full ? 'fsCur' : 'curt'}>{secs(currentTime)}</span><div className={full ? 'fs-progress' : ''} id={full ? 'fsProg' : 'prog'} {...seekHandlers()}><i id={full ? 'fsProgf' : 'progf'} style={{ width: `${duration ? Math.min(100, currentTime / duration * 100) : 0}%` }} /></div><span className="ptime" id={full ? 'fsTot' : 'tott'}>{secs(duration)}</span></div>;
+  const progress = (full = false) => <SeekBar audioRef={audioRef} duration={duration} handlers={seekHandlers()} full={full} />;
 
   return <>
     <header id="top"><button id="libBtn" className="top-lib" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={18}/></button><button id="homeBtn" onClick={goHome} data-tooltip="Home"><Icon name="home"/></button><div id="searchwrap" className={query ? 'filled' : ''}><Icon name="search" size={18}/><input id="q" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder="What do you want to play?"/><button id="qClear" onClick={() => { setQuery(''); document.querySelector('#q')?.focus(); }} data-tooltip="Clear search"><Icon name="close" size={14}/></button></div><button id="settingsBtn" onClick={() => setSettingsOpen(true)} data-tooltip="Settings" aria-label="Open settings"><Settings2 size={21} strokeWidth={1.8} aria-hidden="true"/></button>{updateState?.supported && <div id="upd" className={`${updateMessage ? 'on' : 'on icononly'}`}><span id="updtext">{updateMessage || (updateState.available ? `Kotassium ${updateState.latest} is available (${updateStepsText(updateState.version, updateState.latest)})${updateState.can_install === false ? ' — move it to Applications to update' : ''}` : '')}</span><button id="updbtn" className={updateState.available ? 'go' : ''} onClick={updateState.available ? startUpdate : checkUpdate} disabled={updateBusy} data-tooltip={updateState.available ? 'Restart & Update' : 'Check for updates'} aria-label={updateState.available ? 'Restart and install update' : 'Check for updates'}>{updateState.available ? <Download size={16} strokeWidth={2.2} aria-hidden="true"/> : <RefreshCw size={15} strokeWidth={2} className={updateBusy ? 'lucide-spin' : ''} aria-hidden="true"/>}</button>{updateState.available && <button id="updcheck" onClick={checkUpdate} disabled={updateBusy} data-tooltip="Check again" aria-label="Check for updates again"><RotateCw size={15} strokeWidth={1.9} aria-hidden="true"/></button>}</div>}</header>
@@ -1231,7 +1317,7 @@ function App() {
     </div>}
     <div id="mid" className={sideDragWidth !== null ? 'resizing' : ''}><aside id="side" className={`${(sideResizePreview !== null ? sideResizePreview : collapsed) ? 'collapsed' : ''} ${drawerOpen ? 'open' : ''}`} onTouchStart={(e) => gestureStart(e, 'side')} onTouchMove={(e) => gestureMove(e, 'side')} onTouchEnd={(e) => gestureEnd(e, 'side')} onTouchCancel={(e) => gestureEnd(e, 'side')} onClickCapture={suppressGestureClick}><div id="sideHead"><button id="libToggle" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'} aria-label={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={18}/><b>Your Library</b></button><button id="addBtn" onClick={addLibraryLink} data-tooltip="Add Spotify link" aria-label="Add Spotify link"><Icon name="add" size={17}/></button></div><div id="sideList">{links.length ? links.map((p, i) => <div className={`pitem ${view.type === 'playlist' && view.name === p.name ? 'active' : ''}`} key={p.url || p.name} data-tooltip={p.name} onClick={() => loadPlaylist(i)}><div className="pcover" data-tooltip={p.name || '?'} style={{ background: coverBackground(p.cover || p.tracks?.[0]?.cover, p.name) }} onMouseEnter={() => warmCover(p.cover || p.tracks?.[0]?.cover)} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><button className="pcoverPlay" data-tooltip={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={18}/></button></div><div className="pmeta"><b>{p.name || '?'}</b><small>{typeof p.total === 'number' && p.total > p.count ? `${p.count} of ${p.total} songs` : `${p.count} songs${p.partial ? ' (partial)' : ''}`}</small></div></div>) : <div id="empty"><h3>Your library is empty</h3><p>Click + above and paste a Spotify link.</p></div>}</div></aside><div id="sideResize" role="separator" aria-label="Resize library" aria-orientation="vertical" aria-valuemin={68} aria-valuemax={262} aria-valuenow={sideDragWidth ?? (collapsed ? 68 : 262)} tabIndex={0} onPointerDown={startSidebarResize} onPointerMove={moveSidebarResize} onPointerUp={finishSidebarResize} onPointerCancel={finishSidebarResize} onKeyDown={keySidebarResize}/><main id="main">{renderMain()}</main></div>
     <footer id="bar" onTouchStart={(e) => gestureStart(e, 'bar')} onTouchMove={(e) => gestureMove(e, 'bar')} onTouchEnd={(e) => gestureEnd(e, 'bar')} onTouchCancel={(e) => gestureEnd(e, 'bar')} onClickCapture={suppressGestureClick}><div className="barfull" style={{ display: 'contents' }}><div id="nowp"><button id="nowc" onClick={mobileOpen} data-tooltip="Open player" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)} /><div id="nowt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div>{currentTrack && <div className="nowsave-wrap"><button id="nowsave" className={inCurrentPlaylist ? 'on' : ''} onClick={toggleSaveMenu} aria-label="Add to playlist" aria-expanded={saveOpen} data-tooltip={inCurrentPlaylist ? 'Saved to this playlist' : 'Add to playlist'}><Icon name={inCurrentPlaylist ? 'check' : 'add'} size={15}/></button>{saveOpen && <div className="save-menu" role="dialog" aria-label="Add to playlist"><div className="save-head"><b>Add to playlist</b><button className="save-close" onClick={() => setSaveOpen(false)} aria-label="Close"><Icon name="close" size={14}/></button></div><div className="save-list">{links.length ? links.map((l) => { const inIt = !!(saveContains && saveContains[l.url || l.name]); return <button key={l.url || l.name} className={`save-row ${inIt ? 'in' : ''}`} onClick={() => togglePlaylistMembership(l)} aria-pressed={inIt}><span className="save-name">{l.name || '?'}</span><span className="save-mark"><Icon name={inIt ? 'check' : 'add'} size={13}/></span></button>; }) : <p className="save-empty">No playlists yet - add one with the + button in your library.</p>}</div></div>}</div>}</div><div id="ctr">{controls()}{progress()}</div><div id="rside">{volumeRow()}<button id="dfsBtn" disabled={!currentTrack} className="aicon desktop-fullscreen" onClick={toggleDesktop} data-tooltip={desktopPlayer ? 'Exit full screen' : 'Full screen'} aria-label={desktopPlayer ? 'Exit full screen' : 'Full screen'}><Icon name={desktopPlayer ? 'exitFullscreen' : 'fullscreen'}/></button></div></div></footer>
-    <div id="fs" className={mobilePlayer ? 'on' : ''} onTouchStart={(e) => gestureStart(e, 'fs')} onTouchMove={(e) => gestureMove(e, 'fs')} onTouchEnd={(e) => gestureEnd(e, 'fs')} onTouchCancel={(e) => gestureEnd(e, 'fs')} onClickCapture={suppressGestureClick}><div id="fsGrip" onClick={mobileClose}/><div id="fsHead"><span id="fsPl">{playingPlaylist || 'Now playing'}</span></div><div id="fsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)}/><div id="fsTxt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div><div id="fsQueue" style={{ display: upcoming.length ? '' : 'none' }}><div id="fsQhead"><b>Up next</b><span id="fsQcount">{upcoming.length} {upcoming.length === 1 ? 'track' : 'tracks'}</span></div><div id="fsQrows">{upcoming.map((i, n) => <div className="fsQrow" key={`${trackKey(queue[i])}-${i}`} onClick={() => playIndex(i)}><span className="fsQn">{n + 1}</span><span className="fsQcov" style={{ background: coverBackground(queue[i]?.cover, queue[i]?.t) }}/><span className="fsQt"><b>{queue[i]?.t}</b><small>{queue[i]?.a}</small></span><span className="fsQtime">{fmt(queue[i]?.ms)}</span></div>)}</div></div><div id="fsIsland">{progress(true)}{controls(true)}{volumeRow(true)}</div></div>
+    <div id="fs" className={mobilePlayer ? 'on' : ''} onTouchStart={(e) => gestureStart(e, 'fs')} onTouchMove={(e) => gestureMove(e, 'fs')} onTouchEnd={(e) => gestureEnd(e, 'fs')} onTouchCancel={(e) => gestureEnd(e, 'fs')} onClickCapture={suppressGestureClick}><div id="fsGrip" onClick={mobileClose}/><div id="fsHead"><span id="fsPl">{playingPlaylist || 'Now playing'}</span></div><div id="fsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)}/><div id="fsTxt"><b>{currentTrack?.t || 'Choose a playlist to listen'}</b><small>{currentTrack?.a || 'nothing playing'}</small></div><div id="fsQueue" style={{ display: upcoming.length ? '' : 'none' }}><div id="fsQhead"><b>Up next</b><span id="fsQcount">{upcoming.length} {upcoming.length === 1 ? 'track' : 'tracks'}</span></div><div id="fsQrows">{mobilePlayer && upcoming.map((i, n) => <div className="fsQrow" key={`${trackKey(queue[i])}-${i}`} onClick={() => playIndex(i)}><span className="fsQn">{n + 1}</span><span className="fsQcov" style={{ background: coverBackground(queue[i]?.cover, queue[i]?.t) }}/><span className="fsQt"><b>{queue[i]?.t}</b><small>{queue[i]?.a}</small></span><span className="fsQtime">{fmt(queue[i]?.ms)}</span></div>)}</div></div><div id="fsIsland">{progress(true)}{controls(true)}{volumeRow(true)}</div></div>
     {desktopPlayer && <div id="dfs" className={`open ${desktopIdle ? 'idle' : ''}`} onMouseMove={() => setDesktopIdle(false)}><div id="dfsMain"><div id="dfsTop"><span id="dfsTopTitle">{playingPlaylist || 'Now playing'}</span><button id="dfsExit" onClick={() => setDesktopPlayer(false)} data-tooltip="Exit full screen"><Icon name="exitFullscreen" size={18}/></button></div><div id="dfsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }}/><div id="dfsInfo"><b id="dfsTitle">{currentTrack?.t || 'Choose a playlist to listen'}</b><small id="dfsArtist">{currentTrack?.a || 'nothing playing'}</small></div></div><div id="dfsQueue" style={{ display: queue.length ? '' : 'none' }}><div id="dfsQhead"><b>Queue</b><span id="dfsQcount">{queue.length} {queue.length === 1 ? 'track' : 'tracks'}</span></div><div id="dfsQrows">{currentTrack ? <><div className="dfsQsect">Now Playing</div><QueueRow track={currentTrack} active onClick={() => playIndex(currentIndex)} />{upcoming.length > 0 && <div className="dfsQsect">Next Up</div>}{upcoming.map((i) => <QueueRow key={`${trackKey(queue[i])}-${i}`} track={queue[i]} onClick={() => playIndex(i)}/>)}</> : queue.map((track, index) => <QueueRow key={`${trackKey(track)}-${index}`} track={track} onClick={() => playIndex(index)}/>)}</div></div></div>}
     <div id="toast" className="toast-viewport" aria-label="Notifications" aria-live="polite">
       {download && <div className="toast-card toast-download" role="status">
