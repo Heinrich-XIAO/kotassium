@@ -131,7 +131,7 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("while (interactiveRef.current > 0)", self.app)
         self.assertIn("asInteractive(() => findCandidates(track))", self.app)
         self.assertIn("asInteractive(() => downloadId(candidate.id, track.t, false))", self.app)
-        self.assertIn("const pending = asInteractive((async () => {", self.app)
+        self.assertIn("const pending = asInteractive(async () => {", self.app)
         # Pacing: strictly one background item at a time with seconds of air
         # between items, so this lane can never burst the search/download
         # queues into rate-limit territory.
@@ -232,6 +232,22 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("onTouchStart={(e) => gestureStart(e, 'side')}", self.app)
         self.assertIn("onKeyDown={(e) => e.key === 'Enter' && search()}", self.app)
         self.assertIn("onClick={toggleDesktop}", self.app)
+
+    def test_playlist_play_is_not_broken_by_a_failed_warm_up(self):
+        # Opening a playlist and starting it used to share one catch, and the
+        # play half awaited a prefetch job that could reject - so pressing play
+        # on a home-page card showed "Could not open playlist" over a playlist
+        # that had already opened, and never started the queue.
+        self.assertNotIn("toast('Could not open playlist')", self.app)
+        self.assertIn('job.then((value) => value !== false, () => false)', self.app)
+        self.assertIn("startQueueRef.current(tracks, item.name || 'Playlist', index)", self.app)
+
+    def test_warm_up_lane_is_handed_a_function_not_a_promise(self):
+        # asInteractive(fn) awaits fn(). Invoking the arrow at the call site
+        # (`asInteractive((async () => {...})())`) passed a promise instead, so
+        # every prefetch job resolved to "fn is not a function".
+        self.assertNotIn('asInteractive((async', self.app)
+        self.assertIn('asInteractive(async () => {', self.app)
 
 
 if __name__ == "__main__":

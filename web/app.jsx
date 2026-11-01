@@ -312,14 +312,21 @@ function App() {
   const loadLinks = useCallback(() => API('/api/links').then((j) => { const rows = j.links || []; setLinks(rows); return rows; }), []);
   const startQueueRef = useRef(null);
   const shuffleRef = useRef(false);
+  // Opening a playlist and starting it are two failures, not one. They used to
+  // share a catch, so anything the play half threw was reported as "could not
+  // open playlist" while the playlist was already on screen and the queue was
+  // never started - which is what a prefetch job that rejected did (see
+  // prefetchTrack: the warm-up lane is handed a function, not a promise).
   const loadPlaylist = useCallback(async (i, play = false, suppliedLinks = links) => {
     const item = suppliedLinks[i];
     if (!item) return;
     const req = ++requestRef.current;
     const key = item.url || item.name || '';
+    let full = null;
+    let tracks = [];
     try {
       const warmed = key && warmedPlaylists.current.get(key);
-      let full = warmed ? await warmed : null;
+      full = warmed ? await warmed : null;
       if (req !== requestRef.current) return;
       if (!full?.tracks?.length) {
         warmedPlaylists.current.delete(key);
@@ -327,21 +334,28 @@ function App() {
         if (req !== requestRef.current) return;
       }
       if (full?.error) full = item;
-      const tracks = (full?.tracks || item.tracks || []).filter((t) => t?.t);
-      setPlaylist(tracks); setView({ type: 'playlist', name: item.name || 'Playlist' });
-      setDrawerOpen(false);
-      if (play && tracks.length) {
-        const choice = full?.choice;
-        const warmedIndex = choice ? tracks.findIndex((t) => trackKey(t) === trackKey(choice)) : -1;
-        if (key && warmedIndex >= 0) {
-          const warmed = prefetchJobsRef.current.get(trackKey(choice));
-          if (warmed && await warmed === false) prefetchJobsRef.current.delete(trackKey(choice));
-          if (req !== requestRef.current) return;
-        }
-        const index = warmedIndex >= 0 ? warmedIndex : (shuffle ? Math.floor(Math.random() * tracks.length) : 0);
-        startQueueRef.current(tracks, item.name || 'Playlist', index);
+      tracks = (full?.tracks || item.tracks || []).filter((t) => t?.t);
+    } catch (error) {
+      toast(`Could not open playlist: ${error.message || 'network error'}`);
+      return;
+    }
+    setPlaylist(tracks); setView({ type: 'playlist', name: item.name || 'Playlist' });
+    setDrawerOpen(false);
+    if (!play || !tracks.length) return;
+    try {
+      const choice = full?.choice;
+      const warmedIndex = choice ? tracks.findIndex((t) => trackKey(t) === trackKey(choice)) : -1;
+      if (key && warmedIndex >= 0) {
+        // A warm-up that failed is not a playlist that failed: forget the job
+        // and play, rather than letting its rejection escape into the caller.
+        const job = prefetchJobsRef.current.get(trackKey(choice));
+        const warmedOk = job ? await job.then((value) => value !== false, () => false) : true;
+        if (!warmedOk) prefetchJobsRef.current.delete(trackKey(choice));
+        if (req !== requestRef.current) return;
       }
-    } catch { toast('Could not open playlist'); }
+      const index = warmedIndex >= 0 ? warmedIndex : (shuffle ? Math.floor(Math.random() * tracks.length) : 0);
+      startQueueRef.current(tracks, item.name || 'Playlist', index);
+    } catch (error) { toast(error.message || 'Could not start this playlist'); }
   }, [links, shuffle, toast]);
 
   const chooseNext = useCallback((q = queue, index = currentIndex, shuf = shuffle, order = shuffleOrder, pos = shufflePos) => {
@@ -608,7 +622,11 @@ function App() {
     const key = trackKey(track);
     if (prefetchJobsRef.current.has(key)) return prefetchJobsRef.current.get(key);
     prefetchRef.current.add(key);
-    const pending = asInteractive((async () => {
+    // asInteractive takes the function and awaits its result. Invoking the
+    // arrow here (an extra `()` after the closing brace) handed it a promise
+    // instead, so every warm-up job resolved to `fn is not a function`, and
+    // any click that awaited one lost its playback.
+    const pending = asInteractive(async () => {
       try {
         const knownId = track.id && (track.source === 'youtube' || track.source === 'newgrounds' || track.source === 'soundcloud');
         const cachedId = !track.source && cacheRef.current[key];
@@ -624,7 +642,7 @@ function App() {
         prefetchRef.current.delete(key);
         return false;
       }
-    })());
+    });
     prefetchJobsRef.current.set(key, pending);
     return pending;
   }, [asInteractive, findCandidates, rememberId, runDownload]);
