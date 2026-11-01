@@ -24,30 +24,39 @@ const shuffledExcept = (length, excluded) => {
 // no-repeat keeps a repeated tile inside the same box.
 const gradient = (name) => { const h = hue(name); return `linear-gradient(135deg,hsl(${h},70%,38%),hsl(${(h + 40) % 360},60%,20%)) no-repeat padding-box`; };
 const escStyle = (url) => `url("${String(url || '').replace(/["'<>)]/g, (c) => encodeURIComponent(c))}") center/cover no-repeat padding-box`;
+// Every glyph is drawn on one 24-unit grid and its position lives in the
+// coordinates. Never add a `transform` here: it is measured in user units, so
+// a value tuned to centre a glyph inside one button misplaces it inside every
+// other one at a different size. That is how the play triangle went from a CSS
+// translateX(1px) to translate(0.6 0) to translate(-1.145 0) - too far right,
+// then too far left - while each round was "verified" with
+// getBoundingClientRect, which reports the ink BOX and cannot see that a
+// right-pointing triangle's mass sits at its base. The centres below come from
+// tools/icon_bbox.py (which measures the box, arc bulges included) and are
+// asserted by tests/test_icons.py.
 function Icon({ name, size = 20, children }) {
-  const viewBox = ['add', 'play', 'pause', 'prev', 'next'].includes(name) ? '0 0 16 16' : '0 0 24 24';
   const p = {
-    library: <><path d="M3 3h2.5v18H3zM7 3h2.5v18H7zM11 3.6L21.6 5v14L11 20.4z" fill="currentColor" stroke="none" /></>,
-    home: <path d="M12 3l9 8h-2.5v9h-5v-6h-3v6h-5v-9H3z" fill="currentColor" stroke="none" />,
+    library: <path d="M2.7 3L5.2 3L5.2 21L2.7 21ZM6.7 3L9.2 3L9.2 21L6.7 21ZM10.7 3.6L21.3 5L21.3 19L10.7 20.4Z" fill="currentColor" stroke="none" />,
+    home: <path d="M12 3.5L21 11.5L18.5 11.5L18.5 20.5L13.5 20.5L13.5 14.5L10.5 14.5L10.5 20.5L5.5 20.5L5.5 11.5L3 11.5Z" fill="currentColor" stroke="none" />,
     search: <><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></>,
     close: <><path d="m5 5 14 14M19 5 5 19"/></>,
-    browse: <path d="M3 4.5h13v2H3zM3 8.25h13v2H3zM3 12h18v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z" fill="currentColor" stroke="none" />,
-    // the plus is drawn 1.5..14.5 on both axes so its optical centre lands on
-    // the viewBox centre (8,8) - the earlier path sat 0.75 up and to the right.
-    add: <path d="M7.25 2.25a.75.75 0 0 1 1.5 0v5h5a.75.75 0 0 1 0 1.5h-5v5a.75.75 0 0 1-1.5 0V8.75H2.25a.75.75 0 0 1 0-1.5h5v-5z" fill="currentColor" stroke="none" />,
+    browse: <path d="M3 3.75L16 3.75L16 5.75L3 5.75ZM3 7.5L16 7.5L16 9.5L3 9.5ZM3 11.25L21 11.25L21 18.75A1.5 1.5 0 0 1 19.5 20.25L4.5 20.25A1.5 1.5 0 0 1 3 18.75Z" fill="currentColor" stroke="none" />,
+    add: <path d="M10.875 3.375A1.125 1.125 0 0 1 13.125 3.375L13.125 10.875L20.625 10.875A1.125 1.125 0 0 1 20.625 13.125L13.125 13.125L13.125 20.625A1.125 1.125 0 0 1 10.875 20.625L10.875 13.125L3.375 13.125A1.125 1.125 0 0 1 3.375 10.875L10.875 10.875L10.875 3.375Z" fill="currentColor" stroke="none" />,
     check: <path d="M4.5 12.5l5 5 10-11"/>,
-    play: <path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.288V1.713z" transform="translate(-1.145 0)" fill="currentColor" stroke="none" />,
-    pause: <path d="M4.8 3a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm4.8 0a.7.7 0 0 0-.7.7v10.6a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-1.6z" transform="translate(0 -1)" fill="currentColor" stroke="none" />,
-    prev: <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z" fill="currentColor" stroke="none" />,
-    next: <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z" fill="currentColor" stroke="none" />,
+    // the triangle needs its ink 0.75 right of centre: a box-centred play
+    // glyph reads pulled towards its base, which is exactly what the old
+    // -1.145 nudge made worse.
+    play: <path d="M3.533 2.569A1.05 1.05 0 0 1 5.108 1.658L21.443 11.09A1.05 1.05 0 0 1 21.443 12.908L5.108 22.34A1.05 1.05 0 0 1 3.533 21.431L3.533 2.569Z" fill="currentColor" stroke="none" />,
+    pause: <path d="M7.2 3A1.05 1.05 0 0 0 6.15 4.05L6.15 19.95A1.05 1.05 0 0 0 7.2 21L9.6 21A1.05 1.05 0 0 0 10.65 19.95L10.65 4.05A1.05 1.05 0 0 0 9.6 3L8.55 3ZM14.4 3A1.05 1.05 0 0 0 13.35 4.05L13.35 19.95A1.05 1.05 0 0 0 14.4 21L16.8 21A1.05 1.05 0 0 0 17.85 19.95L17.85 4.05A1.05 1.05 0 0 0 16.8 3L14.4 3Z" fill="currentColor" stroke="none" />,
+    prev: <path d="M4.95 1.5A1.05 1.05 0 0 1 6 2.55L6 10.275L20.925 1.659A1.05 1.05 0 0 1 22.5 2.568L22.5 21.43A1.05 1.05 0 0 1 20.925 22.341L6 13.723L6 21.45A1.05 1.05 0 0 1 4.95 22.5L2.55 22.5A1.05 1.05 0 0 1 1.5 21.45L1.5 2.55A1.05 1.05 0 0 1 2.55 1.5L4.95 1.5Z" fill="currentColor" stroke="none" />,
+    next: <path d="M19.05 1.5A1.05 1.05 0 0 0 18 2.55L18 10.275L3.075 1.66A1.05 1.05 0 0 0 1.5 2.568L1.5 21.43A1.05 1.05 0 0 0 3.075 22.341L18 13.723L18 21.45A1.05 1.05 0 0 0 19.05 22.5L21.45 22.5A1.05 1.05 0 0 0 22.5 21.45L22.5 2.55A1.05 1.05 0 0 0 21.45 1.5L19.05 1.5Z" fill="currentColor" stroke="none" />,
     shuffle: <><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>,
     repeat: <><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></>,
     volume: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
     fullscreen: <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>,
     exitFullscreen: <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>,
-    settings: <><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.8 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.8-1l-1.7.7-1.4-2.4L7.1 15a8 8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.8-1l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.8 1l1.7-.7 1.4 2.4-1.4 1.1a8 8 0 0 1 0 2Z" transform="translate(-1 -2) scale(1.08)"/></>
   };
-  return <svg width={size} height={size} viewBox={viewBox} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children || p[name]}</svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children || p[name]}</svg>;
 }
 
 function TooltipLayer() {

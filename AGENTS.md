@@ -19,6 +19,18 @@ of these lines as the message's last line:
 - `COMMITTED AND PUSHED` — changes were committed and pushed to GitHub
 - `UNCOMMITTED` — changes exist locally but were not committed/pushed
 
+- **Icons are measured, not nudged.** Every glyph in `web/app.jsx`'s `Icon`
+  shares the `0 0 24 24` grid and carries its position in the path
+  coordinates. Never add a `transform` to a glyph: it is in user units, so it
+  centres that glyph at exactly one render size and misplaces it at every
+  other. Four "centre the glyph" commits in a row did that - CSS
+  `translateX(1px)`, then `translate(0.6 0)`, then `translate(-1.145 0)` - and
+  each was checked with `getBoundingClientRect`, which reports the ink *box*
+  and cannot see that a right-pointing triangle's mass sits at its base. Use
+  `tools/icon_bbox.py` to compute a path's ink box without a browser (fixtures
+  and arc bulges included) and let `tests/test_icons.py` pin each single-path
+  glyph's centre; the play triangle is the one deliberate asymmetry, 0.75
+  right of centre.
 - **The page is the only UI.** `tests/test_wrappers.py` fails if `desktop.py`
   or `MainActivity.java` contains markup, styles, or chunks of the page. If
   something is wrong on Android, fix `web/index.html`.
