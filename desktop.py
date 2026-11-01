@@ -19,8 +19,19 @@ thread because calling evaluate_js on the GTK main loop would deadlock.
 import argparse, json, os, queue, sys, threading, time, urllib.request
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-if BASE not in sys.path:
-    sys.path.insert(0, BASE)
+
+# A macOS build may reuse the bundle py2app produced last time (build-macos.sh),
+# and py2app compiles the modules it packages rather than leaving them loose, so
+# the ones it holds are from an older commit. This build's copies go to app/ and
+# have to win: both entries go to the front of sys.path, app/ first. On a source
+# checkout and a full py2app build app/ does not exist and this only puts BASE
+# back where the interpreter already had it.
+_FRESH = os.path.join(BASE, "app")
+_OUR_PATH = [_FRESH, BASE] if os.path.isdir(_FRESH) else [BASE]
+for _entry in _OUR_PATH:
+    while _entry in sys.path:
+        sys.path.remove(_entry)
+sys.path[:0] = _OUR_PATH
 
 import serve_web
 import notify as notify_mod
@@ -105,6 +116,10 @@ def selftest():
     print("python  %s" % sys.version.split()[0])
     print("frozen  %s" % bool(getattr(sys, "frozen", False)))
     print("base    %s" % serve_web.BASE)
+    # Where the code came from. CI asserts this is the reused bundle's own
+    # overlay when the build took that path, so a build cannot ship the copies
+    # py2app compiled in earlier.
+    print("code    %s" % os.path.dirname(os.path.abspath(serve_web.__file__)))
     for rel in ("web/index.html", "assets/kotassium.svg"):
         p = os.path.join(serve_web.BASE, rel)
         print("%-7s %s" % ("ok" if os.path.isfile(p) else "MISSING", p))

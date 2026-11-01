@@ -1,29 +1,34 @@
 """Copy this checkout into an app bundle py2app already built (macOS CI).
 
-py2app is the slow part of a macOS build and almost none of it depends on our
-own sources: it packages the interpreter, pyobjc, pywebview and the boot stub,
+py2app is the slow part of a macOS build and none of it depends on our own
+sources: it packages the interpreter, pyobjc, pywebview and the boot stub,
 which only change when a dependency does. ``build-macos.sh`` therefore restores
 the ``Kotassium.app`` the previous run produced (cached on ``setup-macos.py``,
-``requirements-macos-build.txt`` and ``setup.sh``) and calls this to replace
-everything that came from *this* commit - our modules, the page, the assets,
-the icon and the version stamp - before the bundle is re-signed.
+``requirements-macos-build.txt`` and ``setup.sh``) and calls this to bring it up
+to this commit - our modules, the page, the assets, the icon and the version
+stamp - before the bundle is re-signed.
 
-The modules to replace are read out of ``setup-macos.py`` rather than guessed:
-its ``APP`` and ``includes`` are exactly what py2app was told to bundle, so a
-module added there is a module this looks for. ``py2app`` scatters them - the
-app script lands at ``Contents/Resources/``, the includes under
-``lib/python3.x/``, and in some versions they are inside a zip - so each one is
-located by name, wherever it is.
+Where py2app *put* the modules it packaged is not something this needs to know,
+and it is not something worth guessing: it keeps ``desktop.py`` loose at
+``Contents/Resources/`` and compiles the ``includes`` into the bundle, so they
+are not files that can simply be overwritten. Instead:
 
-It refuses rather than guesses. A module in the manifest that the bundle does
-not contain means the cache predates that module, and a bundle laid out in a
-way this does not recognise means the fast path is not safe: both exit 3 and
-``build-macos.sh`` falls back to a full py2app build, which is slower but
-cannot ship a half-updated app.
+  * ``Contents/Resources/app/`` is written with this build's modules, and
+    ``desktop.py`` puts that directory first on ``sys.path`` - so the copies
+    py2app compiled in are shadowed rather than relocated;
+  * the loose ``desktop.py``, which py2app's boot script runs by path, is
+    replaced in place;
+  * ``web/``, ``assets/`` and the icon are replaced whole, because the commit
+    is the truth about them;
+  * ``Info.plist`` is stamped with this run's version.
 
-The last thing it does is prove it: every module it wrote is compared byte for
-byte against the checkout, so a partial copy fails here rather than in the
-smoke test further down.
+``desktop.py``'s ``--selftest`` reports the directory ``serve_web`` was imported
+from, and CI fails the build when a reused bundle does not report ``app/`` -
+shadowing is only a fast path if it is the path actually taken.
+
+It refuses rather than guesses: no loose ``desktop.py`` means a layout this does
+not understand, so it exits 3 and ``build-macos.sh`` rebuilds with py2app. Every
+file it writes is compared byte for byte against the checkout afterwards.
 """
 
 import argparse
@@ -32,12 +37,11 @@ import os
 import plistlib
 import shutil
 import sys
-import zipfile
 
 REFUSE = 3
 """Exit code meaning "not a bundle I recognise"; build-macos.sh rebuilds."""
 
-MAX_DEPTH = 5
+MAX_DEPTH = 4
 
 
 def refuse(reason):
@@ -78,50 +82,21 @@ def bundle_modules(root):
     return [name if name.endswith(".py") else "%s.py" % name for name in app + includes]
 
 
-def locate(resources, wanted):
-    """Map each wanted module to ("dir", path) or ("zip", path, member)."""
-    found = {}
-    for root, dirs, names in os.walk(resources):
+def find_file(resources, name):
+    """The bundle's own copy of one file, wherever py2app left it."""
+    for root, dirs, files in os.walk(resources):
         if root[len(resources):].count(os.sep) >= MAX_DEPTH:
             dirs[:] = []
             continue
-        dirs[:] = [d for d in dirs if d != "__pycache__"]
-        for name in names:
-            if name in wanted and name not in found:
-                found[name] = ("dir", os.path.join(root, name))
-        for name in names:
-            if not name.endswith(".zip") or all(entry in found for entry in wanted):
-                continue
-            path = os.path.join(root, name)
-            try:
-                with zipfile.ZipFile(path) as archive:
-                    entries = set(archive.namelist())
-            except Exception:
-                continue
-            for entry in wanted:
-                if entry in entries and entry not in found:
-                    found[entry] = ("zip", path, entry)
-    return found
+        dirs[:] = [d for d in dirs if d not in ("__pycache__", "app")]
+        if name in files:
+            return os.path.join(root, name)
+    return None
 
 
-def replace_in_zip(path, members):
-    """Rewrite the members we own, leaving every other entry untouched."""
-    replaced = path + ".new"
-    stale = {os.path.splitext(name)[0] + ".pyc" for name in members}
-    with zipfile.ZipFile(path) as source, zipfile.ZipFile(replaced, "w") as target:
-        for item in source.infolist():
-            if item.filename in members:
-                target.writestr(item, members[item.filename])
-            elif item.filename in stale:
-                # zipimport prefers bytecode whose header matches; a compiled
-                # copy of the old source must go with the source it came from.
-                continue
-            else:
-                target.writestr(item, source.read(item.filename))
-    os.replace(replaced, path)
-
-    with zipfile.ZipFile(path) as archive:
-        return all(archive.read(name) == data for name, data in members.items())
+def same(left, right):
+    with open(left, "rb") as a, open(right, "rb") as b:
+        return a.read() == b.read()
 
 
 def main(argv=None):
@@ -142,30 +117,24 @@ def main(argv=None):
     for name in wanted:
         if not os.path.isfile(os.path.join(root, name)):
             return refuse("the checkout has no %s" % name)
-    sources = {name: open(os.path.join(root, name), "rb").read() for name in wanted}
 
-    located = locate(resources, set(wanted))
-    missing = [name for name in wanted if name not in located]
-    if missing:
-        return refuse("the bundle has no %s" % ", ".join(sorted(missing)))
+    script = find_file(resources, wanted[0])
+    if not script:
+        return refuse("no %s for py2app's boot script to run" % wanted[0])
 
-    by_dir, by_zip = {}, {}
-    for name, where in located.items():
-        if where[0] == "dir":
-            by_dir.setdefault(os.path.dirname(where[1]), []).append(name)
-        else:
-            by_zip.setdefault(where[1], {})[where[2]] = sources[name]
-
-    for directory, names in by_dir.items():
-        for name in names:
-            shutil.copy2(os.path.join(root, name), os.path.join(directory, name))
-            with open(os.path.join(root, name), "rb") as wanted_file:
-                with open(os.path.join(directory, name), "rb") as copied:
-                    if wanted_file.read() != copied.read():
-                        return refuse("%s did not copy cleanly" % name)
-    for archive, members in by_zip.items():
-        if not replace_in_zip(archive, members):
-            return refuse("%s did not take the new sources" % os.path.basename(archive))
+    fresh = os.path.join(resources, "app")
+    if os.path.isdir(fresh):
+        shutil.rmtree(fresh)
+    os.makedirs(fresh)
+    for name in wanted:
+        shutil.copy2(os.path.join(root, name), os.path.join(fresh, name))
+        if not same(os.path.join(root, name), os.path.join(fresh, name)):
+            return refuse("%s did not copy cleanly" % name)
+    # The boot script runs this one by path, so it has to be replaced where it
+    # is as well as being importable from app/.
+    shutil.copy2(os.path.join(root, wanted[0]), script)
+    if not same(os.path.join(root, wanted[0]), script):
+        return refuse("%s did not copy cleanly" % wanted[0])
 
     for tree in ("web", "assets"):
         source = os.path.join(root, tree)
@@ -189,10 +158,8 @@ def main(argv=None):
         with open(info, "wb") as handle:
             plistlib.dump(plist, handle, fmt=plistlib.FMT_BINARY)
 
-    print("reused the bundle: %d modules (%s), web/, assets/%s" % (
-        len(wanted),
-        "zipped" if by_zip else "loose",
-        ", version %s" % args.version if args.version else ""))
+    print("reused the bundle: %d modules shadowing py2app's copies, web/, assets/%s" % (
+        len(wanted), ", version %s" % args.version if args.version else ""))
     return 0
 
 

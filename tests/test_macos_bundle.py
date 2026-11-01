@@ -3,17 +3,16 @@
 py2app packages the interpreter, pyobjc and pywebview, which do not depend on
 our sources, so CI caches its output and replaces the files the checkout owns
 instead of rebuilding it every push. That makes correctness depend on one
-promise: the helper replaces *everything* the commit owns - and proves each
-copy byte for byte - or refuses so the build falls back to py2app. These tests
-hold that promise: a bundle it cannot read is a refusal, never a partial
-update, and a bundle it can read really does end up with this checkout's
-modules, page and version in it.
+promise: the helper writes *everything* the commit owns - and proves each copy
+byte for byte - or refuses so the build falls back to py2app.
 
-The set of modules comes from ``setup-macos.py``, and py2app scatters them: the
-app script lands at ``Contents/Resources/``, the includes under
-``lib/python3.x/``, and older versions keep them in a zip. All of those shapes
-are covered here, because the shape that was *not* covered is the one that made
-the first fast-path run rebuild in 26s instead.
+py2app compiles the modules it packages, so they cannot be overwritten where
+they lie; this build's copies go to ``Contents/Resources/app/``, which
+``desktop.py`` puts first on ``sys.path``. That is only a fast path if it is the
+path actually taken, which is why ```--selftest`` reports where ``serve_web``
+was imported from and CI asserts it. These tests hold the two halves that can be
+checked here: the bundle really does end up carrying this checkout's files, and
+a bundle this does not understand is refused rather than half-updated.
 """
 
 import os
@@ -23,7 +22,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HELPER = os.path.join(ROOT, "tools", "update-macos-bundle.py")
@@ -43,10 +41,10 @@ def read(rel):
         return f.read()
 
 
-def make_checkout(path, app="desktop.py", includes=("serve_web", "updater")):
+def make_checkout(path, app="desktop", includes=("serve_web", "updater")):
     with open(os.path.join(path, "setup-macos.py"), "w") as f:
         f.write(SETUP)
-    modules = [app] + ["%s.py" % name for name in includes]
+    modules = ["%s.py" % app] + ["%s.py" % name for name in includes]
     for name in modules:
         with open(os.path.join(path, name), "w") as f:
             f.write("# %s from this commit\n" % name)
@@ -62,53 +60,28 @@ def make_checkout(path, app="desktop.py", includes=("serve_web", "updater")):
     return modules
 
 
-def plist(app, keys=("CFBundleShortVersionString", "CFBundleVersion")):
-    path = os.path.join(app, "Contents", "Info.plist")
-    if not os.path.exists(path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "wb") as f:
-            plistlib.dump({"CFBundleIdentifier": "app.kotassium.desktop"}, f,
-                          fmt=plistlib.FMT_BINARY)
-    with open(path, "rb") as f:
-        return plistlib.load(f)
+def make_bundle(app, script="desktop.py", includes=("serve_web.py", "updater.py")):
+    """py2app's shape: the script loose at Resources/, includes compiled in.
 
-
-def set_plist(app):
+    The includes are *not* written as .py files, because a compiled bundle is
+    exactly the case that broke the first attempt: there is no file to replace,
+    so the overlay has to shadow them.
+    """
+    resources = os.path.join(app, "Contents", "Resources")
+    libdir = os.path.join(resources, "lib", "python3.12")
+    os.makedirs(libdir)
+    with open(os.path.join(resources, script), "w") as f:
+        f.write("# stale copy from an older commit\n")
+    for name in includes:
+        with open(os.path.join(libdir, name[:-3] + ".pyc"), "wb") as f:
+            f.write(b"stale bytecode")
+    with open(os.path.join(libdir, "webview.py"), "w") as f:
+        f.write("# a dependency, not ours\n")
     with open(os.path.join(app, "Contents", "Info.plist"), "wb") as f:
         plistlib.dump({"CFBundleIdentifier": "app.kotassium.desktop",
                        "CFBundleShortVersionString": "0.0.1",
                        "CFBundleVersion": "0.0.1"}, f, fmt=plistlib.FMT_BINARY)
-
-
-def make_split_bundle(app, modules):
-    """py2app 0.28's real shape: script at Resources/, includes in lib/python3.12/."""
-    resources = os.path.join(app, "Contents", "Resources")
-    libdir = os.path.join(resources, "lib", "python3.12")
-    os.makedirs(libdir)
-    with open(os.path.join(resources, "desktop.py"), "w") as f:
-        f.write("# stale copy from an older commit\n")
-    for name in modules[1:]:
-        with open(os.path.join(libdir, name), "w") as f:
-            f.write("# stale copy from an older commit\n")
-    with open(os.path.join(libdir, "webview.py"), "w") as f:
-        f.write("# a dependency, not ours\n")
-    set_plist(app)
     return resources, libdir
-
-
-def make_zipped_bundle(app, modules):
-    """The other shape py2app produces: the app's modules in site-packages.zip."""
-    resources = os.path.join(app, "Contents", "Resources")
-    libdir = os.path.join(resources, "lib", "python3.12")
-    os.makedirs(libdir)
-    archive = os.path.join(libdir, "site-packages.zip")
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
-        for name in modules:
-            z.writestr(name, "# stale copy from an older commit\n")
-        z.writestr("desktop.pyc", "stale bytecode")
-        z.writestr("webview/__init__.py", "# a dependency, not ours\n")
-    set_plist(app)
-    return archive
 
 
 class BundleReuseTests(unittest.TestCase):
@@ -127,63 +100,81 @@ class BundleReuseTests(unittest.TestCase):
                                "--root", self.checkout, *args],
                               capture_output=True, text=True)
 
-    def test_a_bundle_without_our_modules_is_refused(self):
+    def test_a_bundle_without_our_script_is_refused(self):
         result = self.run_helper()
         self.assertEqual(result.returncode, REFUSE, result.stderr)
         self.assertIn("no Contents/Resources", result.stderr)
 
-    def test_a_bundle_missing_a_module_is_refused(self):
-        # A module the manifest lists but the cache predates: replacing the
-        # rest would ship an app whose imports fail, so nothing is replaced.
-        resources, libdir = make_split_bundle(self.app, self.modules)
-        os.remove(os.path.join(libdir, "serve_web.py"))
+    def test_a_bundle_that_cannot_run_our_script_is_refused(self):
+        resources, libdir = make_bundle(self.app)
+        os.remove(os.path.join(resources, "desktop.py"))
         result = self.run_helper()
         self.assertEqual(result.returncode, REFUSE, result.stderr)
-        self.assertIn("the bundle has no serve_web.py", result.stderr)
-        with open(os.path.join(resources, "desktop.py")) as f:
-            self.assertEqual(f.read(), "# stale copy from an older commit\n",
-                             "a refused bundle must not be half-updated")
+        self.assertIn("no desktop.py for py2app's boot script to run", result.stderr)
+        self.assertFalse(os.path.isdir(os.path.join(resources, "app")),
+                         "a refused bundle must not be touched at all")
 
-    def test_the_split_layout_py2app_actually_writes_is_updated(self):
-        resources, libdir = make_split_bundle(self.app, self.modules)
+    def test_the_compiled_modules_are_shadowed_by_this_checkout(self):
+        resources, libdir = make_bundle(self.app)
         result = self.run_helper("--version", "9.9.9")
         self.assertEqual(result.returncode, 0, result.stderr)
 
         with open(os.path.join(resources, "desktop.py")) as f:
-            self.assertEqual(f.read(), "# desktop.py from this commit\n")
-        for name in self.modules[1:]:
-            with open(os.path.join(libdir, name)) as f:
+            self.assertEqual(f.read(), "# desktop.py from this commit\n",
+                             "the boot script runs this by path, so it must be replaced")
+        for name in self.modules:
+            path = os.path.join(resources, "app", name)
+            with open(path) as f:
                 self.assertEqual(f.read(), "# %s from this commit\n" % name)
-        with open(os.path.join(libdir, "webview.py")) as f:
-            self.assertEqual(f.read(), "# a dependency, not ours\n")
-        self.assertFalse(os.path.exists(os.path.join(libdir, "mpris_linux.py")),
-                         "a module setup-macos.py excludes must not be added")
+        self.assertFalse(os.path.exists(os.path.join(resources, "app", "mpris_linux.py")),
+                         "a module setup-macos.py excludes must not be introduced")
+        # py2app's own copies and the dependencies are left alone.
+        self.assertEqual(open(os.path.join(libdir, "webview.py")).read(),
+                         "# a dependency, not ours\n")
+        self.assertFalse(os.path.exists(os.path.join(resources, "app", "web")),
+                         "the page belongs next to the bundle, not in the overlay")
         self.assertTrue(os.path.isfile(os.path.join(resources, "web", "index.html")))
         self.assertTrue(os.path.isfile(os.path.join(resources, "assets", "kotassium.svg")))
-        self.assertEqual(plist(self.app)["CFBundleShortVersionString"], "9.9.9")
-        self.assertEqual(plist(self.app)["CFBundleVersion"], "9.9.9")
 
-    def test_a_zipped_bundle_is_updated_in_place(self):
-        archive = make_zipped_bundle(self.app, self.modules)
-        result = self.run_helper("--version", "9.9.9")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        with zipfile.ZipFile(archive) as z:
-            for name in self.modules:
-                self.assertEqual(z.read(name), ("# %s from this commit\n" % name).encode())
-            self.assertNotIn("desktop.pyc", z.namelist(),
-                             "stale bytecode would win over the new source")
-            self.assertEqual(z.read("webview/__init__.py"), b"# a dependency, not ours\n")
+        with open(os.path.join(self.app, "Contents", "Info.plist"), "rb") as f:
+            plist = plistlib.load(f)
+        self.assertEqual(plist["CFBundleShortVersionString"], "9.9.9")
+        self.assertEqual(plist["CFBundleVersion"], "9.9.9")
+        self.assertEqual(plist["CFBundleIdentifier"], "app.kotassium.desktop")
 
-    def test_the_page_is_replaced_rather_than_merged(self):
-        # A file deleted from web/ must not survive in the reused bundle; the
-        # page is one directory and the commit is the truth about it.
-        resources, _ = make_split_bundle(self.app, self.modules)
+    def test_the_overlay_is_replaced_not_merged(self):
+        # A module deleted from app/ (a module dropped from the bundle) must not
+        # survive, and a file deleted from web/ must not survive either: the
+        # commit is the truth about both.
+        resources, _ = make_bundle(self.app)
+        os.makedirs(os.path.join(resources, "app"))
+        with open(os.path.join(resources, "app", "removed.py"), "w") as f:
+            f.write("# deleted two commits ago\n")
         os.makedirs(os.path.join(resources, "web"))
-        gone = os.path.join(resources, "web", "removed.js")
-        with open(gone, "w") as f:
+        with open(os.path.join(resources, "web", "removed.js"), "w") as f:
             f.write("// deleted two commits ago\n")
+
         self.assertEqual(self.run_helper().returncode, 0)
-        self.assertFalse(os.path.exists(gone))
+        self.assertFalse(os.path.exists(os.path.join(resources, "app", "removed.py")))
+        self.assertFalse(os.path.exists(os.path.join(resources, "web", "removed.js")))
+
+
+class ShadowingTests(unittest.TestCase):
+    """The overlay only works because desktop.py puts app/ first on sys.path."""
+
+    def test_desktop_prefers_the_overlay_and_falls_back_to_its_own_dir(self):
+        desktop = read("desktop.py")
+        self.assertIn('_FRESH = os.path.join(BASE, "app")', desktop)
+        self.assertIn('_OUR_PATH = [_FRESH, BASE] if os.path.isdir(_FRESH) else [BASE]', desktop)
+        self.assertIn("sys.path[:0] = _OUR_PATH", desktop)
+
+    def test_selftest_reports_where_the_code_was_imported_from(self):
+        desktop = read("desktop.py")
+        self.assertIn('print("code    %s" % os.path.dirname(os.path.abspath(serve_web.__file__)))', desktop)
+        smoke = read(".github/workflows/build.yml").split("- name: Smoke test the bundle", 1)[1]
+        smoke = smoke.split("- name:", 1)[0]
+        self.assertIn("Resources/app", smoke,
+                      "CI must prove the reused bundle runs this build's code")
 
 
 class BuildWiringTests(unittest.TestCase):

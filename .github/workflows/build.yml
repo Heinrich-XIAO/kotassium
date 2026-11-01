@@ -135,12 +135,24 @@ jobs:
           key: desktop-venv-macos-${{ runner.arch }}-py312-${{ hashFiles('setup.sh', 'requirements-macos-build.txt') }}
 
       - name: Smoke test the bundle
+        env:
+          KOTASSIUM_REUSE_BUNDLE: ${{ steps.bundle.outputs.cache-hit == 'true' && '1' || '' }}
         run: |
           APP=dist/Kotassium.app/Contents/MacOS/Kotassium
           codesign --verify --deep --strict dist/Kotassium.app
           "$APP" --selftest | tee selftest.txt
           grep -q "RESULT  ok" selftest.txt
           grep -q "Resources/bin/yt-dlp" selftest.txt
+          if [ -n "$KOTASSIUM_REUSE_BUNDLE" ]; then
+            # The reused bundle still holds the modules py2app compiled in. It
+            # only counts as reused if this build's copies shadowed them, and
+            # selftest reports which directory serve_web came from.
+            grep -q "code    .*Resources/app" selftest.txt || {
+              echo "::error::the reused bundle is running py2app's copies, not this build's"
+              cat selftest.txt >&2
+              exit 1
+            }
+          fi
           KOTASSIUM_LIB="$RUNNER_TEMP/lib" "$APP" --no-window --port 8421 &
           PID=$!
           for i in $(seq 1 30); do
