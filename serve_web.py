@@ -160,6 +160,7 @@ FFMPEG = which("ffmpeg")
 YTDLP_INPROC = (os.environ.get("KOTASSIUM_YTDLP") == "inproc"
                 or (YTDLP is None and hasattr(sys, "getandroidapilevel")))
 LINKS = os.path.join(STATE, "links.json")
+TRACKIDS = os.path.join(STATE, "trackids.json")
 _lock = threading.RLock()
 
 _procs = set()
@@ -357,6 +358,40 @@ def find_link(url):
         if e.get("url") == url:
             return e
     return None
+
+
+def read_trackids():
+    """Durable "title|artist" -> track id map (see /api/trackids).
+
+    The page used to keep this only in localStorage, so clearing web data, a
+    second device, or a track whose title/artist changed sent a song that was
+    already on disk back through a fresh YouTube search - and the search can
+    pick a different video, which downloads a second copy under its id. The
+    pairing lives here instead, next to the library it describes.
+    """
+    with _lock:
+        try:
+            m = json.load(open(TRACKIDS))
+        except Exception:
+            return {}
+    return m if isinstance(m, dict) else {}
+
+
+def write_trackids(data):
+    with _lock:
+        tmp = TRACKIDS + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f, separators=(",", ":"))
+        os.replace(tmp, TRACKIDS)
+
+
+def library_ids():
+    """Ids that have a file in the library right now."""
+    try:
+        names = os.listdir(LIB)
+    except OSError:
+        return set()
+    return {os.path.splitext(n)[0] for n in names if track_name(n)}
 
 def save_link(url, jr):
     with _lock:
@@ -1161,6 +1196,30 @@ def handle_post(path, params, raw, hdr):
         # next launch. Returns immediately with state=checking; the page polls
         # /api/update until it settles.
         return 200, "application/json", json.dumps(updater.check_async()).encode(), None, False
+    if path == "/api/trackids":
+        # Merge what the page learned (a track played -> the id that was
+        # downloaded for it). An empty id forgets the pairing, which is what
+        # the page does when a candidate turns out to be the wrong track.
+        try:
+            j = json.loads(raw.decode("utf-8", "replace") or "{}")
+        except Exception:
+            return 400, "application/json", b'{"error":"bad_json"}', None, False
+        ids = j.get("ids") if isinstance(j, dict) else None
+        if not isinstance(ids, dict):
+            return 400, "application/json", b'{"error":"bad_request"}', None, False
+        with _lock:
+            m = read_trackids()
+            for key, tid in list(ids.items())[:500]:
+                key = str(key or "")[:400]
+                tid = str(tid or "")
+                if not key.strip() or len(key) < 2:
+                    continue
+                if not tid:
+                    m.pop(key, None)
+                elif re.fullmatch(r"[A-Za-z0-9_-]{3,64}", tid):
+                    m[key] = tid
+            write_trackids(m)
+        return 200, "application/json", b'{"ok":true}', None, False
     if path == "/api/cover/cache":
         try:
             j = json.loads(raw.decode("utf-8", "replace"))
@@ -1396,6 +1455,14 @@ def handle(path, params, hdr):
             return 200, "application/json", open(os.path.join(STATE, "manifest.json"), "rb").read(), None, False
         except Exception:
             return 200, "application/json", b"{}", None, False
+    if path == "/api/trackids":
+        # The durable "title|artist" -> id map, so a track that is already
+        # downloaded stays downloaded: the page starts from this instead of
+        # searching for it again. Entries whose file is gone are dropped here
+        # rather than handed out, so a stale id cannot point at nothing.
+        have = library_ids()
+        known = {k: v for k, v in read_trackids().items() if v in have}
+        return 200, "application/json", json.dumps(known).encode(), None, False
     if path == "/api/cover/index":
         # The page keeps its url -> file map in memory only, so every reload
         # used to re-learn each thumbnail from the remote CDN - and a view

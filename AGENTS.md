@@ -115,6 +115,14 @@ of these lines as the message's last line:
 - Downloads are jobs: `/api/ytdl` returns `{"job": id}`, `/api/job?id=` is
   polled by the page. `ytdl(vid, progress=...)` streams yt-dlp output and is
   shared by the job runner. Don't turn it back into a blocking request.
+- The `title|artist` → track-id map is what keeps a song from being downloaded
+  twice, so it lives next to the library (`webstate/trackids.json`,
+  `GET`/`POST /api/trackids`) and is only mirrored into the page's
+  localStorage. A browser-only map lost its contents on a cleared web view or
+  a second device, and the fresh search that followed could pick a different
+  video - a second file for the same song. `GET` returns only ids whose file
+  is still in `LIB`; the page reports a pairing when an id starts playing and
+  forgets one when its candidate turns out to be the wrong track.
 - The page reports now-playing to `POST /api/nowplaying`; `desktop.py` polls it
   for MPRIS and notifications. Media keys/MPRIS are Linux-only.
 - Desktop binds `127.0.0.1`. `--lan` / `--host 0.0.0.0` is the only way to

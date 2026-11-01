@@ -313,6 +313,80 @@ class CoverIndexTests(unittest.TestCase):
             serve_web._fails.clear()
 
 
+class TrackIdTests(unittest.TestCase):
+    """/api/trackids keeps the title|artist -> id map next to the library.
+
+    The page remembered which video it downloaded for a track in localStorage
+    only, so a cleared web view, a second device or a slightly different
+    title/artist sent a song that was already on disk back through a fresh
+    search - and a search can answer with another video, which downloads the
+    song again under its own id.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._saved = (serve_web.LIB, serve_web.TRACKIDS)
+        cls.tmp = tempfile.mkdtemp(prefix="kot-ids-")
+        for name in ("abc123.m4a", "zzz999.mp3", "abc123_preview.m4a"):
+            with open(os.path.join(cls.tmp, name), "wb") as f:
+                f.write(b"\0\1")
+        serve_web.LIB = cls.tmp
+        serve_web.TRACKIDS = os.path.join(cls.tmp, "webstate", "trackids.json")
+        os.makedirs(os.path.dirname(serve_web.TRACKIDS), exist_ok=True)
+        cls.srv = serve_web.make_server("127.0.0.1", 0)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        (serve_web.LIB, serve_web.TRACKIDS) = cls._saved
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def req(self, method, path, body=None):
+        headers = {"Origin": "http://127.0.0.1:%d" % self.port}
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request(method, path, body=body, headers=headers)
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, data
+
+    def post_ids(self, ids):
+        return self.req("POST", "/api/trackids", json.dumps({"ids": ids}).encode())
+
+    def ids(self):
+        return json.loads(self.req("GET", "/api/trackids")[1])
+
+    def test_remembers_and_forgets(self):
+        with open(serve_web.TRACKIDS, "w") as f:
+            f.write("{}")
+        self.assertEqual(self.post_ids({"Song One|Artist": "abc123"})[0], 200)
+        self.assertEqual(self.ids().get("Song One|Artist"), "abc123")
+        # a second report merges instead of replacing the map
+        self.post_ids({"Song Two|Artist": "zzz999"})
+        self.assertEqual(self.ids(), {"Song One|Artist": "abc123",
+                                      "Song Two|Artist": "zzz999"})
+        # an empty id forgets a pairing the track made wrong
+        self.post_ids({"Song Two|Artist": ""})
+        self.assertNotIn("Song Two|Artist", self.ids())
+
+    def test_drops_ids_whose_file_is_gone(self):
+        with open(serve_web.TRACKIDS, "w") as f:
+            json.dump({"Kept|A": "abc123", "Deleted|A": "gone999"}, f)
+        self.assertEqual(self.ids(), {"Kept|A": "abc123"})
+
+    def test_ignores_ids_that_are_not_track_ids(self):
+        with open(serve_web.TRACKIDS, "w") as f:
+            f.write("{}")
+        self.post_ids({"Bad|A": "../../etc/passwd", "Also|A": "has space"})
+        self.assertEqual(self.ids(), {})
+        self.assertEqual(self.req("POST", "/api/trackids", b"{}")[0], 400)
+
+
 class ResolverTests(unittest.TestCase):
     def test_ytdlp_resolves(self):
         self.assertTrue(serve_web.YTDLP, "yt-dlp should resolve to a command")

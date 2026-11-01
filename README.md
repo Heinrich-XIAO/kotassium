@@ -11,7 +11,10 @@ lands on every platform at once.
   tracks are plain mp3 fetches and SoundCloud tracks are reassembled from its
   HLS stream, so neither needs the extractor or ffmpeg), on-disk library, cover caching,
   now-playing state, optional password gate. Serves `web/index.html`, the
-  PWA manifest and the service worker.
+  PWA manifest and the service worker. The library remembers which id each
+  song was downloaded under (`webstate/trackids.json`), so a track already on
+  disk plays from disk instead of being searched for and downloaded again —
+  on any device, and after clearing the browser's data.
 - `web/index.html` — the UI (single file, no build step). The only place UI
   lives.
 - `desktop.py` — desktop shell: either runs the same server on `127.0.0.1`
@@ -30,8 +33,8 @@ lands on every platform at once.
   anonymous web-player token with four plain HTTP requests (no browser), then
   resolves tracks/albums/playlists through Spotify's Pathfinder API.
 - `tests/` — `unittest` coverage for request guards, auth, dependency
-  resolution, download jobs, now-playing, MPRIS and the "wrappers stay
-  wrappers" invariant.
+  resolution, download jobs, the durable track-id map, now-playing, MPRIS and
+  the "wrappers stay wrappers" invariant.
 - `tools/ui_check.py` — headless UI integration check (playback, swap, seek,
   pause, next) under Xvfb.
 - `tools/demo.py` — records `docs/kotassium-demo.mp4` from the real app.

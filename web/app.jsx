@@ -112,6 +112,28 @@ function App() {
   if (!cacheRef.current) {
     try { cacheRef.current = JSON.parse(localStorage.getItem('kot_ytcache') || '{}'); } catch { cacheRef.current = {}; }
   }
+  // A remembered id and the file it wrote are the only reason a song is not
+  // downloaded twice. That map used to live in localStorage alone, so cleared
+  // web data, a second device, or a track whose title/artist reads slightly
+  // differently sent a song already on disk back through a fresh search - and
+  // a search can answer with a different video, which downloads a second copy
+  // under its own id. Mirror it on the server, next to the library, and merge
+  // that back on load: what is already downloaded stays downloaded.
+  const rememberId = useCallback((key, id) => {
+    if (!key) return;
+    if (id) cacheRef.current[key] = id; else delete cacheRef.current[key];
+    try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {}
+    try { postJSON('/api/trackids', { ids: { [key]: id || '' } }).catch(() => {}); } catch {}
+  }, []);
+  useEffect(() => {
+    API('/api/trackids').then((known) => {
+      let gained = false;
+      Object.entries(known || {}).forEach(([key, id]) => {
+        if (id && key && !cacheRef.current[key]) { cacheRef.current[key] = id; gained = true; }
+      });
+      if (gained) { try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {} }
+    }).catch(() => {});
+  }, []);
   const coverCacheRef = useRef({});
   const jobsRef = useRef(new Map());
   const prefetchRef = useRef(new Set());
@@ -389,17 +411,20 @@ function App() {
       setActualDuration(0);
       audio.src = `/lib/${encodeURIComponent(result.file)}`;
       await audio.play();
+      // The id that just started playing is the one whose file is on disk, so
+      // the next play (and every other device) can go straight to it instead
+      // of searching again and perhaps picking a different video.
+      if (!cached) rememberId(cacheKey, candidate.id);
     } catch (error) {
       if (epoch !== playbackEpoch.current) return;
       if (candidateIndex + 1 < candidates.length) return startResolvedTrack(track, candidates, candidateIndex + 1, cacheKey, false, epoch);
       if (cached) {
-        delete cacheRef.current[cacheKey];
-        try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {}
+        rememberId(cacheKey, '');
         if (candidateIndex === 0) return playTrackRef.current?.({ ...track, source: '', id: '' });
       }
       toast(error.message || `Could not fetch ${track.t || 'track'}`);
     }
-  }, [asInteractive, downloadId, toast]);
+  }, [asInteractive, downloadId, rememberId, toast]);
 
   const playTrack = useCallback(async (track) => {
     if (!track) return;
@@ -583,8 +608,7 @@ function App() {
         // one names a file ytdl can answer locally.
         const candidates = knownId ? [track] : cachedId ? [{ source: 'youtube', id: cachedId, dur: 0 }] : await findCandidates(track);
         if (!candidates[0]?.id) { prefetchRef.current.delete(key); return; }
-        cacheRef.current[key] = candidates[0].id;
-        try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {}
+        rememberId(key, candidates[0].id);
         await runDownload(candidates[0].id, track.t);
         return undefined;
       } catch {
@@ -594,7 +618,7 @@ function App() {
     })());
     prefetchJobsRef.current.set(key, pending);
     return pending;
-  }, [asInteractive, findCandidates, runDownload]);
+  }, [asInteractive, findCandidates, rememberId, runDownload]);
   prefetchTrackRef.current = prefetchTrack;
 
   // Opt-in background download (the add-link checkbox, off by default): one
@@ -613,8 +637,8 @@ function App() {
     const fetchOne = async (track) => {
       const key = trackKey(track);
       const knownId = track.id && (track.source === 'youtube' || track.source === 'newgrounds' || track.source === 'soundcloud');
-      const remember = (id) => { cacheRef.current[key] = id; try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {} };
-      const forget = () => { if (!knownId && cacheRef.current[key]) { delete cacheRef.current[key]; try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {} } };
+      const remember = (id) => rememberId(key, id);
+      const forget = () => { if (!knownId && cacheRef.current[key]) rememberId(key, ''); };
       const discover = async () => (await findCandidates(track))[0]?.id || '';
       const remembered = knownId ? track.id : cacheRef.current[key];
       const id = knownId ? remembered : remembered || await discover();
@@ -654,7 +678,7 @@ function App() {
       }
       toast(failed ? `background download: ${saved} saved, ${failed} failed` : `background download finished: ${saved} tracks saved`);
     })();
-  }, [findCandidates, runDownload, toast]);
+  }, [findCandidates, rememberId, runDownload, toast]);
 
   // The next-track identity is derived from the queue state, so changes to the
   // queue, current item, shuffle order, or repeat mode always reconsider it.
@@ -791,19 +815,17 @@ function App() {
         delete audio.dataset.pending;
         const expected = (pending.expected || 0) / 1000;
         if (expected && Math.abs(actual - expected) > Math.max(8, expected * 0.2) && pending.index + 1 < pending.candidates.length) {
-          if (pending.cached) { delete cacheRef.current[pending.cacheKey]; try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {} }
+          if (pending.cached) rememberId(pending.cacheKey, '');
           else {
             const actualKey = `${queue[currentIndex]?.t || ''}|${queue[currentIndex]?.a || ''}`;
-            cacheRef.current[actualKey] = pending.id;
-            try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {}
+            rememberId(actualKey, pending.id);
           }
           audio.pause(); audio.removeAttribute('src'); audio.load();
           startResolvedTrack(queue[currentIndex], pending.candidates, pending.index + 1, pending.cacheKey, false, playbackEpoch.current);
           return;
         }
         if (expected && Math.abs(actual - expected) > Math.max(8, expected * 0.2) && pending.cached) {
-          delete cacheRef.current[pending.cacheKey];
-          try { localStorage.setItem('kot_ytcache', JSON.stringify(cacheRef.current)); } catch {}
+          rememberId(pending.cacheKey, '');
           delete audio.dataset.pending;
           audio.pause(); audio.removeAttribute('src'); audio.load();
           const retryTrack = { ...queue[currentIndex], source: '', id: '' };
@@ -824,7 +846,7 @@ function App() {
     audio.addEventListener('timeupdate', onTime); audio.addEventListener('play', onPlay); audio.addEventListener('pause', onPause);
     audio.addEventListener('loadedmetadata', onMeta); audio.addEventListener('ended', onEnded); audio.addEventListener('error', onError);
     return () => { audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('play', onPlay); audio.removeEventListener('pause', onPause); audio.removeEventListener('loadedmetadata', onMeta); audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError); };
-  }, [queue, currentIndex, repeat, next, playTrack, startResolvedTrack, radio, fetchRadio, shufflePos, shuffleOrder]);
+  }, [queue, currentIndex, repeat, next, playTrack, startResolvedTrack, radio, fetchRadio, shufflePos, shuffleOrder, rememberId]);
 
   useEffect(() => {
     if (!currentTrack) return;
