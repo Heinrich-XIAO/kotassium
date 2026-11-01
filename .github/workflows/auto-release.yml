@@ -1,8 +1,10 @@
 name: Auto release
 
-# Every push to main creates a patch release. Apple Silicon and Android build
-# in parallel with preflight; a failed preflight cancels the workflow, and
-# successful builds publish/attach artifacts as soon as they complete.
+# Every push to main creates a patch release. The Apple Silicon PKG is the one
+# people wait for, so it starts immediately and publishes itself; the APK is
+# built after it finishes rather than beside it, since it is a slower job whose
+# result nobody is watching for. Preflight runs alongside both, and a failure
+# there cancels the workflow.
 
 on:
   push:
@@ -66,9 +68,14 @@ jobs:
       macos: '[{"runner":"macos-15","arch":"arm64"}]'
     secrets: inherit
 
+  # Sequenced behind the PKG on purpose: the macOS build and its publish are the
+  # only thing on the critical path of a push, and a Linux runner assembling an
+  # APK beside it buys nothing. `!cancelled()` rather than a success check, so a
+  # broken macOS build still produces the APK and only the PKG is missing.
   android:
     name: build Android APK
-    needs: version
+    needs: [version, macos]
+    if: ${{ !cancelled() }}
     uses: ./.github/workflows/build.yml
     with:
       version: ${{ needs.version.outputs.version }}

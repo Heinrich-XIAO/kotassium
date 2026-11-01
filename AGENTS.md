@@ -141,7 +141,10 @@ of these lines as the message's last line:
   rather than shipping, but bumping is how you fix it. The PKG is then attached
   by the build job itself through `tools/publish-release.sh` (shared with the
   APK and the tag path) once `tools/await-preflight.sh` has seen this run's
-  preflight pass: publishing moved, the gate did not.
+  preflight pass: publishing moved, the gate did not. The APK is built after the
+  PKG finishes rather than beside it - the PKG is what a push is waiting for -
+  but it still builds when the macOS job failed (`!cancelled()`), so one broken
+  platform does not silently stop the other.
 
 - UI state (playlists, cached covers) lives outside the repo in
   `~/Music/Kotassium` — never commit from there. `KOTASSIUM_LIB` overrides the

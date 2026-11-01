@@ -335,6 +335,11 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("inputs.platform == 'android'", build)
         self.assertNotIn("npm ci", preflight)
         self.assertIn("needs: [version, preflight, android]", auto)
+        # The APK is built after the PKG, not beside it, but it must still be
+        # built when the macOS job failed.
+        android_job = auto.split("  android:", 1)[1].split("  publish-android:", 1)[0]
+        self.assertIn("needs: [version, macos]", android_job)
+        self.assertIn("if: ${{ !cancelled() }}", android_job)
         self.assertIn("actions: write", auto)
         self.assertIn("actions: write", manual)
         self.assertIn("concurrency:", publisher)
