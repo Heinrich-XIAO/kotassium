@@ -23,6 +23,7 @@ import os
 import plistlib
 import shutil
 import sys
+import zipfile
 
 REFUSE = 3
 """Exit code meaning "not a bundle I recognise"; build-macos.sh rebuilds."""
@@ -33,16 +34,71 @@ def refuse(reason):
     return REFUSE
 
 
-def find_libdir(resources, depth=3):
-    """The directory py2app puts our top-level modules in, if it is still there."""
+MODULES = ("desktop.py", "serve_web.py")
+
+
+def find_module_home(resources, depth=4):
+    """Where py2app left our top-level modules: ("dir", path) or ("zip", path).
+
+    It depends on the py2app version and its zipfile option, which this repo has
+    set both ways over time, so both shapes are accepted. Nothing is assumed
+    about where the modules are beyond the fact that the bundle put them
+    somewhere findable.
+    """
+    loose = []
+    compacted = []
     for root, dirs, names in os.walk(resources):
         if root[len(resources):].count(os.sep) >= depth:
             dirs[:] = []
             continue
         dirs[:] = [d for d in dirs if d != "__pycache__"]
-        if "desktop.py" in names and "serve_web.py" in names:
-            return root
-    return None
+        if all(name in names for name in MODULES):
+            return "dir", root
+        loose.extend(os.path.join(root, name) for name in names if name.endswith(".py"))
+        for name in names:
+            if name.endswith(".zip"):
+                path = os.path.join(root, name)
+                try:
+                    with zipfile.ZipFile(path) as archive:
+                        entries = set(archive.namelist())
+                except Exception:
+                    continue
+                if all(name in entries for name in MODULES):
+                    return "zip", path
+                if any(name.endswith(".py") for name in entries):
+                    compacted.append(path)
+
+    print("the bundle's python files are at:", file=sys.stderr)
+    for path in loose[:10]:
+        print("  " + path, file=sys.stderr)
+    for path in compacted[:10]:
+        print("  " + path + " (zip, no desktop.py)", file=sys.stderr)
+    return None, None
+
+
+def replace_in_zip(path, files):
+    """Rewrite the members we own, leaving every other entry untouched.
+
+    A stale ``__pycache__``-style entry next to a replaced source would be
+    preferred by zipimport when its header matches, so those go with it.
+    """
+    replaced = path + ".new"
+    stale = {os.path.splitext(name)[0] + ".pyc" for name in files}
+    with zipfile.ZipFile(path) as source, zipfile.ZipFile(replaced, "w") as target:
+        for item in source.infolist():
+            if item.filename in files:
+                target.writestr(item, files[item.filename])
+            elif item.filename in stale:
+                continue
+            else:
+                target.writestr(item, source.read(item.filename))
+    os.replace(replaced, path)
+
+    with zipfile.ZipFile(path) as archive:
+        for name, data in files.items():
+            if archive.read(name) != data:
+                return False
+    return True
 
 
 def copy_paths(source, target):
@@ -67,20 +123,24 @@ def main(argv=None):
 
     if not os.path.isdir(resources):
         return refuse("no Contents/Resources in %s" % app)
-    libdir = find_libdir(resources)
-    if not libdir:
-        return refuse("no directory in the bundle holds desktop.py and serve_web.py")
+    kind, home = find_module_home(resources)
+    if not kind:
+        return refuse("no directory or archive in the bundle holds our modules")
 
     modules = sorted(name for name in os.listdir(root)
                      if name.endswith(".py") and os.path.isfile(os.path.join(root, name)))
-    if "desktop.py" not in modules or "serve_web.py" not in modules:
+    if not all(name in modules for name in MODULES):
         return refuse("the checkout is missing desktop.py or serve_web.py")
 
-    for name in modules:
-        target = os.path.join(libdir, name)
-        copy_paths(os.path.join(root, name), target)
-        if not filecmp.cmp(os.path.join(root, name), target, shallow=False):
-            return refuse("%s did not copy cleanly" % name)
+    if kind == "dir":
+        for name in modules:
+            target = os.path.join(home, name)
+            copy_paths(os.path.join(root, name), target)
+            if not filecmp.cmp(os.path.join(root, name), target, shallow=False):
+                return refuse("%s did not copy cleanly" % name)
+    elif not replace_in_zip(home, {
+            name: open(os.path.join(root, name), "rb").read() for name in modules}):
+        return refuse("the module archive did not take the new sources")
 
     for tree in ("web", "assets"):
         source = os.path.join(root, tree)
@@ -101,8 +161,9 @@ def main(argv=None):
         with open(info, "wb") as handle:
             plistlib.dump(plist, handle, fmt=plistlib.FMT_BINARY)
 
-    print("reused the bundle: %d modules, web/, assets/%s" % (
-        len(modules), ", version %s" % args.version if args.version else ""))
+    print("reused the bundle: %d modules in a %s, web/, assets/%s" % (
+        len(modules), "directory" if kind == "dir" else "zip",
+        ", version %s" % args.version if args.version else ""))
     return 0
 
 

@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HELPER = os.path.join(ROOT, "tools", "update-macos-bundle.py")
@@ -42,6 +43,22 @@ def make_bundle(path, modules=("desktop.py", "serve_web.py")):
                        "CFBundleVersion": "0.0.1",
                        "CFBundleIdentifier": "app.kotassium.desktop"}, f, fmt=plistlib.FMT_BINARY)
     return libdir
+
+
+def make_zipped_bundle(path):
+    """py2app 0.28's shape: the app's modules live in site-packages.zip."""
+    resources = os.path.join(path, "Contents", "Resources")
+    libdir = os.path.join(resources, "lib", "python3.12")
+    os.makedirs(libdir)
+    archive = os.path.join(libdir, "site-packages.zip")
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("desktop.py", "# stale copy from an older commit\n")
+        z.writestr("serve_web.py", "# stale copy from an older commit\n")
+        z.writestr("desktop.pyc", "stale bytecode")
+        z.writestr("pywebview/__init__.py", "# the dependency, not ours\n")
+    with open(os.path.join(path, "Contents", "Info.plist"), "wb") as f:
+        plistlib.dump({"CFBundleShortVersionString": "0.0.1"}, f, fmt=plistlib.FMT_BINARY)
+    return archive
 
 
 def make_checkout(path):
@@ -83,7 +100,10 @@ class BundleReuseTests(unittest.TestCase):
         make_bundle(self.app, modules=("something_else.py",))
         result = self.run_helper()
         self.assertEqual(result.returncode, REFUSE, result.stderr)
-        self.assertIn("desktop.py and serve_web.py", result.stderr)
+        self.assertIn("no directory or archive in the bundle holds our modules", result.stderr)
+        # A refusal has to be debuggable from the job log alone: say what the
+        # bundle does have, so the next run can be fixed instead of guessed at.
+        self.assertIn("something_else.py", result.stderr)
 
     def test_a_recognised_bundle_gets_this_checkouts_files(self):
         libdir = make_bundle(self.app)
@@ -103,6 +123,21 @@ class BundleReuseTests(unittest.TestCase):
         self.assertEqual(plist["CFBundleShortVersionString"], "9.9.9")
         self.assertEqual(plist["CFBundleVersion"], "9.9.9")
         self.assertEqual(plist["CFBundleIdentifier"], "app.kotassium.desktop")
+
+    def test_a_zipped_bundle_is_updated_in_place(self):
+        # py2app keeps our modules inside site-packages.zip in some versions;
+        # the dependency entries in it must survive untouched.
+        archive = make_zipped_bundle(self.app)
+        result = self.run_helper("--version", "9.9.9")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(archive) as z:
+            self.assertEqual(z.read("desktop.py"), b"# desktop.py from this commit\n")
+            self.assertEqual(z.read("serve_web.py"), b"# serve_web.py from this commit\n")
+            self.assertNotIn("desktop.pyc", z.namelist(),
+                             "stale bytecode would win over the new source")
+            self.assertEqual(z.read("pywebview/__init__.py"), b"# the dependency, not ours\n")
+        self.assertTrue(os.path.isfile(
+            os.path.join(self.app, "Contents", "Resources", "web", "index.html")))
 
     def test_the_page_is_replaced_rather_than_merged(self):
         # A file deleted from web/ must not survive in the reused bundle; the
