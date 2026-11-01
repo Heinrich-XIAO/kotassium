@@ -28,17 +28,25 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 # transport glyphs did.
 PURE_PATH_GLYPHS = ("library", "home", "browse", "add", "check", "close", "play", "pause", "prev", "next")
 
-# Two glyphs carry a deliberate optical offset, both from the icon set rather
-# than from a nudge of ours. The play triangle reads pulled towards its base, so
-# its ink sits 0.75 to the right. The tick is lucide's own `check`, which the
-# library draws half a unit above the box centre; a tick's ink weight always
-# sits below its box centre, so every tick is a trade between the silhouette and
-# the mass, and the library's split is the documented one. Re-centring the box
-# (which this file used to assert) moved the mass 0.44px low at 14px in #nowsave,
-# where it alternates with a perfectly symmetric plus, and that is what read as
-# "still slightly off".
+# Two glyphs carry a deliberate optical offset. The play triangle reads pulled
+# towards its base, so its ink sits 0.75 to the right. The tick is lucide's
+# `check` with its coordinates moved down 0.35.
+#
+# Lucide's numbers put the path data's box half a unit above the grid centre,
+# and the stroke is not centred on that box: the round join at the elbow bulges
+# a full stroke unit below it while the 45-degree caps at the tips bulge only
+# 0.71 above, so the ink the eye sees is 0.145 lower than the path box again.
+# In the 26px button that landed the ink box 0.31px above the disc centre - a
+# sixth of the ink's own height, with 8.38px of green above the tick and 9.00
+# below - and it read as sitting high next to a plus that is drawn dead centre.
+# Measured at 8x on the real button, 0.35 is the shift that makes the ink box
+# concentric with the disc (top gap 8.62, bottom 8.75, the 0.125 being the
+# pixel grid), which leaves the mass 0.34 low: a tick's elbow is where its
+# weight is, so the box and the mass cannot both sit on 12, and the silhouette
+# against the circle is what is judged. The render size cancels out of a
+# coordinate, unlike the transforms this file exists to keep out.
 OPTICAL_X = {"play": 12.75}
-OPTICAL_Y = {"check": 11.5}
+OPTICAL_Y = {"check": 11.85}
 
 
 def load_measurer():
@@ -109,7 +117,7 @@ class IconCentringTests(unittest.TestCase):
                 self.assertNotIn("fill=", entry, "one mark filled and one stroked is two weights")
                 self.assertNotIn("stroke=", entry, "the wrapper's stroke is the shared one")
         self.assertIn('d="M12 5v14M5 12h14"', self.glyphs["add"])
-        self.assertIn('d="M20 6 9 17l-5-5"', self.glyphs["check"])
+        self.assertIn('d="M20 6.35 9 17.35l-5-5"', self.glyphs["check"])
 
     def test_save_menu_mark_icon_lands_on_whole_pixels(self):
         """The 22px ring's 1px border leaves a 20px content box, so a 13px glyph

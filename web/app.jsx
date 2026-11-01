@@ -50,15 +50,21 @@ function Icon({ name, size = 20, children }) {
     // different ink sizes. Both are now the library's, drawn with the svg
     // attributes the wrapper already applies.
     //
-    // lucide centres `plus` exactly (ink 4..20 both ways) and draws `check`
-    // half a unit above the box centre - its own optical call, kept rather
-    // than re-tuned: a tick's ink weight sits below its box centre, so any
-    // tick is a trade between the silhouette and the mass, and the library
-    // splits it. That is ~0.3px of box and ~0.1px of mass at 14px; centring
-    // the box instead (as this glyph did before) moved the mass 0.44px low,
-    // which is what read as "still slightly off" next to a symmetric plus.
+    // lucide centres `plus` exactly (ink 4..20 both ways). Its `check` is
+    // `M20 6 9 17l-5-5`, which puts the path box half a unit above the grid
+    // centre, and the stroke widens that: the round join under the elbow
+    // bulges a full stroke unit below the box while the 45-degree caps at the
+    // tips bulge 0.71 above, so the ink box the eye sees sits 0.145 lower
+    // again. In the 26px button that measured 0.31px high - 8.38px of green
+    // above the tick against 9.00 below, next to a plus drawn dead centre -
+    // and that is what read as off. The path is therefore moved down 0.35,
+    // which puts the ink box on the disc centre within a pixel-grid step
+    // (8.62 and 8.75 at 8x, measured on the real button). It leaves the mass
+    // 0.34 low, and cannot not: a tick's elbow is where its weight is, so the
+    // silhouette and the mass cannot both be on 12, and against a circle the
+    // silhouette is the one being compared.
     add: <path d="M12 5v14M5 12h14" />,
-    check: <path d="M20 6 9 17l-5-5" />,
+    check: <path d="M20 6.35 9 17.35l-5-5" />,
     // the triangle needs its ink 0.75 right of centre: a box-centred play
     // glyph reads pulled towards its base, which is exactly what the old
     // -1.145 nudge made worse.
