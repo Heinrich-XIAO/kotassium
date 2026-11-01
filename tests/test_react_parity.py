@@ -152,6 +152,22 @@ class ReactParityTests(unittest.TestCase):
         # the glyph is centred in its own viewBox; no CSS nudge may push it off-centre
         self.assertNotIn('#playb svg[viewBox="0 0 16 16"]{transform', css)
 
+    def test_transport_row_boxes_are_equal_and_hover_keeps_the_glyph(self):
+        # Measured in the page (tools/page_shot.sh + playwright-core): lucide
+        # `Repeat` draws at 18px where its four siblings use 20px, so its box
+        # measured 30px against their 32px and the flex row centred itself
+        # 1px left of the play disc - `shufb` at -99, `playb` at +1, `repeatb`
+        # at +100 from the row's centre. Hover also scaled the button, so the
+        # glyph was re-rasterised at 16.96px and the two states never matched
+        # even at the same position. Equal boxes and a shadow-grown disc fix
+        # both without moving the glyph.
+        css = read("web/index.html")
+        self.assertIn("#btns .aicon{width:32px;height:32px;flex:none}", css)
+        self.assertIn("#playb:hover{box-shadow:0 0 0 1px #fff}", css)
+        self.assertIn("#fsPlay:hover{box-shadow:0 0 0 1.5px #fff}", css)
+        self.assertNotIn("#playb:hover{transform", css)
+        self.assertNotIn("#fsPlay:hover{transform", css)
+
     def test_cover_frames_have_even_borders_and_clip_square_artwork(self):
         css = read("web/index.html")
         self.assertIn(".pcover,.ccover,#plx,#nowc,.track-cover,#dfsArt,#fsArt{border:1px solid #ffffff18;overflow:hidden;background-clip:padding-box}", css)
@@ -225,6 +241,15 @@ class ReactParityTests(unittest.TestCase):
         reference_css = reference_css.replace("#addBtn{width:26px;height:26px;color:#b3b3b3;display:grid;place-items:center;cursor:pointer}", "#addBtn{width:26px;height:26px;color:#b3b3b3;display:grid;place-items:center;cursor:pointer;padding:0}", 1)
         reference_css = reference_css.replace("border:1px solid #ffffff14;transition:color .15s,background .15s,transform .15s}", "border:1px solid #ffffff14;padding:0;transition:color .15s,background .15s,transform .15s}", 1)
         reference_css = reference_css.replace("#side.collapsed .pitem{justify-content:center;padding:6px 0;gap:0}", "#side.collapsed .pitem{justify-content:center;padding:2px;margin:4px 0 8px;gap:0}", 1)
+        # The transport row: equal-width icon boxes (lucide `Repeat` is 18px in
+        # the same padding, which made its box 30px and pushed the play disc
+        # 1px off the row's centre), and a hover that grows the disc with a
+        # shadow instead of scaling the button - scaling re-rasterised the
+        # glyph at 16.96px, so idle and hovered never matched.
+        reference_css = reference_css.replace("#btns{display:flex;align-items:center;gap:18px}", "#btns{display:flex;align-items:center;gap:18px}\n#btns .aicon{width:32px;height:32px;flex:none}", 1)
+        reference_css = reference_css.replace("transition:transform .06s}\n#playb:hover{transform:scale(1.06)}", "transition:box-shadow .06s}\n#playb:hover{box-shadow:0 0 0 1px #fff}", 1)
+        reference_css = reference_css.replace("#playb:disabled{opacity:.35;background:#fff;color:#000;transform:none;cursor:default}", "#playb:disabled{opacity:.35;background:#fff;color:#000;box-shadow:none;cursor:default}", 1)
+        reference_css = reference_css.replace("display:grid;place-items:center;transition:transform .06s}\n#fsBtns .aicon{flex:none}\n#fsPlay:hover{transform:scale(1.05)}", "display:grid;place-items:center;transition:box-shadow .06s}\n#fsBtns .aicon{flex:none}\n#fsPlay:hover{box-shadow:0 0 0 1.5px #fff}", 1)
         reference_css = re.sub(r"\n{2,}", "\n", reference_css)
         current_css = re.sub(r"\n{2,}", "\n", current_css)
         self.assertEqual(reference_css, current_css)

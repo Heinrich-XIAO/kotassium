@@ -138,10 +138,11 @@ svg{display:block}
 #nowt small{color:#b3b3b3;font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #ctr{display:flex;flex-direction:column;align-items:center;gap:8px}
 #btns{display:flex;align-items:center;gap:18px}
-#playb{width:32px;height:32px;flex:none;border-radius:50%;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;transition:transform .06s}
-#playb:hover{transform:scale(1.06)}
+#btns .aicon{width:32px;height:32px;flex:none}
+#playb{width:32px;height:32px;flex:none;border-radius:50%;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;transition:box-shadow .06s}
+#playb:hover{box-shadow:0 0 0 1px #fff}
 #btns button:disabled,#fsBtns button:disabled,#dfsBtn:disabled{opacity:.35;cursor:default;pointer-events:none}
-#playb:disabled{opacity:.35;background:#fff;color:#000;transform:none;cursor:default}
+#playb:disabled{opacity:.35;background:#fff;color:#000;box-shadow:none;cursor:default}
 #prow{display:flex;align-items:center;gap:10px;width:100%;max-width:560px}
 .ptime{color:#b3b3b3;font-size:11px;min-width:34px;font-variant-numeric:tabular-nums}
 #prog{flex:1;height:4px;background:#ffffff33;border-radius:2px;cursor:pointer;position:relative}
@@ -312,9 +313,9 @@ body{-webkit-tap-highlight-color:transparent}
 #fsProg:active #fsProgf{background:#1ed760}
 #fsBtns{display:flex;align-items:center;justify-content:center;gap:22px;flex:none}
 #fsBtns .aicon svg{width:26px;height:26px}
-#fsPlay{width:60px;height:60px;flex:none;border-radius:50%;background:#fff;color:#000;display:grid;place-items:center;transition:transform .06s}
+#fsPlay{width:60px;height:60px;flex:none;border-radius:50%;background:#fff;color:#000;display:grid;place-items:center;transition:box-shadow .06s}
 #fsBtns .aicon{flex:none}
-#fsPlay:hover{transform:scale(1.05)}
+#fsPlay:hover{box-shadow:0 0 0 1.5px #fff}
 #fsVol{display:flex;align-items:center;gap:12px;flex:none;touch-action:none}
 #fsVol .aicon svg{width:24px;height:24px}
 #fsVolBar{flex:1;height:28px;position:relative;cursor:pointer;touch-action:none}
