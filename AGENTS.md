@@ -121,6 +121,21 @@ of these lines as the message's last line:
   builds without ffmpeg.
 - `.github/workflows/release.yml` builds the macOS PKG and Android APK on a `v*` tag and
   publishes one release; `workflow_dispatch` only uploads artifacts.
+- **A push puts the PKG up in about half a minute, and the cheap path is
+  deliberate.** The macOS build no longer waits for the `version` job: it asks
+  `tools/next-version.sh` for the same patch bump and starts immediately. It
+  reuses the app bundle py2app produced last time - py2app packages the
+  interpreter, pyobjc and pywebview, none of which depend on our sources -
+  and `tools/update-macos-bundle.py` overlays the files this commit owns
+  (every root module, byte-compared after copying, plus `web/`, `assets/`, the
+  icon and the version stamp) before re-signing. `build-macos.sh` rebuilds from
+  scratch whenever the helper does not recognise the bundle, and the CI cache is
+  only saved after the smoke test passed. **Bump the `v1` in that cache key in
+  `build.yml` when a dependency is added** - a stale bundle fails the smoke test
+  rather than shipping, but bumping is how you fix it. The PKG is then attached
+  by the build job itself through `tools/publish-release.sh` (shared with the
+  APK and the tag path) once `tools/await-preflight.sh` has seen this run's
+  preflight pass: publishing moved, the gate did not.
 
 - UI state (playlists, cached covers) lives outside the repo in
   `~/Music/Kotassium` — never commit from there. `KOTASSIUM_LIB` overrides the
@@ -201,8 +216,10 @@ of these lines as the message's last line:
   Python (`PYTHON=/path/to/python tools/agent-preflight.sh`); MPRIS tests skip
   without a session bus. The suite includes `tests/test_icons.py`, so an icon
   nudge or a second viewBox fails the gate instead of shipping. The shared
-  release build workflow runs this same gate before either platform build, so a
-  failing preflight blocks publishing.
+  release build workflow runs this same gate, and no artifact is published
+  until it has passed: the tag path waits on the preflight job, and the macOS
+  build that publishes its own PKG polls it (`tools/await-preflight.sh`). A
+  failing preflight still blocks publishing.
 - Tests: `venv/bin/python -m unittest discover -s tests`, plus
   `dbus-run-session -- desktop-venv/bin/python -m unittest tests.test_mpris`
   and `xvfb-run -a desktop-venv/bin/python tools/ui_check.py`.
