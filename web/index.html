@@ -510,14 +510,19 @@ body.dfs #dfsQueue{display:flex}
 /* playback bar: the Spotify-style add-to-playlist control and its picker */
 #nowp{position:relative}
 .nowsave-wrap{position:relative;flex:none}
-#nowsave{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:#ffffff0f;border:1px solid #ffffff14;padding:0;transition:color .15s,background .15s,box-shadow .15s}
-/* Hover grows the ring, not the svg: a scale here resampled the 16px glyph to
-   16.8px, so its ink landed on fractional device pixels and the plus and the
-   tick both went soft and off-grid exactly while the button was under the
-   pointer. The halo reads as the same lift and keeps the glyph on the grid. */
-#nowsave:hover{color:#fff;background:#ffffff1c;box-shadow:0 0 0 3px #ffffff0f}
-#nowsave.on{background:#1ed760;border-color:#1ed760;color:#07140a}
-#nowsave.on:hover{background:#3be477;border-color:#3be477}
+#nowsave{position:relative;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:none;border:0;padding:0;transition:color .15s}
+/* The disc is a layer of its own so hover can grow it without touching the
+   glyph: scaling the button rendered the 16px icon at 16.8px and left the plus
+   and the tick soft and off the pixel grid exactly while the pointer was on
+   them. Growing the layer's inset instead keeps a crisp circle and leaves the
+   glyph on its 26px, whole-pixel box. */
+#nowsave:before{content:"";position:absolute;inset:0;border-radius:50%;background:#ffffff0f;border:1px solid #ffffff14;transition:inset .15s,background .15s,border-color .15s}
+#nowsave>svg{position:relative;z-index:1}
+#nowsave:hover{color:#fff}
+#nowsave:hover:before{inset:-1px;background:#ffffff1c}
+#nowsave.on{color:#07140a}
+#nowsave.on:before{background:#1ed760;border-color:#1ed760}
+#nowsave.on:hover:before{background:#3be477;border-color:#3be477}
 #nowsave:focus-visible{outline:2px solid #1ed760;outline-offset:2px}
 .save-menu{position:absolute;left:0;bottom:calc(100% + 14px);width:276px;background:#181818;border:1px solid #ffffff17;border-radius:14px;box-shadow:0 24px 60px #000e;z-index:110;overflow:hidden;animation:settings-rise .18s cubic-bezier(.2,.8,.2,1)}
 .save-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 12px 8px 14px}
@@ -533,7 +538,7 @@ body.dfs #dfsQueue{display:flex}
 .save-mark{width:22px;height:22px;flex:none;border-radius:50%;display:grid;place-items:center;color:#8f8f8f;border:1px solid #ffffff1f;transition:background .13s,border-color .13s,color .13s}
 .save-row.in .save-mark{background:#1ed760;border-color:#1ed760;color:#07140a}
 .save-empty{margin:0;padding:4px 10px 14px;font-size:12px;color:#8b8b8b;line-height:1.5}
-@media(prefers-reduced-motion:reduce){.save-menu{animation:none}#nowsave,.save-close,.save-row,.save-mark{transition:none}}
+@media(prefers-reduced-motion:reduce){.save-menu{animation:none}#nowsave,#nowsave:before,.save-close,.save-row,.save-mark{transition:none}}
 </style></head><body>
 <div id="root"></div>
 <script src="/app.js" defer></script>

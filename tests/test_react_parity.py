@@ -198,7 +198,7 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("/api/links/contains", app)
         self.assertIn("inCurrentPlaylist", app)
         css = read("web/index.html")
-        self.assertIn("#nowsave.on{background:#1ed760;border-color:#1ed760;color:#07140a}", css)
+        self.assertIn("#nowsave.on:before{background:#1ed760;border-color:#1ed760}", css)
         self.assertIn(".save-menu{position:absolute", css)
 
     def test_reference_css_is_preserved_in_index_shell(self):
@@ -304,7 +304,17 @@ class ReactParityTests(unittest.TestCase):
         # needs. Both of these measured ~1.5px right until padding went to 0,
         # and the glyph is now even-sized so 26px leaves 4px either side.
         self.assertIn("cursor:pointer;padding:0}", css)
-        self.assertIn("#nowsave{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:#ffffff0f;border:1px solid #ffffff14;padding:0;", css)
+        self.assertIn("#nowsave{position:relative;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:none;border:0;padding:0;", css)
+        # Hover grows the disc layer, never the button: a scale on the button
+        # rasterised the 16px glyph at 16.8px, so the plus and the tick were
+        # soft and off-grid for as long as the pointer sat on them. The glyph
+        # keeps a 26px box (16px + 5px either side, whole pixels) while the
+        # disc grows by a pixel on every side.
+        self.assertIn('#nowsave:before{content:"";position:absolute;inset:0;border-radius:50%;', css)
+        self.assertIn("#nowsave:hover:before{inset:-1px;", css)
+        # No rule that touches this control may transform it at any state.
+        nowsave = re.sub(r"transition:[^;}]*", "", "".join(re.findall(r"#nowsave[^{]*\{[^}]*\}", css)))
+        self.assertNotIn("transform", nowsave)
         self.assertIn("<Icon name=\"add\" size={18}/></button>", self.app)
         self.assertIn("<Icon name={inCurrentPlaylist ? 'check' : 'add'} size={16}/></button>", self.app)
         self.assertIn("#side.collapsed .pitem{justify-content:center;padding:2px;margin:4px 0 8px;gap:0}", css)
