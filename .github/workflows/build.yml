@@ -22,7 +22,10 @@ on:
         description: JSON matrix (runner + arch) of the macOS builds
         required: false
         type: string
-        default: '[{"runner":"macos-14","arch":"arm64"}]'
+        # macos-14 was retired on 2026-11-02: jobs targeting it were cancelled
+        # at queue time through the October brownouts and then stopped
+        # resolving, which silently produced releases with only an APK.
+        default: '[{"runner":"macos-15","arch":"arm64"}]'
     secrets:
       ANDROID_KEYSTORE_B64:
         required: false

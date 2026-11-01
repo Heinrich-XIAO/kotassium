@@ -58,7 +58,7 @@ jobs:
     with:
       version: ${{ needs.version.outputs.version }}
       platform: macos
-      macos: '[{"runner":"macos-14","arch":"arm64"}]'
+      macos: '[{"runner":"macos-15","arch":"arm64"}]'
     secrets: inherit
 
   android:
