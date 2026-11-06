@@ -40,6 +40,12 @@ fi
 TARGET="/Applications/Kotassium.app"
 PREVIOUS="$TARGET.old"
 STAGED="$TARGET.old.next"
+# Copies the user-run silent updater parked because it could not delete them.
+for STALE in "$PREVIOUS".stale.*; do
+    if [ -e "$STALE" ]; then
+        /bin/rm -rf "$STALE"
+    fi
+done
 if [ -d "$TARGET" ]; then
     /bin/rm -rf "$STAGED"
     /usr/bin/ditto "$TARGET" "$STAGED"

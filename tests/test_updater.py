@@ -593,6 +593,44 @@ class SilentInstallTests(unittest.TestCase):
         self.assertIn('report "Kotassium did not quit, so the update was not installed"',
                       script)
 
+    def test_download_leaves_only_the_new_package_in_the_cache(self):
+        for name in ("Kotassium-2.3.111-arm64.dmg", "Kotassium-2.3.112-arm64.pkg",
+                     "Kotassium-2.3.113-arm64.pkg.part", "install.log", "swap.sh"):
+            with open(os.path.join(self.tmp, name), "w") as f:
+                f.write("old")
+        body = b"new package"
+
+        class Resp:
+            def __init__(self):
+                self.left = body
+            def read(self, n):
+                chunk, self.left = self.left, b""
+                return chunk
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        self._patch("_checksum", lambda sums, name: None)
+        real_open = updater.urllib.request.urlopen
+        updater.urllib.request.urlopen = lambda req, timeout=None: Resp()
+        self.addCleanup(setattr, updater.urllib.request, "urlopen", real_open)
+        path = updater.download({"name": "Kotassium-2.3.128-arm64.pkg",
+                                 "size": len(body),
+                                 "browser_download_url": "https://example.invalid/p"})
+        self.assertEqual(sorted(os.listdir(self.tmp)),
+                         ["Kotassium-2.3.128-arm64.pkg", "install.log", "swap.sh"])
+        with open(path, "rb") as f:
+            self.assertEqual(f.read(), body)
+
+    def test_swap_script_deletes_the_package_and_stale_copies_once_installed(self):
+        script = updater.swap_script("/tmp/stage/Kotassium.new.app",
+                                     "/Applications/Kotassium.app",
+                                     package="/tmp/stage/Kotassium-2.3.128-arm64.pkg")
+        installed = script.index('log "installed $TARGET"')
+        self.assertGreater(script.index('/bin/rm -f "$PKG"'), installed)
+        self.assertGreater(script.index('for STALE in "$PREVIOUS".stale.*'), installed)
+
     def test_can_swap_only_where_the_bundle_is_replaceable(self):
         real_app, real_access = updater.app_path, updater.os.access
         try:

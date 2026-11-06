@@ -270,6 +270,10 @@ of these lines as the message's last line:
   install the update". A rename needs only the write bit on the folder holding
   the app, which is exactly what `can_swap()` asks for, and an unremovable
   `.old` is parked as `.old.stale.<pid>` instead of blocking the update. The
+  helper deletes those parked copies it can (the root-owned ones go in the
+  root-run preinstall) and the PKG itself once the swap succeeds, and
+  `download()` prunes older packages first, so the cache never holds more
+  than one installer. The
   helper waits
   about fifteen seconds for the clean quit and then stops the app itself
   (TERM, then KILL), so nothing after the download click is left waiting on a

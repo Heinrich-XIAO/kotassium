@@ -197,8 +197,28 @@ def _checksum(sums_asset, package_name):
     return parse_checksums(text, package_name)
 
 
+PACKAGE_SUFFIXES = (".pkg", ".dmg", ".part")
+
+
+def prune_cache(keep=None):
+    """Delete downloaded installers other than `keep` from the cache dir.
+
+    Every release is saved under its own versioned name, so without this each
+    update left its ~300 MB package behind for good.
+    """
+    d = cache_dir()
+    for name in os.listdir(d):
+        path = os.path.join(d, name)
+        if name.endswith(PACKAGE_SUFFIXES) and path != keep and os.path.isfile(path):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
 def download(asset, sums_asset=None, progress=None):
     """Download an asset to the cache dir, verify it, return its path."""
+    prune_cache()
     name = asset["name"]
     dest = os.path.join(cache_dir(), name)
     tmp = dest + ".part"
@@ -544,6 +564,17 @@ if [ ! -x "$TARGET/Contents/MacOS/Kotassium" ]; then
 fi
 /bin/rm -f "$FAIL"
 log "installed $TARGET"
+
+# The package was only kept for the Installer fallback above; the swap is done.
+if [ -n "$PKG" ]; then
+    /bin/rm -f "$PKG"
+fi
+# Copies parked by earlier updates. Root-owned ones stay; preinstall removes them.
+for STALE in "$PREVIOUS".stale.*; do
+    if [ -e "$STALE" ]; then
+        /bin/rm -rf "$STALE" 2>/dev/null && log "removed $STALE"
+    fi
+done
 
 # 8. reopen the new version
 /usr/bin/open "$TARGET"
