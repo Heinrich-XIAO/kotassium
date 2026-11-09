@@ -291,6 +291,14 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("onKeyDown={(e) => e.key === 'Enter' && search()}", self.app)
         self.assertIn("onClick={toggleDesktop}", self.app)
 
+    def test_mini_player_expands_near_the_top_or_on_a_flick(self):
+        # A slow drag must reach the top fifth (not halfway), and the flick
+        # speed must come from the touch's recent samples: the last segment
+        # and touchend share a point, so it read ~0 and flicks never expanded.
+        self.assertIn("window.innerHeight * 0.2 || vy < -0.6", self.app)
+        self.assertIn("releaseVelocity(g.trail, Date.now())", self.app)
+        self.assertNotIn("window.innerHeight * 0.5 || vy", self.app)
+
     def test_playlist_play_is_not_broken_by_a_failed_warm_up(self):
         # Opening a playlist and starting it used to share one catch, and the
         # play half awaited a prefetch job that could reject - so pressing play

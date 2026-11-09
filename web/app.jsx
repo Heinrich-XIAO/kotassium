@@ -24,6 +24,16 @@ const shuffledExcept = (length, excluded) => {
 // no-repeat keeps a repeated tile inside the same box.
 const gradient = (name) => { const h = hue(name); return `linear-gradient(135deg,hsl(${h},70%,38%),hsl(${(h + 40) % 360},60%,20%)) no-repeat padding-box`; };
 const escStyle = (url) => `url("${String(url || '').replace(/["'<>)]/g, (c) => encodeURIComponent(c))}") center/cover no-repeat padding-box`;
+// Release speed in px/ms, read from the touch samples of the last 100ms. A
+// flick's last move and its touchend sit at the same point, so the speed has
+// to come from the samples before the finger lifted, not the final segment.
+const VELOCITY_WINDOW_MS = 100;
+const releaseVelocity = (trail, now) => {
+  const recent = trail.filter((s) => now - s.t <= VELOCITY_WINDOW_MS);
+  if (recent.length < 2) return { vx: 0, vy: 0 };
+  const a = recent[0], b = recent[recent.length - 1], span = Math.max(1, b.t - a.t);
+  return { vx: (b.x - a.x) / span, vy: (b.y - a.y) / span };
+};
 // Every glyph is drawn on one 24-unit grid and its position lives in the
 // coordinates. Never add a `transform` here: it is measured in user units, so
 // a value tuned to centre a glyph inside one button misplaces it inside every
@@ -1159,6 +1169,7 @@ function App() {
     mobileGesture.current = {
       ...mobileGesture.current, owner, startX: touch.clientX, startY: touch.clientY,
       lastX: touch.clientX, lastY: touch.clientY, lastAt: Date.now(), moved: false,
+      trail: [{ x: touch.clientX, y: touch.clientY, t: Date.now() }],
       dragging: owner === 'fs' && !queue, inQueue: !!queue,
       baseY: owner === 'fs' ? 0 : window.innerHeight, queueScrollTop: queue?.scrollTop || 0,
     };
@@ -1168,6 +1179,7 @@ function App() {
     if (g.owner !== owner) return;
     const touch = event.touches[0], dx = touch.clientX - g.startX, dy = touch.clientY - g.startY;
     g.lastX = touch.clientX; g.lastY = touch.clientY; g.lastAt = Date.now();
+    g.trail = g.trail.filter((s) => g.lastAt - s.t <= VELOCITY_WINDOW_MS).concat({ x: touch.clientX, y: touch.clientY, t: g.lastAt });
     if (!g.dragging) {
       if (owner === 'bar' && (dy >= -6 || Math.abs(dx) >= Math.abs(dy))) return;
       if (owner === 'side' && (dx >= -6 || Math.abs(dy) >= Math.abs(dx))) return;
@@ -1201,12 +1213,13 @@ function App() {
     const g = mobileGesture.current;
     if (g.owner !== owner) return;
     const touch = event.changedTouches[0], dx = touch.clientX - g.startX, dy = touch.clientY - g.startY;
-    const elapsed = Math.max(1, Date.now() - g.lastAt);
-    const vx = (touch.clientX - g.lastX) / elapsed, vy = (touch.clientY - g.lastY) / elapsed;
+    const { vx, vy } = releaseVelocity(g.trail, Date.now());
     if (g.dragging && g.moved) suppressTapUntil.current = Date.now() + 400;
     if (owner === 'bar' && g.dragging) {
       const fs = document.getElementById('fs');
-      if (fs && (g.positionY < window.innerHeight * 0.5 || vy < -0.6)) {
+      // A slow drag has to reach the top fifth of the screen; a flick faster
+      // than 0.6 px/ms expands from anywhere.
+      if (fs && (g.positionY < window.innerHeight * 0.2 || vy < -0.6)) {
         fs.style.transition = 'transform .3s cubic-bezier(.2,.8,.2,1)'; fs.style.transform = 'translateY(0)';
         const list = document.getElementById('fsQueue'); if (list) list.scrollTop = 0;
       } else mobileClose();
