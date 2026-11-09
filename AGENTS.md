@@ -244,6 +244,12 @@ of these lines as the message's last line:
   same-origin checks for POSTs.
 - macOS packaging (`setup-macos.py`, `build-macos.sh`, `install-macos.sh`) can
   only be tested on a Mac; keep it boring and note it as unverified.
+- **Drive the page, don't guess.** `venv/bin/python tools/ui.py tools/ui_views.json`
+  runs every view at phone and desktop width, audits icon centring (`{"icons": "all"}`)
+  and writes one contact sheet, `artifacts/ui/review.png`. It takes JSON steps
+  (`goto`, `click`, `hover`, `press`, `eval`, `shot`, `sheet`). The scores and
+  categories are in `tools/ui_rubric.md`. Play triangles carry the documented
+  optical offset, so the audit lists them and that is expected.
 - **Before shipping, run `tools/agent-preflight.sh`.** It executes the portable
   unittest suite, Python compilation checks and (when Node is installed) the
   page's JavaScript syntax check. It requires `yt-dlp` available to the chosen

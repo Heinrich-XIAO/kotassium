@@ -1,0 +1,113 @@
+[
+ {
+  "size": [
+   1440,
+   900
+  ]
+ },
+ {
+  "goto": "/"
+ },
+ {
+  "shot": "d-home"
+ },
+ {
+  "icons": true
+ },
+ {
+  "layout": true
+ },
+ {
+  "click": ".cardgrid .card"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "d-playlist"
+ },
+ {
+  "icons": true
+ },
+ {
+  "goto": "/"
+ },
+ {
+  "click": "#settingsBtn"
+ },
+ {
+  "wait": 400
+ },
+ {
+  "shot": "d-settings"
+ },
+ {
+  "icons": true
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "goto": "/"
+ },
+ {
+  "click": "button[aria-label='Add Spotify link']"
+ },
+ {
+  "wait": 400
+ },
+ {
+  "shot": "d-addlink"
+ },
+ {
+  "icons": true
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "size": [
+   390,
+   844
+  ]
+ },
+ {
+  "goto": "/"
+ },
+ {
+  "shot": "p-home"
+ },
+ {
+  "icons": true
+ },
+ {
+  "layout": true
+ },
+ {
+  "click": ".cardgrid .card"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "p-playlist"
+ },
+ {
+  "icons": true
+ },
+ {
+  "layout": true
+ },
+ {
+  "size": [
+   1440,
+   900
+  ]
+ },
+ {
+  "goto": "/"
+ },
+ {
+  "sheet": "review"
+ }
+]

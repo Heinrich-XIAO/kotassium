@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import subprocess
@@ -198,7 +199,7 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("/api/links/contains", app)
         self.assertIn("inCurrentPlaylist", app)
         css = read("web/index.html")
-        self.assertIn("#nowsave.on:before{background:#1ed760;border-color:#1ed760}", css)
+        self.assertIn("#nowsave.on:before{background:transparent;border-color:#1ed760}", css)
         self.assertIn(".save-menu{position:absolute", css)
 
     def test_reference_css_is_preserved_in_index_shell(self):
@@ -206,6 +207,13 @@ class ReactParityTests(unittest.TestCase):
         current = read("web/index.html")
         reference_css = re.search(r"<style>(.*?)</style>", migrated_shell, re.S).group(1)
         current_css = re.search(r"<style>(.*?)</style>", current, re.S).group(1)
+        # The 2026 UI pass changed these rules on purpose. Each change is recorded
+        # in tests/data/ui_pass_css.json as the text it replaced, so reverting it
+        # here leaves exactly the CSS this comparison has always checked.
+        ledger = json.load(open(os.path.join(ROOT, "tests", "data", "ui_pass_css.json"), encoding="utf-8"))
+        for hunk in ledger:
+            self.assertIn(hunk["new"], current_css)
+            current_css = current_css.replace(hunk["new"], hunk["old"])
         reference_update_start = reference_css.index("#upd{")
         reference_update_end = reference_css.index("#empty{", reference_update_start)
         reference_css = reference_css[:reference_update_start] + reference_css[reference_update_end:]
