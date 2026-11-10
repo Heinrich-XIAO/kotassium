@@ -143,8 +143,10 @@ class ReactParityTests(unittest.TestCase):
 
     def test_bottom_volume_icon_is_close_to_a_longer_slider(self):
         css = read("web/index.html")
-        self.assertIn("#rside .volume-row{width:auto;gap:4px}", css)
-        self.assertIn("#rside .volume-row .aicon{width:24px;height:24px;padding:0}", css)
+        # The button is the bar's 32px icon size with no gap, so the 20px glyph
+        # still sits 6px from the slider, as it did in a 24px button with 4px.
+        self.assertIn("#rside .volume-row{width:auto;gap:0}", css)
+        self.assertIn("#rside .volume-row .aicon{width:32px;height:32px;padding:0}", css)
         self.assertIn("#rside #vol{width:112px;", css)
 
     def test_bottom_play_button_uses_a_smaller_optically_centered_triangle(self):
@@ -321,11 +323,11 @@ class ReactParityTests(unittest.TestCase):
         # and the glyph is even-sized (20px on the 16/20/24 scale), so 26px leaves 3px
         # either side.
         self.assertIn("cursor:pointer;padding:0}", css)
-        self.assertIn("#nowsave{position:relative;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--text-2);background:none;border:0;padding:0;", css)
+        self.assertIn("#nowsave{position:relative;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--text-2);background:none;border:0;padding:0;", css)
         # Hover grows the disc layer, never the button: a scale on the button
         # rasterised the 16px glyph at 16.8px, so the plus and the tick were
         # soft and off-grid for as long as the pointer sat on them. The glyph
-        # keeps a 26px box (16px + 5px either side, whole pixels) while the
+        # keeps a 32px box (16px + 8px either side, whole pixels) while the
         # disc grows by a pixel on every side.
         self.assertIn('#nowsave:before{content:"";position:absolute;inset:0;border-radius:50%;', css)
         self.assertIn("#nowsave:hover:before{inset:-1px;", css)
