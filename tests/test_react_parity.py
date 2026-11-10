@@ -199,7 +199,7 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("/api/links/contains", app)
         self.assertIn("inCurrentPlaylist", app)
         css = read("web/index.html")
-        self.assertIn("#nowsave.on:before{background:transparent;border-color:#1ed760}", css)
+        self.assertIn("#nowsave.on:before{background:transparent;border-color:#ffffff33}", css)
         self.assertIn(".save-menu{position:absolute", css)
 
     def test_reference_css_is_preserved_in_index_shell(self):
@@ -321,7 +321,7 @@ class ReactParityTests(unittest.TestCase):
         # and the glyph is even-sized (20px on the 16/20/24 scale), so 26px leaves 3px
         # either side.
         self.assertIn("cursor:pointer;padding:0}", css)
-        self.assertIn("#nowsave{position:relative;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:none;border:0;padding:0;", css)
+        self.assertIn("#nowsave{position:relative;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--text-2);background:none;border:0;padding:0;", css)
         # Hover grows the disc layer, never the button: a scale on the button
         # rasterised the 16px glyph at 16.8px, so the plus and the tick were
         # soft and off-grid for as long as the pointer sat on them. The glyph
