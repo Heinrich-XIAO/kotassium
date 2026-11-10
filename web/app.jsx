@@ -104,10 +104,17 @@ function TooltipLayer() {
   useEffect(() => {
     let timer = 0;
     let target = null;
+    let watch = null;
     const show = (event) => {
       const node = event.target?.closest?.('[data-tooltip]');
       if (!node || !node.dataset.tooltip || node.disabled) return;
+      // Focus moved by code (after a click) is not keyboard focus and gets no tooltip.
+      if (event.type === 'focusin' && !node.matches(':focus-visible')) return;
       target = node;
+      // A tooltip on screen follows its control's label, so Play turns into Pause with it.
+      watch?.disconnect();
+      watch = new MutationObserver(() => setTooltip((t) => t && node.dataset.tooltip ? { ...t, text: node.dataset.tooltip } : t));
+      watch.observe(node, { attributes: true, attributeFilter: ['data-tooltip'] });
       clearTimeout(timer);
       timer = setTimeout(() => {
         const rect = node.getBoundingClientRect();
@@ -118,14 +125,18 @@ function TooltipLayer() {
     };
     const hide = (event) => {
       if (target && event.relatedTarget && target.contains(event.relatedTarget)) return;
-      clearTimeout(timer); target = null; setTooltip(null);
+      clearTimeout(timer); target = null; watch?.disconnect(); setTooltip(null);
     };
+    const dismiss = () => { clearTimeout(timer); target = null; watch?.disconnect(); setTooltip(null); };
     document.addEventListener('mouseover', show);
     document.addEventListener('mouseout', hide);
+    document.addEventListener('pointerdown', dismiss);
     document.addEventListener('focusin', show);
     document.addEventListener('focusout', hide);
     return () => {
       clearTimeout(timer);
+      watch?.disconnect();
+      document.removeEventListener('pointerdown', dismiss);
       document.removeEventListener('mouseover', show);
       document.removeEventListener('mouseout', hide);
       document.removeEventListener('focusin', show);
@@ -149,17 +160,41 @@ function updateStepsText(current, latest) {
 // The seek bar reads the audio clock itself: letting every timeupdate
 // re-render the whole app (four times a second, forever) is what grew the
 // web content process's heap. This widget is a handful of nodes.
-// A dialog takes focus when it opens and gives it back to whatever opened it.
-function useDialogFocus(open, selector) {
+// The control a dialog should hand focus back to. A click does not always
+// focus a button (Safari never does), so the press is remembered as well.
+let lastOutside = null;
+const remember = (event) => {
+  const node = event.target?.closest?.('button,a,[tabindex],input');
+  if (node && !node.closest('[aria-modal="true"]')) lastOutside = node;
+};
+document.addEventListener('pointerdown', remember, true);
+document.addEventListener('focusin', remember, true);
+
+// A dialog takes focus when it opens, keeps Tab inside itself, and gives focus
+// back to whatever opened it.
+function useDialogFocus(open, selector, container) {
   useEffect(() => {
     if (!open) return undefined;
-    const opener = document.activeElement;
+    const opener = lastOutside;
     const frame = requestAnimationFrame(() => document.querySelector(selector)?.focus());
+    const trap = (event) => {
+      const box = container && document.querySelector(container);
+      if (event.key !== 'Tab' || !box) return;
+      const items = [...box.querySelectorAll('button,input,[tabindex]:not([tabindex="-1"])')].filter((el) => !el.disabled && el.offsetParent);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey ? document.activeElement === first || !box.contains(document.activeElement) : document.activeElement === last) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      }
+    };
+    document.addEventListener('keydown', trap);
     return () => {
       cancelAnimationFrame(frame);
-      if (opener && opener !== document.body && document.contains(opener)) opener.focus();
+      document.removeEventListener('keydown', trap);
+      if (opener && document.contains(opener)) opener.focus();
     };
-  }, [open, selector]);
+  }, [open, selector, container]);
 }
 
 // Enter or Space on a focusable card does what a click does.
@@ -1067,7 +1102,8 @@ function App() {
   }, [togglePlay, next, previous]);
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (event.code === 'Space' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) {
+      const focus = document.activeElement;
+      if (event.code === 'Space' && !/INPUT|TEXTAREA|SELECT|BUTTON|A/.test(focus?.tagName || '') && !focus?.closest?.('[role=button],[role=link],[role=slider],[role=switch],[role=radio]')) {
         event.preventDefault(); togglePlay();
       }
     };
@@ -1276,8 +1312,8 @@ function App() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [mobilePlayer, mobileClose]);
-  useDialogFocus(settingsOpen, '.settings-close');
-  useDialogFocus(linkOpen, '#plink');
+  useDialogFocus(settingsOpen, '.settings-close', '.settings-dialog');
+  useDialogFocus(linkOpen, '#plink', '.link-dialog');
   useDialogFocus(mobilePlayer, '#fsGrip');
   useDialogFocus(desktopPlayer, '#dfsExit');
   const toggleDesktop = useCallback(() => {
@@ -1350,8 +1386,8 @@ function App() {
   const trackRow = (tracks, mode, i) => {
     const track = tracks[i];
     const active = queue[currentIndex] && trackKey(queue[currentIndex]) === trackKey(track) && (mode === 'search' || playingPlaylist === view.name);
-    return <div className={`${mode === 'search' ? 'srow' : 'row'}${active ? ' playing' : ''}`} key={`${trackKey(track)}-${i}`} onClick={() => mode === 'search' ? playIndex(i, tracks, '') : playIndex(i, tracks, view.name)}>
-      {mode === 'search' ? <><button className="rbtn" data-tooltip="Play" aria-label="Play"><Icon name="play" size={16}/></button><div className="rtxt" style={{ flex: 1 }}><b>{track.t}</b><small>{track.a}</small></div><span className="stag">{track.source}</span>{track.full === false ? <span className="stream-only">stream only</span> : <span/>}<span/><span/></> : <><div><span className="trnum">{active ? <span className="bars"><i/><i/><i/><i/></span> : i + 1}</span></div><div className="rt"><div className="track-cover" style={{ background: coverBackground(track.cover, track.album || track.t) }} onMouseEnter={() => warmCover(track.cover)}></div><div className="rtxt"><b>{track.t}</b><small>{track.a}</small></div></div><div className="ralb">{track.album || ''}</div><div className="rdura">{fmt(track.ms)}</div></>}
+    return <div className={`${mode === 'search' ? 'srow' : 'row'}${active ? ' playing' : ''}`} key={`${trackKey(track)}-${i}`} role="button" tabIndex={0} aria-label={`Play ${track.t}${track.a ? ` by ${track.a}` : ''}`} onClick={() => mode === 'search' ? playIndex(i, tracks, '') : playIndex(i, tracks, view.name)} onKeyDown={onActivate(() => mode === 'search' ? playIndex(i, tracks, '') : playIndex(i, tracks, view.name))}>
+      {mode === 'search' ? <><button className="rbtn" tabIndex={-1} data-tooltip="Play" aria-label="Play"><Icon name="play" size={16}/></button><div className="rtxt" style={{ flex: 1 }}><b>{track.t}</b><small>{track.a}</small></div><span className="stag">{track.source}</span>{track.full === false ? <span className="stream-only">stream only</span> : <span/>}<span/><span/></> : <><div><span className="trnum">{active ? <span className={`bars${paused ? ' paused' : ''}`}><i/><i/><i/><i/></span> : i + 1}</span></div><div className="rt"><div className="track-cover" style={{ background: coverBackground(track.cover, track.album || track.t) }} onMouseEnter={() => warmCover(track.cover)}></div><div className="rtxt"><b>{track.t}</b><small>{track.a}</small></div></div><div className="ralb">{track.album || ''}</div><div className="rdura">{fmt(track.ms)}</div></>}
     </div>;
   };
   const trackRows = (tracks, mode) => tracks.map((_, i) => trackRow(tracks, mode, i));
@@ -1365,27 +1401,31 @@ function App() {
       const live = !!currentTrack && playingPlaylist === p.name;
       const pausable = live && !paused;
       const label = `${pausable ? 'Pause' : 'Play'} ${p.name}`;
+      const minutes = Math.round((p.tracks || []).reduce((sum, t) => sum + (t.ms || 0), 0) / 60000);
+      const length = minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : minutes ? `${minutes} min` : '';
       return <section id="feature" role="link" tabIndex={0} aria-label={`Open ${p.name}`} style={{ background: `linear-gradient(90deg,hsl(${hue(p.name)},45%,24%),#181818 75%)` }} onClick={() => loadPlaylist(featured)} onKeyDown={onActivate(() => loadPlaylist(featured))}>
         <div className="fcover" style={{ background: coverBackground(linkCover(p), p.name) }}/>
         <div className="finfo"><small>{live ? 'Now playing' : lastPlaylist === p.name ? 'Jump back in' : 'Start here'}</small><h2>{p.name}</h2><p>{p.total || p.count} songs</p>
-        <button className="fplay" data-tooltip={label} aria-label={label} onClick={(e) => { e.stopPropagation(); if (live) togglePlay(); else loadPlaylist(featured, true); }}><Icon name={pausable ? 'pause' : 'play'} size={24}/><span>{pausable ? 'Pause' : 'Play'}</span></button></div>
+        <button className="fplay" data-tooltip={label} aria-label={label} onClick={(e) => { e.stopPropagation(); if (live) togglePlay(); else { loadPlaylist(featured, true); requestAnimationFrame(() => document.getElementById('bigplay')?.focus({ preventScroll: true })); } }}><Icon name={pausable ? 'pause' : 'play'} size={24}/><span>{pausable ? 'Pause' : 'Play'}</span></button></div>
+        <div className="ffig" aria-hidden="true"><b>{p.total || p.count}</b><span>songs{length ? ` · ${length}` : ''}</span></div>
       </section>;
     })();
-    return <div id="homeView">{feature}{links.length ? <><h2>Your playlists</h2><div className="cardgrid">{links.map((p, i) => <article className="card" key={p.url || p.name} role="link" tabIndex={0} aria-label={`Open ${p.name}`} onClick={() => loadPlaylist(i)} onKeyDown={onActivate(() => loadPlaylist(i))}><div className="ccover" style={{ background: coverBackground(linkCover(p), p.name) }} onMouseEnter={() => warmCover(linkCover(p))}><button className="card-play" data-tooltip={`Play ${p.name}`} aria-label={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={20}/></button></div><b>{p.name || '?'}</b><small>{p.total || p.count} songs</small></article>)}</div></> : <div className="empty-cta"><h2>Your library is empty</h2><button className="pill-cta" onClick={() => setLinkOpen(true)}><Icon name="add" size={20}/>Add a Spotify link</button></div>}</div>;
+    return <div id="homeView">{feature}{links.length > 1 ? <><h2>Your playlists</h2><div className="cardgrid">{links.map((p, i) => i === featured ? null : <article className="card" key={p.url || p.name} role="link" tabIndex={0} aria-label={`Open ${p.name}`} onClick={() => loadPlaylist(i)} onKeyDown={onActivate(() => loadPlaylist(i))}><div className="ccover" style={{ background: coverBackground(linkCover(p), p.name) }} onMouseEnter={() => warmCover(linkCover(p))}><button className="card-play" data-tooltip={`Play ${p.name}`} aria-label={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={20}/></button></div><b>{p.name || '?'}</b><small>{p.total || p.count} songs</small></article>)}</div></> : links.length ? null : <div className="empty-cta"><h2>Your library is empty</h2><button className="pill-cta" onClick={() => setLinkOpen(true)}><Icon name="add" size={20}/>Add a Spotify link</button></div>}</div>;
   };
 
   const repeatButton = (fullscreen = false) => <button id={fullscreen ? 'fsRepeat' : 'repeatb'} className={`aicon ${repeat ? 'on' : ''}`} aria-pressed={repeat !== 0} onClick={toggleRepeat} data-tooltip={`Repeat ${repeat === 0 ? 'off' : repeat === 1 ? 'all' : 'one'}`} aria-label={`Repeat ${repeat === 0 ? 'off' : repeat === 1 ? 'all' : 'one'}`}>{repeat === 2 ? <Repeat1 size={fullscreen ? 24 : 20} strokeWidth={2}/> : <Repeat size={fullscreen ? 24 : 20} strokeWidth={2}/>}</button>;
   const controls = (fullscreen = false) => <div className={fullscreen ? 'fs-controls' : ''} id={fullscreen ? 'fsBtns' : 'btns'}><button id={fullscreen ? 'fsShuf' : 'shufb'} className={`aicon ${shuffle ? 'on' : ''}`} aria-pressed={shuffle} onClick={toggleShuffle} data-tooltip="Shuffle" aria-label="Shuffle"><Icon name="shuffle" size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsprev' : 'prevb'} className="aicon" onClick={previous} disabled={!currentTrack || (currentIndex <= 0 && !(repeat === 1 && queue.length > 1))} data-tooltip="Previous" aria-label="Previous"><Icon name="prev" size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsPlay' : 'playb'} className={fullscreen ? 'fs-play' : ''} onClick={togglePlay} disabled={!currentTrack} data-tooltip={paused ? 'Play' : 'Pause'} aria-label={paused ? 'Play' : 'Pause'}><Icon name={paused ? 'play' : 'pause'} size={fullscreen ? 24 : 16}/></button><button id={fullscreen ? 'fsnext' : 'nextb'} className="aicon" onClick={next} data-tooltip="Next" aria-label="Next" disabled={!currentTrack || (nextIndex < 0 && !radio)}><Icon name="next" size={fullscreen ? 24 : 20}/></button>{repeatButton(fullscreen)}</div>;
-  const volumeRow = (full = false) => <div id={full ? 'fsVol' : undefined} className={full ? 'fs-volume' : 'volume-row'}><button className="aicon" onClick={toggleVolume} data-tooltip="Volume" aria-label="Volume"><span id={full ? 'volIcon2' : 'volIcon'}>{icon('volume', full ? 24 : 20)}</span></button><div className={full ? 'fs-volume-bar' : ''} id={full ? 'fsVolBar' : 'vol'} {...volumeHandlers()} role="slider" tabIndex={0} aria-label="Volume level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((muted ? 0 : Math.sqrt(volume)) * 100)} onKeyDown={(event) => {
-    const step = { ArrowRight: 5, ArrowUp: 5, ArrowLeft: -5, ArrowDown: -5 }[event.key];
-    if (!step) return;
+  const volumeRow = (full = false) => <div id={full ? 'fsVol' : undefined} className={full ? 'fs-volume' : 'volume-row'}><button className="aicon" onClick={toggleVolume} data-tooltip="Volume" aria-label="Volume"><span id={full ? 'volIcon2' : 'volIcon'}>{icon('volume', full ? 24 : 20)}</span></button><div className={full ? 'fs-volume-bar' : ''} id={full ? 'fsVolBar' : 'vol'} {...volumeHandlers()} role="slider" tabIndex={0} aria-label="Volume level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((muted ? 0 : Math.sqrt(volume)) * 100)} aria-valuetext={`${Math.round((muted ? 0 : Math.sqrt(volume)) * 100)}%`} onKeyDown={(event) => {
+    const now = (muted ? 0 : Math.sqrt(volume)) * 100;
+    const to = { ArrowRight: now + 5, ArrowUp: now + 5, ArrowLeft: now - 5, ArrowDown: now - 5, PageUp: now + 20, PageDown: now - 20, Home: 0, End: 100 }[event.key];
+    if (to === undefined) return;
     event.preventDefault();
-    setVolumePercent((muted ? 0 : Math.sqrt(volume)) * 100 + step);
+    setVolumePercent(to);
   }}><i id={full ? 'fsVolFill' : 'volf'} style={{ width: `${(muted ? 0 : Math.sqrt(volume)) * 100}%` }} /></div></div>;
   const progress = (full = false) => <SeekBar audioRef={audioRef} duration={duration} handlers={seekHandlers()} full={full} />;
 
   return <>
-    <header id="top"><button id="libBtn" className="top-lib" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'} aria-label={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={20}/></button><button id="homeBtn" onClick={goHome} data-tooltip="Home" aria-label="Home"><Icon name="home"/></button><div id="searchwrap" className={query ? 'filled' : ''}><Icon name="search" size={20}/><input id="q" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder={narrow ? 'Search' : 'What do you want to play?'}/><button id="qClear" onClick={() => { setQuery(''); document.querySelector('#q')?.focus(); }} data-tooltip="Clear search" aria-label="Clear search"><Icon name="close" size={16}/></button></div><button id="settingsBtn" onClick={() => setSettingsOpen(true)} data-tooltip="Settings" aria-label="Open settings"><Settings2 size={20} strokeWidth={1.8} aria-hidden="true"/></button>{updateState?.supported && <div id="upd" className={`${updateMessage ? 'on' : 'on icononly'}`}><span id="updtext">{updateMessage || (updateState.available ? `Kotassium ${updateState.latest} is available (${updateStepsText(updateState.version, updateState.latest)})${updateState.can_install === false ? ' — move it to Applications to update' : ''}` : '')}</span><button id="updbtn" className={updateState.available ? 'go' : ''} onClick={updateState.available ? startUpdate : checkUpdate} disabled={updateBusy} data-tooltip={updateState.available ? 'Restart & Update' : 'Check for updates'} aria-label={updateState.available ? 'Restart and install update' : 'Check for updates'}>{updateState.available ? <Download size={16} strokeWidth={2.2} aria-hidden="true"/> : <RefreshCw size={16} strokeWidth={2} className={updateBusy ? 'lucide-spin' : ''} aria-hidden="true"/>}</button>{updateState.available && <button id="updcheck" onClick={checkUpdate} disabled={updateBusy} data-tooltip="Check again" aria-label="Check for updates again"><RotateCw size={16} strokeWidth={1.9} aria-hidden="true"/></button>}</div>}</header>
+    <a className="skip" href="#main" onClick={(event) => { event.preventDefault(); document.getElementById('main')?.focus(); }}>Skip to content</a><header id="top"><button id="libBtn" className="top-lib" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'} aria-label={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={20}/></button><button id="homeBtn" onClick={goHome} data-tooltip="Home" aria-label="Home"><Icon name="home"/></button><div id="searchwrap" className={query ? 'filled' : ''}><Icon name="search" size={20}/><input id="q" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} placeholder={narrow ? 'Search' : 'What do you want to play?'}/><button id="qClear" onClick={() => { setQuery(''); document.querySelector('#q')?.focus(); }} data-tooltip="Clear search" aria-label="Clear search"><Icon name="close" size={16}/></button></div><button id="settingsBtn" onClick={() => setSettingsOpen(true)} data-tooltip="Settings" aria-label="Open settings"><Settings2 size={20} strokeWidth={1.8} aria-hidden="true"/></button>{updateState?.supported && <div id="upd" className={`${updateMessage ? 'on' : 'on icononly'}`}><span id="updtext">{updateMessage || (updateState.available ? `Kotassium ${updateState.latest} is available (${updateStepsText(updateState.version, updateState.latest)})${updateState.can_install === false ? ' — move it to Applications to update' : ''}` : '')}</span><button id="updbtn" className={updateState.available ? 'go' : ''} onClick={updateState.available ? startUpdate : checkUpdate} disabled={updateBusy} data-tooltip={updateState.available ? 'Restart & Update' : 'Check for updates'} aria-label={updateState.available ? 'Restart and install update' : 'Check for updates'}>{updateState.available ? <Download size={16} strokeWidth={2.2} aria-hidden="true"/> : <RefreshCw size={16} strokeWidth={2} className={updateBusy ? 'lucide-spin' : ''} aria-hidden="true"/>}</button>{updateState.available && <button id="updcheck" onClick={checkUpdate} disabled={updateBusy} data-tooltip="Check again" aria-label="Check for updates again"><RotateCw size={16} strokeWidth={1.9} aria-hidden="true"/></button>}</div>}</header>
     {settingsOpen && <div className="settings-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
       <section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
         <header className="settings-head">
@@ -1394,17 +1434,9 @@ function App() {
         </header>
         <div className="settings-content">
           <section className="settings-group">
-            <h3 className="settings-label">Playback</h3>
+            <h3 className="settings-label">Preferences</h3>
             <div className="settings-card">
-              <div className="setting-row"><div className="setting-copy"><b>Output level</b></div><div className="setting-volume"><input aria-label="Output level" type="range" min="0" max="100" value={Math.round((muted ? 0 : Math.sqrt(volume)) * 100)} style={{ '--range-progress': `${(muted ? 0 : Math.sqrt(volume)) * 100}%` }} onChange={(event) => setVolumePercent(event.target.value)}/><span>{Math.round((muted ? 0 : Math.sqrt(volume)) * 100)}%</span></div></div>
-              <div className="setting-row"><div className="setting-copy"><b>Shuffle</b></div><button className={`setting-switch ${shuffle ? 'enabled' : ''}`} role="switch" aria-checked={shuffle} aria-label="Shuffle playback" onClick={toggleShuffle}><i/></button></div>
-              <div className="setting-row"><div className="setting-copy"><b>Repeat</b></div><div className="setting-seg" role="radiogroup" aria-label="Repeat mode">{[['Off', 0], ['Queue', 1], ['One', 2]].map(([label, value]) => <button key={value} type="button" role="radio" aria-checked={repeat === value} className={repeat === value ? 'on' : ''} onClick={() => { setRepeat(value); try { localStorage.setItem('kot_repeat', String(value)); } catch {} }}>{label}</button>)}</div></div>
               <div className="setting-row"><div className="setting-copy"><b>Track change notifications</b></div><button className={`setting-switch ${notifyTrackChanges ? 'enabled' : ''}`} role="switch" aria-checked={notifyTrackChanges} aria-label="Track change notifications" onClick={() => setNotifyTrackChanges((value) => { const next = !value; try { localStorage.setItem('kot_notify_track_changes', next ? '1' : '0'); } catch {} return next; })}><i/></button></div>
-            </div>
-          </section>
-          <section className="settings-group">
-            <h3 className="settings-label">Workspace</h3>
-            <div className="settings-card">
               <div className="setting-row"><div className="setting-copy"><b>Compact library</b></div><button className={`setting-switch ${collapsed ? 'enabled' : ''}`} role="switch" aria-checked={collapsed} aria-label="Compact library" onClick={() => setCollapsed((value) => { const next = !value; try { localStorage.setItem('kot_side_collapsed', next ? '1' : '0'); } catch {} return next; })}><i/></button></div>
             </div>
           </section>
@@ -1425,12 +1457,11 @@ function App() {
     </div>}
     {linkOpen && <div className="link-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setLinkOpen(false); }}>
       <section className="link-dialog" role="dialog" aria-modal="true" aria-labelledby="linkTitle">
-        <header className="link-dialog-head"><span/><button className="settings-close" onClick={() => setLinkOpen(false)} disabled={busy} aria-label="Close add link dialog"><Icon name="close" size={20}/></button></header>
-        <div className="link-dialog-copy"><h2 id="linkTitle">Add a Spotify link</h2></div>
-        <form className="link-form" onSubmit={(event) => { event.preventDefault(); if (!busy) addLink(); }}><label htmlFor="plink" className="sr-only">Playlist, album or track link</label><div className="link-input-wrap"><input id="plink" type="url" value={linkValue} onChange={(event) => setLinkValue(event.target.value)} placeholder="https://open.spotify.com/…" autoComplete="url" required disabled={busy}/><span className="link-input-icon"><Icon name="browse" size={16}/></span></div><label className="link-opt" htmlFor="bgdl"><input id="bgdl" type="checkbox" checked={bgDownload} onChange={(event) => setBgDownload(event.target.checked)} disabled={busy}/><span><b>Download every track</b><small>Downloads in the background, one at a time.</small></span></label><button className="link-submit" type="submit" disabled={busy || !linkValue.trim()}>{busy ? <><i className="link-spinner"/>Adding to library…</> : 'Add link'}</button></form>
+        <header className="link-dialog-head"><h2 id="linkTitle">Add a Spotify link</h2><button className="settings-close" onClick={() => setLinkOpen(false)} disabled={busy} aria-label="Close add link dialog"><Icon name="close" size={20}/></button></header>
+        <form className="link-form" onSubmit={(event) => { event.preventDefault(); if (!busy) addLink(); }}><label htmlFor="plink" className="sr-only">Playlist, album or track link</label><div className="link-input-wrap"><input id="plink" type="url" value={linkValue} onChange={(event) => setLinkValue(event.target.value)} placeholder="https://open.spotify.com/…" autoComplete="url" required disabled={busy}/><span className="link-input-icon"><Icon name="browse" size={16}/></span></div><label className="link-opt" htmlFor="bgdl"><input id="bgdl" type="checkbox" checked={bgDownload} onChange={(event) => setBgDownload(event.target.checked)} disabled={busy}/><span><b>Download all tracks</b></span></label><button className="link-submit" type="submit" disabled={busy || !linkValue.trim()}>{busy ? <><i className="link-spinner"/>Adding to library…</> : 'Add link'}</button></form>
       </section>
     </div>}
-    <div id="mid" className={sideDragWidth !== null ? 'resizing' : ''}><aside id="side" className={`${(sideResizePreview !== null ? sideResizePreview : collapsed) ? 'collapsed' : ''} ${drawerOpen ? 'open' : ''}`} onTouchStart={(e) => gestureStart(e, 'side')} onTouchMove={(e) => gestureMove(e, 'side')} onTouchEnd={(e) => gestureEnd(e, 'side')} onTouchCancel={(e) => gestureEnd(e, 'side')} onClickCapture={suppressGestureClick}><div id="sideHead"><button id="libToggle" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'} aria-label={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={20}/><b>Your Library</b></button><button id="addBtn" onClick={addLibraryLink} data-tooltip="Add Spotify link" aria-label="Add Spotify link"><Icon name="add" size={20}/></button></div><div id="sideList">{links.length ? links.map((p, i) => <div className={`pitem ${view.type === 'playlist' && view.name === p.name ? 'active' : ''}`} key={p.url || p.name} data-tooltip={p.name} role="link" tabIndex={0} aria-label={`Open ${p.name}`} onClick={() => loadPlaylist(i)} onKeyDown={onActivate(() => loadPlaylist(i))}><div className="pcover" data-tooltip={p.name || '?'} style={{ background: coverBackground(p.cover || p.tracks?.[0]?.cover, p.name) }} onMouseEnter={() => warmCover(p.cover || p.tracks?.[0]?.cover)} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><button className="pcoverPlay" data-tooltip={`Play ${p.name}`} aria-label={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={20}/></button></div><div className="pmeta"><b>{p.name || '?'}</b><small>{typeof p.total === 'number' && p.total > p.count ? `${p.count} of ${p.total} songs` : `${p.count} songs${p.partial ? ' (partial)' : ''}`}</small></div></div>) : null}</div></aside><div id="sideResize" role="separator" aria-label="Resize library" aria-orientation="vertical" aria-valuemin={68} aria-valuemax={262} aria-valuenow={sideDragWidth ?? (collapsed ? 68 : 262)} tabIndex={0} onPointerDown={startSidebarResize} onPointerMove={moveSidebarResize} onPointerUp={finishSidebarResize} onPointerCancel={finishSidebarResize} onKeyDown={keySidebarResize}/><main id="main">{renderMain()}</main></div>
+    <div id="mid" className={sideDragWidth !== null ? 'resizing' : ''}><aside id="side" className={`${(sideResizePreview !== null ? sideResizePreview : collapsed) ? 'collapsed' : ''} ${drawerOpen ? 'open' : ''} ${links.length ? '' : 'bare'}`} onTouchStart={(e) => gestureStart(e, 'side')} onTouchMove={(e) => gestureMove(e, 'side')} onTouchEnd={(e) => gestureEnd(e, 'side')} onTouchCancel={(e) => gestureEnd(e, 'side')} onClickCapture={suppressGestureClick}><div id="sideHead"><button id="libToggle" onClick={toggleSide} data-tooltip={collapsed ? 'Expand library' : 'Collapse library'} aria-label={collapsed ? 'Expand library' : 'Collapse library'}><Icon name="library" size={20}/><b>Your Library</b></button><button id="addBtn" onClick={addLibraryLink} data-tooltip="Add Spotify link" aria-label="Add Spotify link"><Icon name="add" size={20}/></button></div><div id="sideList">{links.length ? links.map((p, i) => <div className={`pitem ${view.type === 'playlist' && view.name === p.name ? 'active' : ''}`} key={p.url || p.name} data-tooltip={p.name} role="link" tabIndex={0} aria-label={`Open ${p.name}`} onClick={() => loadPlaylist(i)} onKeyDown={onActivate(() => loadPlaylist(i))}><div className="pcover" data-tooltip={p.name || '?'} style={{ background: coverBackground(p.cover || p.tracks?.[0]?.cover, p.name) }} onMouseEnter={() => warmCover(p.cover || p.tracks?.[0]?.cover)} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><button className="pcoverPlay" data-tooltip={`Play ${p.name}`} aria-label={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={20}/></button></div><div className="pmeta"><b>{p.name || '?'}</b><small>{typeof p.total === 'number' && p.total > p.count ? `${p.count} of ${p.total} songs` : `${p.count} songs${p.partial ? ' (partial)' : ''}`}</small></div></div>) : null}</div></aside><div id="sideResize" role="separator" aria-label="Resize library" aria-orientation="vertical" aria-valuemin={68} aria-valuemax={262} aria-valuenow={sideDragWidth ?? (collapsed ? 68 : 262)} tabIndex={0} onPointerDown={startSidebarResize} onPointerMove={moveSidebarResize} onPointerUp={finishSidebarResize} onPointerCancel={finishSidebarResize} onKeyDown={keySidebarResize}/><main id="main" tabIndex={-1}>{renderMain()}</main></div>
     <footer id="bar" className={currentTrack ? '' : 'idle'} onTouchStart={(e) => gestureStart(e, 'bar')} onTouchMove={(e) => gestureMove(e, 'bar')} onTouchEnd={(e) => gestureEnd(e, 'bar')} onTouchCancel={(e) => gestureEnd(e, 'bar')} onClickCapture={suppressGestureClick}><div className="barfull" style={{ display: 'contents' }}><div id="nowp"><button id="nowc" onClick={mobileOpen} data-tooltip="Open player" aria-label="Open player" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)} /><div id="nowt"><b>{currentTrack?.t || 'Nothing playing'}</b><small>{currentTrack ? currentTrack.a : links.length ? 'Pick a playlist' : ''}</small></div>{currentTrack && <div className="nowsave-wrap"><button id="nowsave" className={inCurrentPlaylist ? 'on' : ''} onClick={toggleSaveMenu} aria-label="Add to playlist" aria-expanded={saveOpen} data-tooltip={inCurrentPlaylist ? 'Saved to this playlist' : 'Add to playlist'}><Icon name={inCurrentPlaylist ? 'check' : 'add'} size={16}/></button>{saveOpen && <div className="save-menu" role="dialog" aria-label="Add to playlist"><div className="save-head"><b>Add to playlist</b><button className="save-close" onClick={() => setSaveOpen(false)} aria-label="Close"><Icon name="close" size={16}/></button></div><div className="save-list">{links.length ? links.map((l) => { const inIt = !!(saveContains && saveContains[l.url || l.name]); return <button key={l.url || l.name} className={`save-row ${inIt ? 'in' : ''}`} onClick={() => togglePlaylistMembership(l)} aria-pressed={inIt}><span className="save-name">{l.name || '?'}</span><span className="save-mark"><Icon name={inIt ? 'check' : 'add'} size={16}/></span></button>; }) : <p className="save-empty">No playlists yet - add one with the + button in your library.</p>}</div></div>}</div>}</div><div id="ctr">{controls()}{progress()}</div><div id="rside">{volumeRow()}<button id="dfsBtn" disabled={!currentTrack} className={`aicon desktop-fullscreen ${desktopPlayer ? 'is-open' : ''}`} onClick={toggleDesktop} data-tooltip={desktopPlayer ? 'Exit full screen' : 'Full screen'} aria-label={desktopPlayer ? 'Exit full screen' : 'Full screen'}><Icon name={desktopPlayer ? 'exitFullscreen' : 'fullscreen'}/></button></div></div></footer>
     <div id="fs" className={mobilePlayer ? 'on' : ''} onTouchStart={(e) => gestureStart(e, 'fs')} onTouchMove={(e) => gestureMove(e, 'fs')} onTouchEnd={(e) => gestureEnd(e, 'fs')} onTouchCancel={(e) => gestureEnd(e, 'fs')} onClickCapture={suppressGestureClick}><button id="fsGrip" onClick={mobileClose} aria-label="Close player"/><div id="fsHead"><span id="fsPl">{playingPlaylist || 'Now playing'}</span></div><div id="fsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }} onMouseEnter={() => warmCover(currentTrack?.cover)}/><div id="fsTxt"><b>{currentTrack?.t || 'Nothing playing'}</b><small>{currentTrack?.a || 'Pick a playlist'}</small></div><div id="fsQueue" style={{ display: upcoming.length ? '' : 'none' }}><div id="fsQhead"><b>Up next</b><span id="fsQcount">{upcoming.length} {upcoming.length === 1 ? 'song' : 'songs'}</span></div><div id="fsQrows">{mobilePlayer && upcoming.map((i, n) => <div className="fsQrow" key={`${trackKey(queue[i])}-${i}`} onClick={() => playIndex(i)}><span className="fsQn">{n + 1}</span><span className="fsQcov" style={{ background: coverBackground(queue[i]?.cover, queue[i]?.t) }}/><span className="fsQt"><b>{queue[i]?.t}</b><small>{queue[i]?.a}</small></span><span className="fsQtime">{fmt(queue[i]?.ms)}</span></div>)}</div></div><div id="fsIsland">{progress(true)}{controls(true)}{volumeRow(true)}</div></div>
     {desktopPlayer && <div id="dfs" className={`open ${desktopIdle ? 'idle' : ''}`} onMouseMove={() => setDesktopIdle(false)}><div id="dfsMain"><div id="dfsTop"><span id="dfsTopTitle">{playingPlaylist || 'Now playing'}</span><button id="dfsExit" onClick={() => setDesktopPlayer(false)} data-tooltip="Exit full screen" aria-label="Exit full screen"><Icon name="exitFullscreen" size={20}/></button></div><div id="dfsArt" style={{ background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t) : '#282828' }}/><div id="dfsInfo"><b id="dfsTitle">{currentTrack?.t || 'Nothing playing'}</b><small id="dfsArtist">{currentTrack?.a || 'Pick a playlist'}</small></div></div><div id="dfsQueue" style={{ display: queue.length ? '' : 'none' }}><div id="dfsQhead"><b>Queue</b><span id="dfsQcount">{queue.length} {queue.length === 1 ? 'track' : 'tracks'}</span></div><div id="dfsQrows">{currentTrack ? <><div className="dfsQsect">Now Playing</div><QueueRow track={currentTrack} active onClick={() => playIndex(currentIndex)} />{upcoming.length > 0 && <div className="dfsQsect">Next Up</div>}{upcoming.map((i) => <QueueRow key={`${trackKey(queue[i])}-${i}`} track={queue[i]} onClick={() => playIndex(i)}/>)}</> : queue.map((track, index) => <QueueRow key={`${trackKey(track)}-${index}`} track={track} onClick={() => playIndex(index)}/>)}</div></div></div>}
