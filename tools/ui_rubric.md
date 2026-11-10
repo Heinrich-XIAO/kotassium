@@ -21,8 +21,9 @@ list or a dashboard.
 4. **Next-click prominence.** The action most likely to be clicked next is the
    most visually dominant control on the screen. Secondary actions recede.
 5. **Icon centring.** Every icon-only control centres its glyph within 0.10px
-   (`tools/ui.py` `{"icons": "all"}`). The play triangles carry a documented
-   optical offset (AGENTS.md), so they are not judged on box centring.
+   (`tools/ui.py` `{"icons": "all"}`). The play triangle and the tick carry a
+   documented optical offset (AGENTS.md, tests/test_icons.py), and the audit
+   holds them to that offset instead of the box centre.
 6. **Typographic hierarchy.** Three clear levels (title, label, meta). Sizes
    come from the scale, not from one-off values.
 7. **Spacing rhythm.** Gutters repeat (16, 24, 32). Groups are separated by
@@ -34,8 +35,9 @@ list or a dashboard.
 10. **Other sizes.** Looks deliberate at 1024x700 and 1920x1080 too.
 11. **States.** Empty, playing, paused and no-track states each say what to do
     next, in as few words as possible.
-12. **Accessibility.** Text contrast at least 4.5:1. Every icon-only control
-    has a label. Focus is visible on keyboard navigation.
+12. **Accessibility.** Text contrast at least 4.5:1 (3:1 for large text), as
+    `{"contrast": true}` measures it. Every icon-only control has a label.
+    Focus is visible on keyboard navigation. Dialogs close on Escape.
 13. **Motion and feedback.** Hover, press and active states respond at once.
     Motion is short. Reduced motion is respected.
 14. **Scannability.** A list or grid reads at a glance: the title is clear, the
@@ -45,8 +47,17 @@ list or a dashboard.
 
 ## How to check
 
-    venv/bin/python tools/ui.py tools/ui_views.json      # every view, both sizes
-    venv/bin/python tools/ui.py '[{"goto":"/"},{"icons":"all"}]'
-    venv/bin/python tools/ui.py '[{"size":[1024,700]},{"goto":"/"},{"shot":"t-home"}]'
+    venv/bin/python tools/ui.py tools/ui_views.json
+
+That one run covers every view and writes three contact sheets:
+`artifacts/ui/review-desktop.png` (home, hover, playlist, settings, add-link,
+playing at 1440x900), `review-sizes.png` (1024x700 and 1920x1080) and
+`review-phone.png` (home, playlist, playing, full player at 390x844). It also
+prints the icon audit, the layout check and a WCAG contrast audit per view.
+
+The library is seeded by `tools/ui_seed.py`. `KOT_SEED=sparse` gives three
+cover-less playlists and `KOT_SEED=empty` the first-run state, for example:
+
+    KOT_SEED=empty venv/bin/python tools/ui.py '[{"goto":"/"},{"shot":"e-home"}]'
 
 Read a screenshot with the Read tool. Look at it. Then judge it.

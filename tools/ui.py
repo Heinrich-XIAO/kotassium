@@ -17,14 +17,16 @@ A scenario is a JSON list. Each step has one key:
     {"shot": "name"}        save artifacts/ui/<name>.png
     {"icons": true}         centring audit of every icon-only control ("all" lists each one)
     {"layout": true}        horizontal overflow, words and controls in view
-    {"sheet": "name"}       one contact sheet of every shot so far: a single image to read
+    {"contrast": true}      WCAG AA text contrast against the composited background
+    {"sheet": "name"}       one contact sheet of the shots since the last sheet: one image to read
 
 Needs the venv with playwright and pillow (venv/bin/pip install playwright pillow)
 and Google Chrome at /Applications, or KOT_CHROME pointing at a Chromium binary.
 Scores for the page live in tools/ui_rubric.md.
 
 Output is one line per step. Screenshots land in artifacts/ui/, which git
-ignores. Set KOT_URL to test a server that is already running. Set KOT_CHROME
+ignores. KOT_SEED picks the library: full (default), sparse or empty
+(tools/ui_seed.py). Set KOT_URL to test a server that is already running. Set KOT_CHROME
 to pick another browser binary.
 """
 import json
@@ -36,27 +38,19 @@ import time
 import urllib.request
 
 from PIL import Image
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ui_seed  # noqa: E402
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = os.path.join(ROOT, "venv", "bin", "python")
 OUT = os.path.join(ROOT, "artifacts", "ui")
-LIB = os.path.join(ROOT, "artifacts", "ui-lib")
+SEED = os.environ.get("KOT_SEED", "full")
+LIB = os.path.join(ROOT, "artifacts", "ui-lib-" + SEED)
 TOLERANCE = 0.1  # CSS px an icon's ink box may sit off its control's centre
 CHROME = os.environ.get(
     "KOT_CHROME", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-
-# A library with three playlists, so the home page and the list views have
-# content. The same seed as tools/page_shot.sh.
-SEED_TRACKS = [{"t": "Song One", "a": "Artist A", "ms": 214000, "id": "yt1"},
-               {"t": "Song Two", "a": "Artist B", "ms": 187000, "id": "yt2"},
-               {"t": "Song Three", "a": "Artist C", "ms": 249000, "id": "yt3"}]
-SEED_LINKS = [{"url": "https://open.spotify.com/playlist/demo", "name": "Late Night Drive",
-               "count": 3, "ts": 0, "tracks": SEED_TRACKS},
-              {"url": "https://open.spotify.com/playlist/demo2", "name": "Kitchen Radio",
-               "count": 12, "total": 12, "ts": 0, "tracks": SEED_TRACKS},
-              {"url": "https://open.spotify.com/playlist/demo3", "name": "Long Player",
-               "count": 8, "total": 20, "partial": True, "ts": 0, "tracks": SEED_TRACKS}]
 
 ICON_JS = """
 () => {
@@ -68,8 +62,10 @@ ICON_JS = """
     if (!visible(ctl)) continue;
     const svg = [...ctl.querySelectorAll('svg')].find((s) => visible(s) && !seen.has(s));
     if (!svg) continue;
-    seen.add(svg);
+    // A labelled control (a card, a pill with text) is not judged, but the
+    // icon-only button inside it still is, so its glyph stays unclaimed.
     if (ctl.textContent.trim()) { skipped++; continue; }
+    seen.add(svg);
     // The glyph's own box, from its shapes: getBBox is exact for arcs and
     // ignores the stroke, which is symmetric about the path.
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -84,13 +80,68 @@ ICON_JS = """
     const label = ctl.getAttribute('aria-label') || ctl.getAttribute('title') || ctl.id ||
       (ctl.className && String(ctl.className.baseVal ?? ctl.className)) || ctl.tagName.toLowerCase();
     const k = s.width / vb.width;  // css px per glyph unit
-    out.push({ label: label.slice(0, 40), size: Math.round(c.width),
+    // Two glyphs are placed optically on purpose (OPTICAL_X / OPTICAL_Y in
+    // tests/test_icons.py): the play triangle 0.75 units right, and the tick's
+    // path box 0.15 units high so its stroked ink is centred. Hold them there.
+    const play = !!svg.querySelector('path[d^="M3.533 2.569"]');
+    const tick = !!svg.querySelector('path[d^="M20 6.35"]');
+    const optical = play ? 0.75 * k : 0, opticalY = tick ? -0.15 * k : 0;
+    out.push({ label: label.slice(0, 40), size: Math.round(c.width), optical, opticalY,
                dx: (s.x + s.width / 2 - (c.x + c.width / 2)) + ((x0 + x1) / 2 - (vb.x + vb.width / 2)) * k,
                dy: (s.y + s.height / 2 - (c.y + c.height / 2)) + ((y0 + y1) / 2 - (vb.y + vb.height / 2)) * k });
   }
   return { rows: out, skipped };
 }
 """
+
+CONTRAST_JS = """
+() => {
+  const parse = (c) => { const m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null;
+    const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v.length > 3 ? v[3] : 1]; };
+  const over = (top, under) => { const a = top[3]; return [0, 1, 2].map((i) => top[i] * a + under[i] * (1 - a)).concat(1); };
+  const lum = (c) => { const f = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+  const rows = []; let skipped = 0;
+  for (const el of document.querySelectorAll('body *')) {
+    if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility !== 'visible' || el.closest(':disabled')) continue;
+    // A gradient is judged against its worst stop; a picture cannot be judged.
+    let opacity = 1, layers = [], stops = [[0, 0, 0, 1]], unknown = false;
+    for (let a = el; a; a = a.parentElement) {
+      const s = getComputedStyle(a);
+      opacity *= Number(s.opacity);
+      const bg = parse(s.backgroundColor);
+      if (s.backgroundImage !== 'none') {
+        if (s.backgroundImage.includes('url(')) { unknown = true; break; }
+        const found = (s.backgroundImage.match(/rgba?\\([^)]+\\)/g) || []).map(parse);
+        if (bg && bg[3] > 0) layers.push(bg);
+        stops = found.map((c) => over(c, [0, 0, 0, 1]));
+        break;
+      }
+      if (bg && bg[3] > 0) { layers.push(bg); if (bg[3] >= 1) break; }
+    }
+    if (unknown || opacity === 0) { skipped++; continue; }
+    const fg0 = parse(cs.color); if (!fg0) continue;
+    let ratio = Infinity;
+    for (const stop of stops) {
+      let bg = stop;
+      for (const layer of [...layers].reverse()) bg = over(layer, bg);
+      const fg = over([fg0[0], fg0[1], fg0[2], fg0[3] * opacity], bg);
+      const L1 = lum(fg), L2 = lum(bg);
+      ratio = Math.min(ratio, (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05));
+    }
+    const size = parseFloat(cs.fontSize), bold = Number(cs.fontWeight) >= 700;
+    const need = size >= 24 || (size >= 18.66 && bold) ? 3 : 4.5;
+    const text = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').trim().slice(0, 32);
+    rows.push({ text, ratio: Math.round(ratio * 100) / 100, need, size });
+  }
+  return { rows, skipped };
+}
+"""
+
 
 LAYOUT_JS = """
 () => {
@@ -123,11 +174,7 @@ def start_server():
     """Start serve_web.py on a throwaway library unless KOT_URL points at one."""
     if os.environ.get("KOT_URL"):
         return os.environ["KOT_URL"].rstrip("/"), None
-    os.makedirs(os.path.join(LIB, "webstate"), exist_ok=True)
-    links = os.path.join(LIB, "webstate", "links.json")
-    if not os.path.exists(links):
-        with open(links, "w") as fh:
-            json.dump(SEED_LINKS, fh)
+    ui_seed.build(LIB, SEED)
     port = free_port()
     log = open(os.path.join(LIB, "server.log"), "w")
     env = dict(os.environ, KOTASSIUM_LIB=LIB)
@@ -150,15 +197,17 @@ def run_icons(page):
 
 
 def report_icons(rows, skipped, every=False):
-    bad = [r for r in rows if abs(r["dx"]) > TOLERANCE or abs(r["dy"]) > TOLERANCE]
-    print("icons: %d icon-only controls, %d off-centre by more than %.2fpx "
-          "(glyph box and control centre; labelled controls skipped: %d)"
-          % (len(rows), len(bad), TOLERANCE, skipped))
+    bad = [r for r in rows if abs(r["dx"] - r["optical"]) > TOLERANCE or abs(r["dy"] - r["opticalY"]) > TOLERANCE]
+    optical = sum(1 for r in rows if r["optical"] or r["opticalY"])
+    print("icons: %d icon-only controls, %d off target by more than %.2fpx "
+          "(%d play/tick glyphs held to their documented optical offset; %d labelled skipped)"
+          % (len(rows), len(bad), TOLERANCE, optical, skipped))
     for r in (rows if every else bad)[:60]:
-        print("  %-40s dx=%+.2f dy=%+.2f  control=%dpx" % (r["label"], r["dx"], r["dy"], r["size"]))
+        target = " target dx=%+.2f dy=%+.2f" % (r["optical"], r["opticalY"]) if r["optical"] or r["opticalY"] else ""
+        print("  %-40s dx=%+.2f dy=%+.2f%s  control=%dpx" % (r["label"], r["dx"], r["dy"], target, r["size"]))
 
 
-def contact_sheet(paths, out, row_h=560, row_w=1800, gap=16):
+def contact_sheet(paths, out, row_h=560, row_w=1840, gap=16):
     """Lay the shots out in rows of equal height, so one image shows every view."""
     images = [Image.open(p).convert("RGB") for p in paths]
     images = [im.resize((round(im.width * row_h / im.height), row_h)) for im in images]
@@ -241,8 +290,16 @@ def main(argv):
                     elif key == "sheet":
                         path = contact_sheet(shots, os.path.join(OUT, val + ".png"))
                         print("%d sheet %s (%d shots)" % (n, os.path.relpath(path, ROOT), len(shots)))
+                        shots = []
                     elif key == "icons":
                         report_icons(*run_icons(page), every=(val == "all"))
+                    elif key == "contrast":
+                        found = page.evaluate(CONTRAST_JS)
+                        bad = sorted((r for r in found["rows"] if r["ratio"] < r["need"]), key=lambda r: r["ratio"])
+                        print("%d contrast: %d text elements, %d below WCAG AA, %d over pictures skipped"
+                              % (n, len(found["rows"]), len(bad), found["skipped"]))
+                        for r in bad[:12]:
+                            print("  %-34s %.2f:1 (needs %.1f, %spx)" % (r["text"], r["ratio"], r["need"], r["size"]))
                     elif key == "layout":
                         print("%d layout %s" % (n, json.dumps(page.evaluate(LAYOUT_JS))))
                     else:

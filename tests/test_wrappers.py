@@ -422,7 +422,7 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("<RefreshCw", app)
         self.assertIn("<Download", app)
         self.assertIn("Repeat1", app)
-        self.assertIn("Repeat size={fullscreen ? 24 : 18}", app)
+        self.assertIn("Repeat size={fullscreen ? 24 : 20}", app)
         self.assertIn("Repeat ${repeat === 0 ? 'off' : repeat === 1 ? 'all' : 'one'}", app)
         self.assertNotIn("toast(`repeat ${", app)
         self.assertNotIn("<button onClick={addLink} disabled={busy}>Add</button>", app)

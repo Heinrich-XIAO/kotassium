@@ -1,113 +1,68 @@
 [
- {
-  "size": [
-   1440,
-   900
-  ]
- },
- {
-  "goto": "/"
- },
- {
-  "shot": "d-home"
- },
- {
-  "icons": true
- },
- {
-  "layout": true
- },
- {
-  "click": ".cardgrid .card"
- },
- {
-  "wait": 300
- },
- {
-  "shot": "d-playlist"
- },
- {
-  "icons": true
- },
- {
-  "goto": "/"
- },
- {
-  "click": "#settingsBtn"
- },
- {
-  "wait": 400
- },
- {
-  "shot": "d-settings"
- },
- {
-  "icons": true
- },
- {
-  "press": "Escape"
- },
- {
-  "goto": "/"
- },
- {
-  "click": "button[aria-label='Add Spotify link']"
- },
- {
-  "wait": 400
- },
- {
-  "shot": "d-addlink"
- },
- {
-  "icons": true
- },
- {
-  "press": "Escape"
- },
- {
-  "size": [
-   390,
-   844
-  ]
- },
- {
-  "goto": "/"
- },
- {
-  "shot": "p-home"
- },
- {
-  "icons": true
- },
- {
-  "layout": true
- },
- {
-  "click": ".cardgrid .card"
- },
- {
-  "wait": 300
- },
- {
-  "shot": "p-playlist"
- },
- {
-  "icons": true
- },
- {
-  "layout": true
- },
- {
-  "size": [
-   1440,
-   900
-  ]
- },
- {
-  "goto": "/"
- },
- {
-  "sheet": "review"
- }
+ {"size": [1440, 900]},
+ {"goto": "/"},
+ {"wait": 500},
+ {"shot": "d-home"},
+ {"icons": true},
+ {"layout": true},
+ {"contrast": true},
+ {"hover": ".cardgrid .card:nth-child(2)"},
+ {"wait": 300},
+ {"shot": "d-hover"},
+ {"click": ".cardgrid .card"},
+ {"wait": 400},
+ {"shot": "d-playlist"},
+ {"icons": true},
+ {"contrast": true},
+ {"goto": "/"},
+ {"click": "#settingsBtn"},
+ {"wait": 400},
+ {"shot": "d-settings"},
+ {"contrast": true},
+ {"press": "Escape"},
+ {"goto": "/"},
+ {"click": "button[aria-label='Add Spotify link']"},
+ {"wait": 400},
+ {"shot": "d-addlink"},
+ {"contrast": true},
+ {"press": "Escape"},
+ {"goto": "/"},
+ {"wait": 400},
+ {"click": ".fplay"},
+ {"wait": 2500},
+ {"shot": "d-playing"},
+ {"icons": true},
+ {"sheet": "review-desktop"},
+ {"size": [1024, 700]},
+ {"goto": "/"},
+ {"wait": 500},
+ {"shot": "t-home"},
+ {"layout": true},
+ {"size": [1920, 1080]},
+ {"goto": "/"},
+ {"wait": 500},
+ {"shot": "w-home"},
+ {"layout": true},
+ {"sheet": "review-sizes"},
+ {"size": [390, 844]},
+ {"goto": "/"},
+ {"wait": 500},
+ {"shot": "p-home"},
+ {"icons": true},
+ {"layout": true},
+ {"contrast": true},
+ {"click": ".cardgrid .card"},
+ {"wait": 400},
+ {"shot": "p-playlist"},
+ {"layout": true},
+ {"goto": "/"},
+ {"wait": 400},
+ {"click": ".fplay"},
+ {"wait": 2500},
+ {"shot": "p-playing"},
+ {"click": "#nowc"},
+ {"wait": 700},
+ {"shot": "p-player"},
+ {"icons": true},
+ {"sheet": "review-phone"}
 ]

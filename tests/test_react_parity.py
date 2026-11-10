@@ -92,7 +92,7 @@ class ReactParityTests(unittest.TestCase):
 
     def test_fullscreen_tracks_live_playback_and_reference_ids_exist(self):
         self.assertIn("background: currentTrack ? coverBackground(currentTrack.cover, currentTrack.t)", self.app)
-        self.assertIn('<b id="dfsTitle">{currentTrack?.t || \'Choose a playlist to listen\'}</b>', self.app)
+        self.assertIn('<b id="dfsTitle">{currentTrack?.t || \'Nothing playing\'}</b>', self.app)
         self.assertIn('<span id="dfsTopTitle">{playingPlaylist || \'Now playing\'}</span>', self.app)
         self.assertIn("if (!desktopPlayer && (window.innerWidth <= 820 || !currentTrack)) return", self.app)
         original_body = re.sub(r"<script>.*?</script>|<style>.*?</style>", "", self.original, flags=re.S)
@@ -148,7 +148,7 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("#rside #vol{width:112px;", css)
 
     def test_bottom_play_button_uses_a_smaller_optically_centered_triangle(self):
-        self.assertIn("fullscreen ? 26 : 16", self.app)
+        self.assertIn("fullscreen ? 24 : 16", self.app)
         css = read("web/index.html")
         # the glyph is centred in its own viewBox; no CSS nudge may push it off-centre
         self.assertNotIn('#playb svg[viewBox="0 0 16 16"]{transform', css)
@@ -318,7 +318,8 @@ class ReactParityTests(unittest.TestCase):
         # A fixed-width round icon button inherits the shared button padding
         # (1px 6px) and then cannot centre its glyph: the pad eats the width it
         # needs. Both of these measured ~1.5px right until padding went to 0,
-        # and the glyph is now even-sized so 26px leaves 4px either side.
+        # and the glyph is even-sized (20px on the 16/20/24 scale), so 26px leaves 3px
+        # either side.
         self.assertIn("cursor:pointer;padding:0}", css)
         self.assertIn("#nowsave{position:relative;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#b3b3b3;background:none;border:0;padding:0;", css)
         # Hover grows the disc layer, never the button: a scale on the button
@@ -331,7 +332,7 @@ class ReactParityTests(unittest.TestCase):
         # No rule that touches this control may transform it at any state.
         nowsave = re.sub(r"transition:[^;}]*", "", "".join(re.findall(r"#nowsave[^{]*\{[^}]*\}", css)))
         self.assertNotIn("transform", nowsave)
-        self.assertIn("<Icon name=\"add\" size={18}/></button>", self.app)
+        self.assertIn("<Icon name=\"add\" size={20}/></button>", self.app)
         self.assertIn("<Icon name={inCurrentPlaylist ? 'check' : 'add'} size={16}/></button>", self.app)
         self.assertIn("#side.collapsed .pitem{justify-content:center;padding:2px;margin:4px 0 8px;gap:0}", css)
         self.assertNotIn("padding:6px 0;gap:0}", css)
