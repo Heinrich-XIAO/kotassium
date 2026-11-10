@@ -149,8 +149,10 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("#rside .volume-row .aicon{width:32px;height:32px;padding:0}", css)
         self.assertIn("#rside #vol{width:112px;", css)
 
-    def test_bottom_play_button_uses_a_smaller_optically_centered_triangle(self):
-        self.assertIn("fullscreen ? 24 : 16", self.app)
+    def test_bottom_play_button_triangle_is_optically_centered(self):
+        # 20px in the bar and 24px full screen: the play glyph is the largest
+        # in its row, and its position lives in its coordinates, never in CSS.
+        self.assertIn("fullscreen ? 24 : 20", self.app)
         css = read("web/index.html")
         # the glyph is centred in its own viewBox; no CSS nudge may push it off-centre
         self.assertNotIn('#playb svg[viewBox="0 0 16 16"]{transform', css)
