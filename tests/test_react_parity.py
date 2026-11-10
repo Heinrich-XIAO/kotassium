@@ -122,8 +122,8 @@ class ReactParityTests(unittest.TestCase):
         # The whole-playlist download is a per-add choice: an unchecked box
         # in the add-link dialog, reset every time the dialog reopens, and it
         # only ever fires after a resolve that actually saved.
-        self.assertIn('className="link-opt" htmlFor="bgdl"', self.app)
-        self.assertIn('type="checkbox" checked={bgDownload}', self.app)
+        self.assertIn('<div className="link-opt" onClick={toggleRow}>', self.app)
+        self.assertIn('id="bgdl" type="button" className={`setting-switch ${bgDownload ? \'enabled\' : \'\'}`} role="switch" aria-checked={bgDownload}', self.app)
         self.assertIn("setLinkOpen(true);\n    setBgDownload(false);", self.app)
         self.assertIn("if (bgDownload) startBackgroundDownload(j.tracks || [], j.name || '');", self.app)
         # Priority: playback and prefetch mark every search/download they
