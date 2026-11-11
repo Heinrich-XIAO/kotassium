@@ -6,16 +6,21 @@
 
 Covers are drawn here with Pillow and registered in the server's cover cache
 (webstate/covers + covers.json), exactly where a real library keeps the
-thumbnails it fetched from Spotify, so the page never touches the network.
+thumbnails it fetched from Spotify. Every track carries a library id with a
+silent file behind it (one ffmpeg clip per length, hard-linked per track), so
+pressing play answers from disk: without that the page searched YouTube for
+the made-up titles and downloaded real songs into the throwaway library.
 """
 import hashlib
 import json
 import os
 import random
+import shutil
+import subprocess
 
 from PIL import Image, ImageDraw, ImageFilter
 
-VERSION = "2"  # bump to rebuild cached seed libraries
+VERSION = "3"  # bump to rebuild cached seed libraries
 
 PLAYLISTS = [
     ("Late Night Drive", 24), ("Kitchen Radio", 36), ("Deep Focus", 48),
@@ -27,6 +32,7 @@ ARTISTS = ["Nova Hart", "The Lanterns", "Kito Blue", "Mira Vale", "Hollow Pines"
 ALBUMS = ["Neon Weather", "Paper Moons", "Slow Signal", "Glasshouse", "Northbound",
           "After Hours", "Field Notes", "Static Bloom", "Coastlines", "Velvet Rooms",
           "Low Orbit", "Small Hours"]
+LENGTHS = [149, 186, 204, 221, 252, 309]  # seconds; one silent clip each
 WORDS = ["Golden", "Hour", "Echo", "Static", "Satellite", "Ember", "Coast", "Signal",
          "Velvet", "Midnight", "Paper", "Rivers", "Glass", "Bloom", "Northern", "Lights",
          "Slow", "Motion", "Neon", "Rain", "Summer", "Ghost", "Fever", "Harbour"]
@@ -68,9 +74,28 @@ def _tracks(name, count, albums, r):
         title = " ".join(r.sample(WORDS, r.choice([1, 2, 2, 3])))
         album = r.choice(albums)
         out.append({"t": title, "a": r.choice(ARTISTS), "al": album, "album": album,
-                    "ms": r.randint(140, 320) * 1000, "id": "seed-%s-%d" % (hashlib.md5(name.encode()).hexdigest()[:6], i),
+                    "ms": r.choice(LENGTHS) * 1000, "source": "youtube",
+                    "id": "seed-%s-%d" % (hashlib.md5(name.encode()).hexdigest()[:6], i),
                     "cover": "https://i.scdn.co/image/kot-seed-album-" + album.lower().replace(" ", "-")})
     return out
+
+
+def _audio(lib, tracks):
+    """Give each track a silent file named by its id, so playback never downloads."""
+    if not shutil.which("ffmpeg"):
+        print("ui_seed: no ffmpeg, so play steps will search YouTube for real audio")
+        return
+    clips = os.path.join(lib, "webstate", "clips")
+    os.makedirs(clips, exist_ok=True)
+    for t in tracks:
+        sec = t["ms"] // 1000
+        clip = os.path.join(clips, "%d.mp3" % sec)
+        if not os.path.exists(clip):
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                            "anullsrc=r=8000:cl=mono", "-t", str(sec), "-b:a", "8k", clip], check=True)
+        dest = os.path.join(lib, t["id"] + ".mp3")
+        if not os.path.exists(dest):
+            os.link(clip, dest)
 
 
 def build(lib, seed):
@@ -83,9 +108,9 @@ def build(lib, seed):
     os.makedirs(covers_dir, exist_ok=True)
     links, cover_map = [], {}
     if seed == "sparse":
-        tracks = [{"t": "Song One", "a": "Artist A", "ms": 214000, "id": "yt1"},
-                  {"t": "Song Two", "a": "Artist B", "ms": 187000, "id": "yt2"},
-                  {"t": "Song Three", "a": "Artist C", "ms": 249000, "id": "yt3"}]
+        tracks = [{"t": "Song One", "a": "Artist A", "ms": 221000, "id": "seed-yt1", "source": "youtube"},
+                  {"t": "Song Two", "a": "Artist B", "ms": 186000, "id": "seed-yt2", "source": "youtube"},
+                  {"t": "Song Three", "a": "Artist C", "ms": 252000, "id": "seed-yt3", "source": "youtube"}]
         links = [{"url": "https://open.spotify.com/playlist/demo", "name": "Late Night Drive",
                   "count": 3, "ts": 0, "tracks": tracks},
                  {"url": "https://open.spotify.com/playlist/demo2", "name": "Kitchen Radio",
@@ -110,6 +135,7 @@ def build(lib, seed):
                           "tracks": _tracks(name, count, ALBUMS, r)})
     elif seed != "empty":
         raise SystemExit("unknown KOT_SEED %r (full, sparse, empty)" % seed)
+    _audio(lib, [t for link in links for t in link["tracks"]])
     with open(os.path.join(state, "links.json"), "w") as fh:
         json.dump(links, fh)
     with open(os.path.join(state, "covers.json"), "w") as fh:
