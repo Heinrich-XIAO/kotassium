@@ -611,6 +611,8 @@ body.dfs #dfsQueue{display:flex}
 @media(min-width:1600px){#homeBtn{margin-left:auto}}
 /* Phone: the mini player keeps save, play and next, and shows progress as a line on its top edge. */
 @media(max-width:820px){#prevb{display:none}#bar{position:relative}#prow{display:block;position:absolute;left:12px;right:12px;top:0;width:auto;max-width:none}#prow .ptime{display:none}#prog{height:2px;pointer-events:none}#playb svg{width:24px;height:24px}}
+/* Wide windows: the home banner and the playlist header share one 64px headline. */
+@media(min-width:1200px) and (min-height:761px){#feature .finfo h2,.plinfo h1{font-size:64px}.plinfo{min-width:0}.plinfo h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.02em}}
 </style></head><body>
 <div id="root"></div>
 <script src="/app.js" defer></script>

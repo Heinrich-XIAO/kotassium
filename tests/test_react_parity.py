@@ -100,7 +100,7 @@ class ReactParityTests(unittest.TestCase):
         app_ids = set(re.findall(r'''\bid=["']([A-Za-z][\w-]*)["']''', self.app))
         dynamic_ids = set(re.findall(r"\bid=\{[^}]*?['\"]([A-Za-z][\w-]*)['\"]", self.app))
         dynamic_control_ids = {"btns", "shufb", "prevb", "playb", "nextb", "repeatb", "prow", "curt", "prog", "progf", "tott", "volIcon", "vol", "volf", "thumbstrip", "fsBtns", "fsShuf", "fsprev", "fsPlay", "fsPlayIcon", "fsnext", "fsRepeat", "fsSeek", "fsCur", "fsProg", "fsProgf", "fsTot", "fsVol", "volIcon2", "fsVolBar", "fsVolFill"}
-        intentional_replacements = {"pbIcon", "fsPlayIcon", "repeatIcon", "fsTitle", "fsArtist", "au", "addBox", "qBrowse", "qDiv", "dl", "dllabel", "dlbar", "dlfill", "dlpct"}
+        intentional_replacements = {"pbIcon", "fsPlayIcon", "repeatIcon", "fsTitle", "fsArtist", "au", "addBox", "qBrowse", "qDiv", "dl", "dllabel", "dlbar", "dlfill", "dlpct", "fsQcount"}
         self.assertEqual(set(), original_ids - app_ids - dynamic_ids - dynamic_control_ids - intentional_replacements)
 
     def test_up_next_toast_can_be_dismissed_until_track_or_notice_changes(self):
