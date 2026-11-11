@@ -20,7 +20,7 @@ import subprocess
 
 from PIL import Image, ImageDraw, ImageFilter
 
-VERSION = "3"  # bump to rebuild cached seed libraries
+VERSION = "4"  # bump to rebuild cached seed libraries
 
 PLAYLISTS = [
     ("Late Night Drive", 24), ("Kitchen Radio", 36), ("Deep Focus", 48),
@@ -114,9 +114,9 @@ def build(lib, seed):
         links = [{"url": "https://open.spotify.com/playlist/demo", "name": "Late Night Drive",
                   "count": 3, "ts": 0, "tracks": tracks},
                  {"url": "https://open.spotify.com/playlist/demo2", "name": "Kitchen Radio",
-                  "count": 12, "total": 12, "ts": 0, "tracks": tracks},
+                  "count": 3, "total": 3, "ts": 0, "tracks": tracks},
                  {"url": "https://open.spotify.com/playlist/demo3", "name": "Long Player",
-                  "count": 8, "total": 20, "partial": True, "ts": 0, "tracks": tracks}]
+                  "count": 3, "total": 20, "partial": True, "ts": 0, "tracks": tracks}]
     elif seed == "full":
         for album in ALBUMS:
             url = "https://i.scdn.co/image/kot-seed-album-" + album.lower().replace(" ", "-")
