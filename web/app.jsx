@@ -1436,12 +1436,13 @@ const linkCover = (link) => link?.cover || link?.tracks?.[0]?.cover;
       const p = links[featured];
       const live = !!currentTrack && playingPlaylist === p.name;
       const pausable = live && !paused;
-      const label = `${pausable ? 'Pause' : 'Play'} ${p.name}`;
-      const eyebrow = live ? (paused ? 'Paused' : 'Now playing') : '';
+      const verb = pausable ? 'Pause' : live ? 'Resume' : 'Play';
+      const label = `${verb} ${p.name}`;
+      const eyebrow = pausable ? 'Now playing' : '';
       return <section id="feature" role="link" tabIndex={0} aria-label={`Open ${p.name}`} style={{ background: `linear-gradient(180deg,hsl(${hue(p.name)},40%,18%),#121212)` }} onClick={() => loadPlaylist(featured)} onKeyDown={onActivate(() => loadPlaylist(featured))}>
         <div className="fcover" style={{ background: coverBackground(linkCover(p), p.name) }}/>
         <div className="finfo">{eyebrow && <small>{eyebrow}</small>}<h1>{p.name}</h1><p>{songCount(p)}</p></div>
-        <button className="fplay" data-tooltip={label} aria-label={label} onClick={(e) => { e.stopPropagation(); if (live) togglePlay(); else { loadPlaylist(featured, true); requestAnimationFrame(() => document.getElementById('bigplay')?.focus({ preventScroll: true })); } }}><Icon name={pausable ? 'pause' : 'play'} size={24}/><span>{pausable ? 'Pause' : 'Play'}</span></button>
+        <button className="fplay" data-tooltip={label} aria-label={label} onClick={(e) => { e.stopPropagation(); if (live) togglePlay(); else { loadPlaylist(featured, true); requestAnimationFrame(() => document.getElementById('bigplay')?.focus({ preventScroll: true })); } }}><Icon name={pausable ? 'pause' : 'play'} size={24}/><span>{verb}</span></button>
       </section>;
     })();
     return <div id="homeView">{feature}{links.length > 1 ? <><h2>Your playlists</h2><div className="cardgrid">{links.map((p, i) => i === featured ? null : <article className="card" key={p.url || p.name} role="link" tabIndex={0} aria-label={`Open ${p.name}`} onClick={() => loadPlaylist(i)} onKeyDown={onActivate(() => loadPlaylist(i))}><div className="ccover" style={{ background: coverBackground(linkCover(p), p.name) }} onMouseEnter={() => warmCover(linkCover(p))}><button className="card-play" data-tooltip={`Play ${p.name}`} aria-label={`Play ${p.name}`} onClick={(e) => { e.stopPropagation(); loadPlaylist(i, true); }}><Icon name="play" size={20}/></button></div><b>{p.name || '?'}</b><small>{songCount(p)}</small></article>)}</div></> : links.length ? null : <div className="empty-cta"><h2>Your library is empty</h2><button className="pill-cta" onClick={() => setLinkOpen(true)}><Icon name="add" size={20}/>Add a Spotify link</button></div>}</div>;

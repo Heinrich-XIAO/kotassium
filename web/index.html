@@ -229,7 +229,7 @@ svg{display:block}
 #empty{color:var(--text-2);padding:24px 8px;font-size:14px}
 
 .empty-cta{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;text-align:center}
-#homeView .empty-cta h2{margin:0;font-size:24px}
+#homeView .empty-cta h2{margin:0;font-size:var(--font-size-hero);letter-spacing:-.02em}
 .pill-cta{height:56px;display:inline-flex;align-items:center;gap:8px;padding:0 24px 0 20px;border-radius:999px;background:var(--accent);color:#000;font-size:16px;font-weight:var(--font-weight-bold);transition:background .15s,transform .15s}
 .pill-cta:hover{background:var(--accent-hover);transform:scale(1.04)}
 #bigplayBtns{display:flex}
@@ -620,7 +620,7 @@ body.dfs #dfsQueue{display:flex}
 .settings-foot{margin:0;font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums}
 .settings-foot::first-letter{text-transform:uppercase}
 /* One size per role: 48px page controls, 32px bar controls. */
-@media(min-width:821px){#plactions .aicon{width:48px;height:48px}.card-play{width:48px;height:48px}#plactions #rb2{display:none}}
+@media(min-width:821px){#plactions .aicon{width:48px;height:48px}.card-play{width:48px;height:48px}#plactions #rb2,#plactions #shuf2{display:none}}
 #addBtn{border-radius:50%;transition:color .15s,background .15s}
 #addBtn:hover{background:#ffffff14}
 .aicon{transition:color .15s,background .15s,transform .15s}
