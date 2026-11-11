@@ -128,7 +128,7 @@ svg{display:block}
 .tr-head span{line-height:36px}
 .row{height:56px;cursor:default}
 .row:hover{background:#ffffff14}
-.trnum{color:var(--text-2);font-variant-numeric:tabular-nums;font-size:16px}
+.trnum{color:var(--text-2);font-variant-numeric:tabular-nums;font-size:14px}
 .rt{min-width:0;display:flex;align-items:center;gap:12px}
 .rtxt{min-width:0}
 .rtxt b{display:block;font-size:16px;font-weight:var(--font-weight-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -577,7 +577,7 @@ body.dfs #dfsQueue{display:flex}
 @media(min-width:821px){#side.bare,#side.bare+#sideResize{display:none}}
 @media(max-width:820px){#fs #fsVol{display:none}}
 /* Short desktop windows: the hero and playlist header give the grid and the track list room. */
-@media(min-width:821px) and (max-height:760px){#feature{padding:24px 32px;margin-bottom:24px}#feature .fcover{width:160px;height:160px}#plhead{padding-top:24px}#plx{width:160px;height:160px}}
+@media(min-width:821px) and (max-height:760px){#feature{padding:24px 32px;margin-bottom:24px}#feature .fcover{width:120px;height:120px}#plhead{padding-top:24px}#plx{width:120px;height:120px}#plactions{padding:12px 32px 8px}}
 .skip{position:absolute;left:16px;top:-64px;min-height:44px;display:inline-flex;align-items:center;box-sizing:border-box;z-index:200;padding:12px 16px;border-radius:999px;background:var(--accent);color:#000;font-weight:var(--font-weight-bold);text-decoration:none}
 .skip:focus{top:12px}
 .tdur{display:flex;justify-content:flex-end;align-items:center;height:36px;color:var(--text-2)}
@@ -633,6 +633,17 @@ body.dfs #dfsQueue{display:flex}
 #libBtn,#nowc{transition:transform .15s,background .15s}
 .fsHeadEnd{width:44px;margin-right:-10px;flex:none}
 #fsGrip:active{background:#ffffff1f}
+/* Cover-less playlists: the initial, sized to its cover. */
+.fcover,.ccover{display:grid;place-items:center}
+.cover-initial{font-weight:var(--font-weight-bold);color:var(--text);line-height:1;pointer-events:none}
+.ccover .cover-initial,#feature .fcover .cover-initial{font-size:var(--font-size-display)}
+.pcover .cover-initial{font-size:var(--font-size-title)}
+@media(max-width:820px){.ccover .cover-initial,#feature .fcover .cover-initial{font-size:var(--font-size-hero)}}
+/* The column labels stay pinned under the sticky action row. */
+@media(min-width:821px){#plactions{height:96px;box-sizing:border-box}.tr-head{position:sticky;top:96px;z-index:5;background:#121212}}
+@media(min-width:821px) and (max-height:760px){#plactions{height:76px}.tr-head{top:76px}}
+@media(min-width:821px) and (max-width:1100px){.cardgrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}
+@media(min-width:1600px){.tr-head,.row{grid-template-columns:36px minmax(0,640px) minmax(0,1fr) 60px}}
 </style></head><body>
 <div id="root"></div>
 <script src="/app.js" defer></script>
