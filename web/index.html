@@ -141,7 +141,9 @@ svg{display:block}
 .row.playing .rtxt b,.srow.playing .rtxt b{color:var(--accent)}
 .row.playing .trnum{color:var(--accent)}
 .bars{display:flex;gap:2px;align-items:flex-end;height:14px}
-.bars i{width:3px;background:var(--accent);animation:b .9s ease infinite alternate}
+/* Resting heights: with reduced motion the animation ends at once, and a bar with no height of its own collapses to nothing. */
+.bars i{width:3px;height:9px;background:var(--accent);animation:b .9s ease infinite alternate}
+.bars i:nth-child(2){height:14px}.bars i:nth-child(3){height:6px}.bars i:nth-child(4){height:11px}
 .bars.paused i{animation-play-state:paused}
 .bars i:nth-child(2){animation-delay:.3s}.bars i:nth-child(3){animation-delay:.15s}.bars i:nth-child(4){animation-delay:.45s}
 @keyframes b{from{height:4px}to{height:14px}}

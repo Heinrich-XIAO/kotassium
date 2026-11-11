@@ -8,6 +8,7 @@ A scenario is a JSON list. Each step has one key:
 
     {"size": [w, h]}        viewport for the steps after it (default 1440x900)
     {"goto": "/path"}       load a page from the server
+    {"motion": "reduce"}    emulate prefers-reduced-motion ("no-preference" to undo)
     {"click": "css"}        click the first match
     {"hover": "css"}        hover the first match
     {"fill": ["css", "text"]}
@@ -259,6 +260,9 @@ def main(argv):
                         size = list(val)
                         page.set_viewport_size({"width": size[0], "height": size[1]})
                         print("%d size %dx%d" % (n, size[0], size[1]))
+                    elif key == "motion":
+                        page.emulate_media(reduced_motion=val)
+                        print("%d motion %s" % (n, val))
                     elif key == "goto":
                         page.goto(url + val, wait_until="load")
                         page.wait_for_timeout(600)

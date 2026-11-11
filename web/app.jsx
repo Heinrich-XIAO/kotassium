@@ -1424,14 +1424,22 @@ const linkCover = (link) => link?.cover || link?.tracks?.[0]?.cover;
     return out;
   }, [queue, currentIndex, shuffle, shuffleOrder, shufflePos, repeat]);
 
-  const trackRow = (tracks, mode, i) => {
+  // A list may hold the same song twice; only one row is the one playing. It is
+  // the row at the queue's own index when the list is the queue, else the first match.
+  const activeRow = (tracks, mode) => {
+    const current = queue[currentIndex];
+    if (!current || !(mode === 'search' || playingPlaylist === view.name)) return -1;
+    const key = trackKey(current);
+    return tracks[currentIndex] && trackKey(tracks[currentIndex]) === key ? currentIndex : tracks.findIndex((t) => trackKey(t) === key);
+  };
+  const trackRow = (tracks, mode, i, activeIndex) => {
     const track = tracks[i];
-    const active = queue[currentIndex] && trackKey(queue[currentIndex]) === trackKey(track) && (mode === 'search' || playingPlaylist === view.name);
+    const active = i === activeIndex;
     return <div className={`${mode === 'search' ? 'srow' : 'row'}${active ? ' playing' : ''}`} key={`${trackKey(track)}-${i}`} role="button" tabIndex={i === 0 ? 0 : -1} aria-label={`Play ${track.t}${track.a ? ` by ${track.a}` : ''}`} onClick={() => mode === 'search' ? playIndex(i, tracks, '') : playIndex(i, tracks, view.name)} onKeyDown={rowKeys(() => mode === 'search' ? playIndex(i, tracks, '') : playIndex(i, tracks, view.name))}>
       {mode === 'search' ? <><button className="rbtn" tabIndex={-1} data-tooltip="Play" aria-label="Play"><Icon name="play" size={16}/></button><div className="rtxt" style={{ flex: 1 }}><b>{track.t}</b><small>{track.a}</small></div><span className="stag">{track.source}</span>{track.full === false ? <span className="stream-only">stream only</span> : <span/>}<span/><span/></> : <><div><span className="trnum">{active ? <span className={`bars${paused ? ' paused' : ''}`}><i/><i/><i/><i/></span> : <><span className="trn">{i + 1}</span><span className="trplay" aria-hidden="true"><Icon name="play" size={16}/></span></>}</span></div><div className="rt"><div className="track-cover" style={{ background: coverBackground(track.cover, track.album || track.t) }} onMouseEnter={() => warmCover(track.cover)}></div><div className="rtxt"><b>{track.t}</b><small>{track.a}</small></div></div><div className="ralb">{track.album || ''}</div><div className="rdura">{fmt(track.ms)}</div></>}
     </div>;
   };
-  const trackRows = (tracks, mode) => tracks.map((_, i) => trackRow(tracks, mode, i));
+  const trackRows = (tracks, mode) => { const activeIndex = activeRow(tracks, mode); return tracks.map((_, i) => trackRow(tracks, mode, i, activeIndex)); };
 
   const renderMain = () => {
     if (view.type === 'playlist')    return <><div id="plhead" style={{ background: `linear-gradient(180deg,hsl(${hue(view.name)},65%,30%),hsl(${(hue(view.name) + 40) % 360},60%,22%) 60%,#12121200)` }}><div id="plx" style={{ background: coverBackground(linkCover(links.find((l) => l.name === view.name)), view.name) }}>{coverInitial(view.name, linkCover(links.find((l) => l.name === view.name)))}</div><div className="plinfo"><h1>{view.name}</h1><p>{playlist.length} song{playlist.length === 1 ? '' : 's'}</p></div></div><div id="plactions" className={plStuck ? 'stuck' : ''}><button id="bigplay" onClick={(!!currentTrack && playingPlaylist === view.name) ? togglePlay : playList} data-tooltip={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'Pause' : 'Play'} aria-label={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'Pause' : 'Play'}><Icon name={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'pause' : 'play'} size={24}/><span>{(!!currentTrack && playingPlaylist === view.name) && !paused ? 'Pause' : 'Play'}</span></button><b className="plstick">{view.name}</b><button id="shuf2" className={`aicon ${shuffle ? 'on' : ''}`} aria-pressed={shuffle} onClick={toggleShuffle} data-tooltip="Shuffle" aria-label="Shuffle"><Icon name="shuffle" size={20}/></button><button id="rb2" className={`aicon ${repeat ? 'on' : ''}`} aria-pressed={repeat !== 0} onClick={toggleRepeat} data-tooltip="Repeat" aria-label="Repeat"><Icon name="repeat" size={20}/></button></div><div id="tbl" className={playlist.some((t) => t.album) ? '' : 'no-album'}><div className="tr-head"><span>#</span><span>Title</span><span>Album</span><span className="tdur" aria-label="Duration"><Icon name="clock" size={16}/></span></div>{playlist.length > WINDOW_ROWS ? <WindowList count={playlist.length} renderRow={(i) => trackRow(playlist, 'playlist', i)} /> : trackRows(playlist, 'playlist')}</div></>;
