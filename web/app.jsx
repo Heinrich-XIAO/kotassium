@@ -1210,10 +1210,10 @@ function App() {
   }, [saveSidebarCollapsed]);
   const addLibraryLink = useCallback(() => {
     setLinkValue('');
-    // The phone drawer hands over to the dialog: two open modals would each trap Tab.
-    setDrawerOpen(false);
     setLinkOpen(true);
     setBgDownload(false);
+    // The phone drawer hands over to the dialog: two open modals would each trap Tab.
+    setDrawerOpen(false);
   }, []);
   const mobileOpen = useCallback(() => {
     if (!window.matchMedia('(max-width:820px)').matches) return;
