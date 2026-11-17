@@ -320,19 +320,117 @@ def spotify_search(provider, query, limit=8):
     return out
 
 RADIO_URL = "https://spclient.wg.spotify.com/inspiredby-mix/v2/seed_to_playlist/{}?response-format=json"
+FETCH_PLAYLIST_OP = ("fetchPlaylist", "8964e8eafb21aa992a7d951d256d83285c04be2105d209262901de70cb97584a")
 
-def spotify_recommend(provider, seed_uri, n):
-    """Spotify's own song/artist radio: the web player's "Go to radio" asks
-    inspiredby-mix for the seed's personalised Radio playlist (37i9dQZF1E...),
-    which the anonymous token can read like any other playlist."""
+def _radio_track(t):
+    aa = t.get("playlistAudioAttributes") or {}
+    key = aa.get("key") or {}
+    alb = t.get("albumOfTrack") or {}
+    covers = (alb.get("coverArt") or {}).get("sources") or [{}]
+    return {"uri": t["uri"], "name": t.get("name") or "",
+            "artists": [[a.get("uri"), (a.get("profile") or {}).get("name") or ""]
+                        for a in (t.get("artists") or {}).get("items", [])],
+            "album": alb.get("uri"), "album_name": alb.get("name") or "",
+            "released": (alb.get("date") or {}).get("isoString"),
+            "duration_ms": _pf_duration(t), "playcount": int(t.get("playcount") or 0),
+            "bpm": aa.get("bpm"), "key": key.get("key"), "mode": key.get("mode"),
+            "camelot": (key.get("camelotKey") or {}).get("value"),
+            "explicit": (t.get("contentRating") or {}).get("label") == "EXPLICIT",
+            "cover": covers[0].get("url")}
+
+def fetch_radio(provider, seed_uri):
+    """Spotify's own song/artist radio, as everything the radio says about
+    itself: the web player's "Go to radio" asks inspiredby-mix for the seed's
+    Radio playlist (37i9dQZF1E...), which the anonymous token reads like any
+    other playlist."""
     req = urlreq.Request(RADIO_URL.format(seed_uri),
                          headers={"Authorization": f"Bearer {provider.bearer()}",
                                   "App-Platform": "WebPlayer", "User-Agent": "Mozilla/5.0"})
-    items = json.loads(urlreq.urlopen(req, timeout=20).read()).get("mediaItems") or []
-    if not items:
+    media = json.loads(urlreq.urlopen(req, timeout=20).read()).get("mediaItems") or []
+    if not media:
         raise RuntimeError(f"spotify has no radio for {seed_uri}")
-    _, tracks = resolve_pathfinder("playlist", items[0]["uri"].rsplit(":", 1)[-1], provider)
-    return [t for t in tracks if t["uri"] != seed_uri][:n]
+    d = pathfinder_query(provider, *FETCH_PLAYLIST_OP, {"uri": media[0]["uri"], "offset": 0, "limit": 100,
+                                                        "enableWatchFeedEntrypoint": False})
+    pv = d["data"]["playlistV2"]
+    items = []
+    for it in pv["content"]["items"]:
+        t = (it.get("itemV2") or {}).get("data") or {}
+        if t.get("__typename") != "Track" or not t.get("name"):
+            continue
+        attrs = {a["key"]: a["value"] for a in it.get("attributes") or []}
+        items.append({"pos": len(items), "decision_id": attrs.pop("decision_id", None),
+                      "attrs": attrs, "track": _radio_track(t)})
+    return {"seed": seed_uri, "playlist": media[0]["uri"], "revision": pv.get("revisionId") or "",
+            "name": pv.get("name"), "format": pv.get("format"),
+            "attrs": {a["key"]: a["value"] for a in pv.get("attributes") or []}, "items": items}
+
+RADIO_SCHEMA = """
+CREATE TABLE IF NOT EXISTS radio (
+  id INTEGER PRIMARY KEY, seed TEXT NOT NULL, playlist TEXT NOT NULL, revision TEXT NOT NULL,
+  name TEXT, format TEXT, attrs TEXT, sources TEXT NOT NULL,
+  first_seen REAL NOT NULL, last_seen REAL NOT NULL, fetches INTEGER NOT NULL DEFAULT 1,
+  UNIQUE (seed, revision));
+CREATE TABLE IF NOT EXISTS radio_item (
+  radio INTEGER NOT NULL REFERENCES radio(id), pos INTEGER NOT NULL, track TEXT NOT NULL,
+  decision_id TEXT, attrs TEXT, PRIMARY KEY (radio, pos));
+CREATE INDEX IF NOT EXISTS radio_item_track ON radio_item (track);
+CREATE INDEX IF NOT EXISTS radio_seed ON radio (seed);
+CREATE TABLE IF NOT EXISTS track (
+  uri TEXT PRIMARY KEY, name TEXT, artists TEXT, album TEXT, album_name TEXT, released TEXT,
+  duration_ms INTEGER, playcount INTEGER, bpm REAL, musical_key TEXT, mode TEXT, camelot TEXT,
+  explicit INTEGER, cover TEXT, updated REAL);
+"""
+
+def radio_db(path):
+    import sqlite3
+    db = sqlite3.connect(path, timeout=30, check_same_thread=False)
+    db.execute("PRAGMA journal_mode=WAL")
+    db.executescript(RADIO_SCHEMA)
+    return db
+
+def record_radio(db, rec, source, now=None):
+    """Store one fetched radio. A radio is a stored playlist that only changes
+    when Spotify regenerates it, so a refetch of the same (seed, revision)
+    counts the fetch instead of storing the list again."""
+    now = time.time() if now is None else now
+    with db:
+        row = db.execute("SELECT id, sources FROM radio WHERE seed=? AND revision=?",
+                         (rec["seed"], rec["revision"])).fetchone()
+        if row:
+            srcs = row[1] if source in row[1].split(",") else f"{row[1]},{source}"
+            db.execute("UPDATE radio SET last_seen=?, fetches=fetches+1, sources=? WHERE id=?", (now, srcs, row[0]))
+            rid = row[0]
+        else:
+            rid = db.execute("INSERT INTO radio (seed, playlist, revision, name, format, attrs, sources, first_seen,"
+                             " last_seen) VALUES (?,?,?,?,?,?,?,?,?)",
+                             (rec["seed"], rec["playlist"], rec["revision"], rec["name"], rec["format"],
+                              json.dumps(rec["attrs"]), source, now, now)).lastrowid
+            db.executemany("INSERT INTO radio_item VALUES (?,?,?,?,?)",
+                           [(rid, it["pos"], it["track"]["uri"], it["decision_id"],
+                             json.dumps(it["attrs"]) if it["attrs"] else None) for it in rec["items"]])
+        db.executemany("INSERT OR REPLACE INTO track VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                       [(t["uri"], t["name"], json.dumps(t["artists"]), t["album"], t["album_name"], t["released"],
+                         t["duration_ms"], t["playcount"], t["bpm"], t["key"], t["mode"], t["camelot"],
+                         int(t["explicit"]), t["cover"], now) for t in (it["track"] for it in rec["items"])])
+    return rid
+
+def spotify_recommend(provider, seed_uri, n, db=None):
+    """The seed's radio as playable tracks, without the seed itself. With
+    `db` (a path), the whole radio is recorded there too: a failed write
+    never costs the listener their radio."""
+    rec = fetch_radio(provider, seed_uri)
+    if db:
+        try:
+            conn = radio_db(db)
+            try:
+                record_radio(conn, rec, "app")
+            finally:
+                conn.close()
+        except Exception as e:
+            log(f"radio not recorded: {e}")
+    return [{"title": t["name"], "uri": t["uri"], "artist": ", ".join(a for _, a in t["artists"] if a),
+             "album": t["album_name"], "dur": t["duration_ms"] / 1000.0, "cover": t["cover"]}
+            for t in (it["track"] for it in rec["items"]) if t["uri"] != seed_uri][:n]
 
 # ---------------- Spotify resolution ----------------
 

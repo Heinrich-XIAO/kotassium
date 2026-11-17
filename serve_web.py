@@ -35,6 +35,8 @@ os.makedirs(STATE, exist_ok=True)
 COVER_DIR = os.path.join(STATE, "covers")
 os.makedirs(COVER_DIR, exist_ok=True)
 COVERS_JSON = os.path.join(STATE, "covers.json")
+# Every radio the app plays, in the same store tools/radiolab crawls into.
+RADIO_DB = os.path.join(STATE, "radio.db")
 PORT = 8421
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
 
@@ -1503,7 +1505,7 @@ def handle(path, params, hdr):
             words = lambda s: set(spotify_get.norm(s).split())
             if not seed or not words(query) & words(f"{seed[0]['title']} {seed[0]['artist']}"):
                 raise RuntimeError("no spotify track to seed the radio")
-            recs = spotify_get.spotify_recommend(provider, seed[0]["uri"], 50)
+            recs = spotify_get.spotify_recommend(provider, seed[0]["uri"], 50, db=RADIO_DB)
             results = [{"title": t["title"], "artist": t["artist"], "dur": t.get("dur", 0),
                         "album": t.get("album") or "", "cover": cover_local(t.get("cover") or "")}
                        for t in recs]

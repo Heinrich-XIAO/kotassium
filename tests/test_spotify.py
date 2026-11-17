@@ -191,3 +191,46 @@ class RadioTests(unittest.TestCase):
         self.assertIn("seed_to_playlist/spotify:track:SEED", seen[0])
         self.assertEqual([t["title"] for t in got], ["A"])
         self.assertEqual(got[0]["dur"], 120.0)
+
+    def fake_radio(self, revision="REV1"):
+        def track(uri, name, bpm):
+            return {"attributes": [{"key": "decision_id", "value": "ssp~" + name}],
+                    "itemV2": {"data": {"__typename": "Track", "uri": uri, "name": name, "playcount": "7",
+                                        "artists": {"items": [{"uri": "spotify:artist:AR", "profile": {"name": "Artist"}}]},
+                                        "playlistAudioAttributes": {"bpm": bpm, "key": {"key": "G", "mode": "MODE_MINOR",
+                                                                                         "camelotKey": {"value": "6A"}}},
+                                        "trackDuration": {"totalMilliseconds": 120000}}}}
+        def fake_urlopen(req, timeout=None):
+            if "inspiredby-mix" in req.full_url:
+                body = {"mediaItems": [{"uri": "spotify:playlist:RADIO"}]}
+            else:
+                items = [track("spotify:track:SEED", "Seed", 90.0), track("spotify:track:A", "A", 120.5)]
+                body = {"data": {"playlistV2": {"name": "Seed Radio", "format": "inspiredby-mix", "revisionId": revision,
+                                                "attributes": [{"key": "request_id", "value": "ssp~req"}],
+                                                "content": {"totalCount": 2, "items": items}}}}
+            return io.BytesIO(json.dumps(body).encode())
+        return mock.patch.object(spotify_get.urlreq, "urlopen", fake_urlopen)
+
+    def test_a_played_radio_is_recorded_whole_and_once_per_revision(self):
+        import sqlite3, tempfile
+        path = os.path.join(tempfile.mkdtemp(), "radio.db")
+        prov = spotify_get.TokenProvider("tok")
+        with self.fake_radio():
+            spotify_get.spotify_recommend(prov, "spotify:track:SEED", 50, db=path)
+            spotify_get.spotify_recommend(prov, "spotify:track:SEED", 50, db=path)
+        with self.fake_radio("REV2"):
+            spotify_get.spotify_recommend(prov, "spotify:track:SEED", 50, db=path)
+        db = sqlite3.connect(path)
+        self.assertEqual(db.execute("SELECT revision, fetches, sources, json_extract(attrs, '$.request_id')"
+                                    " FROM radio ORDER BY id").fetchall(),
+                         [("REV1", 2, "app", "ssp~req"), ("REV2", 1, "app", "ssp~req")])
+        self.assertEqual(db.execute("SELECT pos, track, decision_id FROM radio_item WHERE radio=1").fetchall(),
+                         [(0, "spotify:track:SEED", "ssp~Seed"), (1, "spotify:track:A", "ssp~A")])
+        self.assertEqual(db.execute("SELECT bpm, camelot, playcount, artists FROM track WHERE uri='spotify:track:A'")
+                         .fetchone(), (120.5, "6A", 7, '[["spotify:artist:AR", "Artist"]]'))
+
+    def test_a_store_that_cannot_be_written_still_plays_the_radio(self):
+        with self.fake_radio():
+            got = spotify_get.spotify_recommend(spotify_get.TokenProvider("tok"), "spotify:track:SEED", 50,
+                                                db="/nonexistent/dir/radio.db")
+        self.assertEqual([t["title"] for t in got], ["A"])

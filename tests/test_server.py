@@ -705,7 +705,7 @@ class RecommendTests(unittest.TestCase):
         from unittest import mock
         rec = [{"title": "Loonboon", "artist": "Laura Shigihara", "dur": 107.0, "album": "PvZ", "cover": ""}]
         with mock.patch.object(spotify_get, "spotify_search", lambda p, q, n: hit), \
-             mock.patch.object(spotify_get, "spotify_recommend", lambda p, uri, n: rec), \
+             mock.patch.object(spotify_get, "spotify_recommend", lambda p, uri, n, db=None: rec), \
              mock.patch.object(spotify_get.TokenProvider, "bearer", lambda self: "tok"):
             c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
             c.request("GET", "/api/recommend?" + query)
