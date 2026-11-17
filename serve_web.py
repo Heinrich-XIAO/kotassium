@@ -1493,7 +1493,25 @@ def handle(path, params, hdr):
         src, tid = one("src"), one("id")
         return 200, "application/json", b'{"error":"youtube downloads need the extractor lane"}', None, False
     if path == "/api/recommend":
-        return 200, "application/json", b'{"results":[]}', None, False
+        try:
+            import spotify_get
+            provider = spotify_get.TokenProvider()
+            query = f"{one('t')} {one('a')}".strip()
+            seed = spotify_get.spotify_search(provider, query, 1) if query else []
+            # Search always answers with something; a hit sharing no word with
+            # the track would seed a radio for an unrelated song.
+            words = lambda s: set(spotify_get.norm(s).split())
+            if not seed or not words(query) & words(f"{seed[0]['title']} {seed[0]['artist']}"):
+                raise RuntimeError("no spotify track to seed the radio")
+            recs = spotify_get.spotify_recommend(provider, seed[0]["uri"], 50)
+            results = [{"title": t["title"], "artist": t["artist"], "dur": t.get("dur", 0),
+                        "album": t.get("album") or "", "cover": cover_local(t.get("cover") or "")}
+                       for t in recs]
+            threading.Thread(target=_warm_worker, args=([t["cover"] for t in recs if t.get("cover")],),
+                             daemon=True).start()
+            return 200, "application/json", json.dumps({"results": results}).encode(), None, False
+        except Exception as e:
+            return 200, "application/json", json.dumps({"results": [], "error": str(e)[:200]}).encode(), None, False
     if path == "/api/spot/resolve":
         link = one("url")
         try:

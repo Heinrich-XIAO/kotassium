@@ -269,14 +269,11 @@ def pathfinder_query(provider, operation, vhash, variables, tries=4):
     raise last or RuntimeError("pathfinder failed")
 
 SEARCH_OP = ("findTopResults", "903df2a65d8121e27d73a2be03c01e88ebe6021bb6d4eb82a389e35d87e51d27")
-SIMILAR_ALBUMS_OP = ("similarAlbumsBasedOnThisTrack", "1d1f93a737498adca2c892c73af87fc0b052afe4e1a33c989540c32413dfae17")
 ALBUM_TRACKS_OP = ("queryAlbumTracks", "11c9cad9cb24c4f9e25ef9456f68621cfd6006a90f679e729c1d2f2fd70dfe16")
 
 def _pf_duration(track):
     d = track.get("trackDuration") or track.get("duration") or {}
     return int(d.get("totalMilliseconds") or d.get("milliseconds") or 0)
-
-_album_uri_of = {}
 
 def _pick_id(cands, pick):
     # spotify candidates don't carry yt ids; the flat ytsearch is done by search_and_pick at download time.
@@ -322,37 +319,20 @@ def spotify_search(provider, query, limit=8):
         c.pop("uri_album", None)
     return out
 
-def spotify_recommend(provider, track_uri, n):
-    d = pathfinder_query(provider, *SIMILAR_ALBUMS_OP, {"uri": track_uri, "limit": 20})
-    albums = []
-    def walk(o):
-        if isinstance(o, dict):
-            if o.get("__typename") == "Album" and o.get("name") and o.get("uri"):
-                albums.append(o)
-            for v in o.values(): walk(v)
-        elif isinstance(o, list):
-            for v in o: walk(v)
-    walk(d.get("data", {}))
-    seen, tracks = set(), []
-    for alb in albums:
-        if len(tracks) >= n:
-            break
-        try:
-            d2 = pathfinder_query(provider, *ALBUM_TRACKS_OP,
-                                  {"uri": alb["uri"], "offset": 0, "limit": 50})
-        except Exception as e:
-            log(f"album tracks failed ({alb.get('name')}): {e}"); continue
-        for it in d2["data"]["albumUnion"]["tracksV2"]["items"]:
-            t = it.get("track") or {}
-            uri = t.get("uri")
-            if not t.get("name") or uri in seen:
-                continue
-            seen.add(uri)
-            tracks.append({"title": t["name"], "uri": uri,
-                           "artist": ", ".join(a["profile"]["name"] for a in (t.get("artists") or {}).get("items", []) if a.get("profile")),
-                           "album": alb.get("name") or "", "dur": _pf_duration(t) / 1000.0,
-                           "cover": (((alb.get("coverArt") or {}).get("sources")) or [{}])[0].get("url") if alb.get("coverArt") else None})
-    return tracks[:n]
+RADIO_URL = "https://spclient.wg.spotify.com/inspiredby-mix/v2/seed_to_playlist/{}?response-format=json"
+
+def spotify_recommend(provider, seed_uri, n):
+    """Spotify's own song/artist radio: the web player's "Go to radio" asks
+    inspiredby-mix for the seed's personalised Radio playlist (37i9dQZF1E...),
+    which the anonymous token can read like any other playlist."""
+    req = urlreq.Request(RADIO_URL.format(seed_uri),
+                         headers={"Authorization": f"Bearer {provider.bearer()}",
+                                  "App-Platform": "WebPlayer", "User-Agent": "Mozilla/5.0"})
+    items = json.loads(urlreq.urlopen(req, timeout=20).read()).get("mediaItems") or []
+    if not items:
+        raise RuntimeError(f"spotify has no radio for {seed_uri}")
+    _, tracks = resolve_pathfinder("playlist", items[0]["uri"].rsplit(":", 1)[-1], provider)
+    return [t for t in tracks if t["uri"] != seed_uri][:n]
 
 # ---------------- Spotify resolution ----------------
 
@@ -407,7 +387,8 @@ def _pf_track_obj(t, album_fallback=""):
         cover = (((alb.get("coverArt") or {}).get("sources")) or [{}])[0].get("url")
     except Exception:
         pass
-    return {"title": t.get("name") or "", "artist": ", ".join(a for a in artists if a),
+    return {"title": t.get("name") or "", "uri": t.get("uri") or "",
+            "artist": ", ".join(a for a in artists if a),
             "album": alb.get("name") or album_fallback,
             "dur": _pf_duration(t) / 1000.0, "cover": cover}
 

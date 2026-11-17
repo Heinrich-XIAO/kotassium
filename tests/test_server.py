@@ -683,3 +683,43 @@ class AddToPlaylistTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecommendTests(unittest.TestCase):
+    """/api/recommend seeds Spotify's radio from the playing track's title and
+    artist, and refuses a search hit that shares no word with them."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = serve_web.make_server("127.0.0.1", 0)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def get(self, query, hit):
+        import spotify_get
+        from unittest import mock
+        rec = [{"title": "Loonboon", "artist": "Laura Shigihara", "dur": 107.0, "album": "PvZ", "cover": ""}]
+        with mock.patch.object(spotify_get, "spotify_search", lambda p, q, n: hit), \
+             mock.patch.object(spotify_get, "spotify_recommend", lambda p, uri, n: rec), \
+             mock.patch.object(spotify_get.TokenProvider, "bearer", lambda self: "tok"):
+            c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+            c.request("GET", "/api/recommend?" + query)
+            body = json.loads(c.getresponse().read())
+            c.close()
+        return body
+
+    def test_matching_seed_returns_its_radio(self):
+        body = self.get("t=ASGORE&a=Toby%20Fox",
+                        [{"title": "ASGORE", "artist": "Toby Fox", "uri": "spotify:track:X"}])
+        self.assertEqual(body["results"], [{"title": "Loonboon", "artist": "Laura Shigihara",
+                                            "dur": 107.0, "album": "PvZ", "cover": ""}])
+
+    def test_unrelated_search_hit_is_not_a_seed(self):
+        body = self.get("t=zzqqxx&a=", [{"title": "HOLLYWOOD", "artist": "1300SAINT", "uri": "spotify:track:Y"}])
+        self.assertEqual(body["results"], [])
+        self.assertIn("error", body)

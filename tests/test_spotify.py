@@ -1,6 +1,9 @@
+import io
+import json
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -159,3 +162,32 @@ class PlaylistImageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RadioTests(unittest.TestCase):
+    """Radio is Spotify's own seed -> Radio playlist (inspiredby-mix), the one
+    the web player opens on "Go to song radio"; /v1/recommendations is closed
+    to new apps and answers 429."""
+
+    def test_radio_reads_the_seeds_radio_playlist_without_the_seed(self):
+        seed = "spotify:track:SEED"
+        def track(uri, name):
+            return {"itemV2": {"data": {"__typename": "Track", "uri": uri, "name": name,
+                                        "artists": {"items": [{"profile": {"name": "Artist"}}]},
+                                        "trackDuration": {"totalMilliseconds": 120000}}}}
+        seen = []
+        def fake_urlopen(req, timeout=None):
+            seen.append(req.full_url)
+            if "inspiredby-mix" in req.full_url:
+                body = {"total": 1, "mediaItems": [{"uri": "spotify:playlist:RADIO"}]}
+            else:
+                self.assertEqual(json.loads(req.data)["variables"]["uri"], "spotify:playlist:RADIO")
+                items = [track(seed, "Seed"), track("spotify:track:A", "A"), track("spotify:track:B", "B")]
+                body = {"data": {"playlistV2": {"name": "Seed Radio",
+                                                "content": {"totalCount": 3, "items": items}}}}
+            return io.BytesIO(json.dumps(body).encode())
+        with mock.patch.object(spotify_get.urlreq, "urlopen", fake_urlopen):
+            got = spotify_get.spotify_recommend(spotify_get.TokenProvider("tok"), seed, 1)
+        self.assertIn("seed_to_playlist/spotify:track:SEED", seen[0])
+        self.assertEqual([t["title"] for t in got], ["A"])
+        self.assertEqual(got[0]["dur"], 120.0)

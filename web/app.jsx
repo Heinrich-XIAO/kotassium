@@ -739,9 +739,8 @@ function App() {
     if (!seed) return;
     radioLoadingRef.current = true;
     try {
-      const endpoint = `/api/recommend${seed.source === 'youtube' && seed.id ? `?seed=${encodeURIComponent(seed.id)}` : `?artist=${encodeURIComponent(seed.a || seed.t || '')}`}`;
-      const response = await API(endpoint);
-      const additions = (response.results || []).map((track) => ({ t: track.title, a: track.artist, source: track.source, id: track.id, preview: track.preview, ms: (track.dur || 0) * 1000, cover: track.cover || '', album: '' }));
+      const response = await API(`/api/recommend?t=${encodeURIComponent(seed.t || '')}&a=${encodeURIComponent(seed.a || '')}`);
+      const additions = (response.results || []).map((track) => ({ t: track.title, a: track.artist, ms: (track.dur || 0) * 1000, cover: track.cover || '', album: track.album || '' }));
       const seen = new Set(queue.map(trackKey));
       const fresh = additions.filter((track) => !seen.has(trackKey(track)) && seen.add(trackKey(track)));
       if (fresh.length) {
@@ -751,7 +750,7 @@ function App() {
         setQueue(extendedQueue); setCurrentIndex(first);
         setPlayingPlaylist(playingPlaylist);
         playTrack(fresh[0]);
-      } else setRadio(false);
+      } else { setRadio(false); toast(response.error ? 'no radio for this track' : 'radio: nothing new'); }
     } catch { toast('radio failed'); }
     finally { radioLoadingRef.current = false; }
   }, [queue, currentIndex, toast, playingPlaylist, playTrack]);
