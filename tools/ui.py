@@ -67,14 +67,18 @@ ICON_JS = """
     // icon-only button inside it still is, so its glyph stays unclaimed.
     if (ctl.textContent.trim()) { skipped++; continue; }
     seen.add(svg);
-    // The glyph's own box, from its shapes: getBBox is exact for arcs and
-    // ignores the stroke, which is symmetric about the path.
+    // The glyph's own box, from its shapes: getBBox is exact for arcs but
+    // leaves out the stroke. Every glyph has round caps and joins, so a
+    // stroked shape's ink is its box grown by half the stroke on all sides;
+    // a filled shape beside stroked ones (a sparkle) is not grown.
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const el of svg.querySelectorAll('path,line,polyline,polygon,circle,ellipse,rect')) {
       const b = el.getBBox();
       if (!b.width && !b.height) continue;
-      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
-      x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height);
+      const style = getComputedStyle(el);
+      const pad = style.stroke === 'none' ? 0 : parseFloat(style.strokeWidth) / 2;
+      x0 = Math.min(x0, b.x - pad); y0 = Math.min(y0, b.y - pad);
+      x1 = Math.max(x1, b.x + b.width + pad); y1 = Math.max(y1, b.y + b.height + pad);
     }
     const vb = svg.viewBox.baseVal;
     const c = ctl.getBoundingClientRect(), s = svg.getBoundingClientRect();

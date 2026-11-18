@@ -45,15 +45,22 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("else if(RADIO){radioNext()}", self.original)
         self.assertIn("const n = chooseNext()", self.app)
         self.assertIn("playIndex(order[0], queue, playingPlaylist, false, order)", self.app)
-        self.assertIn("else if (radio) fetchRadio()", self.app)
+        self.assertIn("if (smartShuffle && await fetchSmartShuffle()) return", self.app)
         self.assertIn("if (repeat === 2) return index", self.app)
         self.assertIn("if (shuf && q.length > 1) return pos < order.length ? order[pos] : -1", self.app)
 
-    def test_radio_recommendations_are_appended_and_played(self):
-        body = self.app.split("const fetchRadio = useCallback", 1)[1].split("  const next = useCallback", 1)[0]
-        self.assertIn("setQueue(extendedQueue); setCurrentIndex(first)", body)
-        self.assertIn("playTrack(fresh[0])", body)
+    def test_smart_shuffle_appends_the_radio_and_shuffles_only_the_new_songs(self):
+        body = self.app.split("const fetchSmartShuffle = useCallback", 1)[1].split("  const next = useCallback", 1)[0]
+        self.assertIn("const order = [first, ...shuffledExcept(fresh.length, 0).map((index) => first + index)]", body)
+        self.assertIn("playIndex(first, [...queue, ...fresh], playingPlaylist, false, order)", body)
         self.assertIn("/api/recommend", body)
+
+    def test_smart_shuffle_is_the_third_state_of_the_shuffle_button(self):
+        self.assertIn("const nextMode = (shuffleMode + 1) % 3", self.app)
+        self.assertIn("const shuffle = shuffleMode > 0, smartShuffle = shuffleMode === 2", self.app)
+        self.assertIn("return repeat === 1 && !smartShuffle ? 0 : -1", self.app)
+        self.assertEqual(self.app.count("{shuffleButton("), 2)
+        self.assertNotIn("toggleRadio", self.app)
 
     def test_queue_view_uses_only_unplayed_shuffle_entries(self):
         body = self.app.split("const upcoming = useMemo", 1)[1].split("  const trackRows", 1)[0]
@@ -107,7 +114,7 @@ class ReactParityTests(unittest.TestCase):
         self.assertIn("upNextGone.current = true; setUpNext(false); setUpNextDismissed(true);", self.app)
         self.assertIn("upNextGone.current = false", self.app)
         self.assertIn('className="toast-card toast-upnext"', self.app)
-        self.assertIn("const displayNextTrack = nextTrack || (radio && currentIndex >= 0 ? queue[currentIndex] : null)", self.app)
+        self.assertIn("const displayNextTrack = nextTrack || (smartShuffle && currentIndex >= 0 ? queue[currentIndex] : null)", self.app)
 
     def test_replayed_tracks_reuse_the_cached_source_without_searching(self):
         # Source discovery is the only network cost left when replaying a track

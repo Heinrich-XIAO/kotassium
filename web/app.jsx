@@ -85,6 +85,9 @@ function Icon({ name, size = 20, children }) {
     next: <path d="M19.05 1.5A1.05 1.05 0 0 0 18 2.55L18 10.275L3.075 1.66A1.05 1.05 0 0 0 1.5 2.568L1.5 21.43A1.05 1.05 0 0 0 3.075 22.341L18 13.723L18 21.45A1.05 1.05 0 0 0 19.05 22.5L21.45 22.5A1.05 1.05 0 0 0 22.5 21.45L22.5 2.55A1.05 1.05 0 0 0 21.45 1.5L19.05 1.5Z" fill="currentColor" stroke="none" />,
     clock: <><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></>,
     shuffle: <><polyline points="15.5 3 20.5 3 20.5 8"/><line x1="3.5" y1="20" x2="20.5" y2="3"/><polyline points="20.5 16 20.5 21 15.5 21"/><line x1="14.5" y1="15" x2="20.5" y2="21"/><line x1="3.5" y1="4" x2="8.5" y2="9"/></>,
+    // shuffle with a sparkle in the gap left of the long stroke; its tips
+    // keep a full stroke unit clear of both lines.
+    smartShuffle: <><polyline points="15.5 3 20.5 3 20.5 8"/><line x1="3.5" y1="20" x2="20.5" y2="3"/><polyline points="20.5 16 20.5 21 15.5 21"/><line x1="14.5" y1="15" x2="20.5" y2="21"/><line x1="3.5" y1="4" x2="8.5" y2="9"/><path d="M5 10Q5.6 11.9 7.5 12.5Q5.6 13.1 5 15Q4.4 13.1 2.5 12.5Q4.4 11.9 5 10Z" fill="currentColor" stroke="none"/></>,
     repeat: <><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></>,
     volume: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
     fullscreen: <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>,
@@ -360,9 +363,11 @@ function App() {
     setLastPlaylist(playingPlaylist);
     try { localStorage.setItem('kot_last_playlist', playingPlaylist); } catch {}
   }, [playingPlaylist]);
-  const [radio, setRadio] = useState(false);
   const [notifyTrackChanges, setNotifyTrackChanges] = useState(() => { try { return localStorage.getItem('kot_notify_track_changes') !== '0'; } catch { return true; } });
-  const [shuffle, setShuffle] = useState(() => { try { return localStorage.getItem('kot_shuf') === '1'; } catch { return false; } });
+  // 0 off, 1 shuffle, 2 smart shuffle: shuffle that, once the shuffled queue
+  // is played out, adds the playing song's radio instead of starting over.
+  const [shuffleMode, setShuffleMode] = useState(() => { try { const mode = Number(localStorage.getItem('kot_shuf')); return mode === 1 || mode === 2 ? mode : 0; } catch { return 0; } });
+  const shuffle = shuffleMode > 0, smartShuffle = shuffleMode === 2;
   const [repeat, setRepeat] = useState(() => { try { const value = localStorage.getItem('kot_repeat'); return value === null ? 1 : Number(value); } catch { return 1; } });
   const [shuffleOrder, setShuffleOrder] = useState([]);
   const [shufflePos, setShufflePos] = useState(0);
@@ -562,8 +567,8 @@ function App() {
     if (repeat === 2) return index;
     if (shuf && q.length > 1) return pos < order.length ? order[pos] : -1;
     if (index + 1 < q.length) return index + 1;
-    return repeat === 1 ? 0 : -1;
-  }, [queue, currentIndex, shuffle, shuffleOrder, shufflePos, repeat]);
+    return repeat === 1 && !smartShuffle ? 0 : -1;
+  }, [queue, currentIndex, shuffle, smartShuffle, shuffleOrder, shufflePos, repeat]);
 
   const downloadId = useCallback(async (id, label = '', quiet = false) => {
     if (!quiet) { setDownload({ label, pct: 0, status: 'queued' }); setBusy(true); }
@@ -732,42 +737,40 @@ function App() {
     startQueue(playlist, view.name || '', index);
   }, [playlist, view, shuffle, startQueue, links]);
 
-  const radioLoadingRef = useRef(false);
-  const fetchRadio = useCallback(async () => {
-    if (radioLoadingRef.current) return;
+  const smartLoadingRef = useRef(false);
+  const fetchSmartShuffle = useCallback(async () => {
+    if (smartLoadingRef.current) return true;
     const seed = queue[currentIndex];
-    if (!seed) return;
-    radioLoadingRef.current = true;
+    if (!seed) return false;
+    smartLoadingRef.current = true;
     try {
       const response = await API(`/api/recommend?t=${encodeURIComponent(seed.t || '')}&a=${encodeURIComponent(seed.a || '')}`);
       const additions = (response.results || []).map((track) => ({ t: track.title, a: track.artist, ms: (track.dur || 0) * 1000, cover: track.cover || '', album: track.album || '' }));
       const seen = new Set(queue.map(trackKey));
       const fresh = additions.filter((track) => !seen.has(trackKey(track)) && seen.add(trackKey(track)));
       if (fresh.length) {
-        toast(`radio: +${fresh.length} tracks`);
+        toast(`smart shuffle: +${fresh.length} tracks`);
         const first = queue.length;
-        const extendedQueue = [...queue, ...fresh];
-        setQueue(extendedQueue); setCurrentIndex(first);
-        setPlayingPlaylist(playingPlaylist);
-        playTrack(fresh[0]);
-      } else { setRadio(false); toast(response.error ? 'no radio for this track' : 'radio: nothing new'); }
-    } catch { toast('radio failed'); }
-    finally { radioLoadingRef.current = false; }
-  }, [queue, currentIndex, toast, playingPlaylist, playTrack]);
-  const next = useCallback(() => {
+        const order = [first, ...shuffledExcept(fresh.length, 0).map((index) => first + index)];
+        playIndex(first, [...queue, ...fresh], playingPlaylist, false, order);
+        return true;
+      }
+      toast(response.error ? 'smart shuffle: nothing like this song' : 'smart shuffle: nothing new');
+    } catch { toast('smart shuffle failed'); }
+    finally { smartLoadingRef.current = false; }
+    return false;
+  }, [queue, currentIndex, toast, playingPlaylist, playIndex]);
+  const next = useCallback(async () => {
     if (!queue.length) return;
     if (repeat === 2) { playIndex(currentIndex); return; }
-    if (shuffle && queue.length > 1 && shufflePos >= shuffleOrder.length) {
-      const order = shuffledExcept(queue.length, currentIndex);
-      if (order.length) {
-        playIndex(order[0], queue, playingPlaylist, false, order);
-        return;
-      }
-    }
     const n = chooseNext();
-    if (n >= 0) playIndex(n, queue, playingPlaylist, shuffle && queue.length > 1);
-    else if (radio) fetchRadio();
-  }, [queue, chooseNext, repeat, playingPlaylist, playIndex, currentIndex, shuffle, shufflePos, shuffleOrder, radio, fetchRadio]);
+    if (n >= 0) { playIndex(n, queue, playingPlaylist, shuffle && queue.length > 1); return; }
+    if (smartShuffle && await fetchSmartShuffle()) return;
+    if (shuffle && queue.length > 1) {
+      const order = shuffledExcept(queue.length, currentIndex);
+      if (order.length) playIndex(order[0], queue, playingPlaylist, false, order);
+    }
+  }, [queue, chooseNext, repeat, playingPlaylist, playIndex, currentIndex, shuffle, smartShuffle, fetchSmartShuffle]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -776,11 +779,13 @@ function App() {
   }, [queue, currentIndex, playIndex, toast]);
 
   const toggleShuffle = useCallback(() => {
-    const nextShuffle = !shuffle;
+    const nextMode = (shuffleMode + 1) % 3;
+    setShuffleMode(nextMode);
+    try { localStorage.setItem('kot_shuf', String(nextMode)); } catch {}
+    if (nextMode === 2) { toast('smart shuffle: adds songs like this one when the queue runs out'); return; }
+    const nextShuffle = nextMode === 1;
     warmedPlaylists.current.clear();
     prefetchJobsRef.current.clear();
-    setShuffle(nextShuffle);
-    try { localStorage.setItem('kot_shuf', nextShuffle ? '1' : '0'); } catch {}
     if (nextShuffle && currentIndex >= 0) {
       setShuffleOrder(shuffledExcept(queue.length, currentIndex)); setShufflePos(0);
     } else { setShuffleOrder([]); setShufflePos(0); }
@@ -789,9 +794,8 @@ function App() {
       const next = nextShuffle ? shuffledExcept(queue.length, currentIndex)[0] : currentIndex + 1;
       if (next >= 0 && queue[next]) prefetchTrackRef.current?.(queue[next]);
     }
-  }, [shuffle, queue, currentIndex]);
+  }, [shuffleMode, queue, currentIndex, toast]);
   const toggleRepeat = useCallback(() => setRepeat((r) => { const v = (r + 1) % 3; try { localStorage.setItem('kot_repeat', String(v)); } catch {} return v; }), []);
-  const toggleRadio = useCallback(() => setRadio((value) => !value), []);
   const previous = useCallback(() => {
     if (currentIndex > 0) playIndex(currentIndex - 1);
   }, [currentIndex, playIndex]);
@@ -912,8 +916,8 @@ function App() {
   // queue, current item, shuffle order, or repeat mode always reconsider it.
   const nextIndex = chooseNext();
   const nextTrack = nextIndex >= 0 && nextIndex !== currentIndex ? queue[nextIndex] : null;
-  const displayNextTrack = nextTrack || (radio && currentIndex >= 0 ? queue[currentIndex] : null);
-  const radioSearching = radio && !nextTrack;
+  const displayNextTrack = nextTrack || (smartShuffle && currentIndex >= 0 ? queue[currentIndex] : null);
+  const smartShuffleSearching = smartShuffle && !nextTrack;
   useEffect(() => { if (nextTrack) prefetchTrack(nextTrack); }, [nextTrack, prefetchTrack]);
   useEffect(() => {
     const key = trackKey(currentTrack);
@@ -927,7 +931,7 @@ function App() {
     // the web content process's heap grow to hundreds of megabytes.
     const check = () => {
       const pos = audioRef.current?.currentTime || 0;
-      const shouldShow = !!(actualDuration && pos > 0 && actualDuration - pos <= 30 && (nextTrack || radio));
+      const shouldShow = !!(actualDuration && pos > 0 && actualDuration - pos <= 30 && (nextTrack || smartShuffle));
       if (!shouldShow) {
         setUpNextDismissed(false); upNextGone.current = false; setUpNext(false);
       } else if (!upNextGone.current) {
@@ -937,7 +941,7 @@ function App() {
     check();
     const timer = setInterval(check, 1000);
     return () => clearInterval(timer);
-  }, [actualDuration, nextTrack, currentTrack, radio]);
+  }, [actualDuration, nextTrack, currentTrack, smartShuffle]);
 
   useEffect(() => {
     let alive = true;
@@ -1083,14 +1087,13 @@ function App() {
     };
     const onEnded = () => {
       if (repeat === 2) { audio.currentTime = 0; audio.play(); return; }
-      if (radio && currentIndex === queue.length - 1 && repeat !== 1) { fetchRadio(); return; }
       next();
     };
     const onError = () => { if (audio.currentSrc) toast('Audio source could not be played'); };
     audio.addEventListener('play', onPlay); audio.addEventListener('pause', onPause);
     audio.addEventListener('loadedmetadata', onMeta); audio.addEventListener('ended', onEnded); audio.addEventListener('error', onError);
     return () => { audio.removeEventListener('play', onPlay); audio.removeEventListener('pause', onPause); audio.removeEventListener('loadedmetadata', onMeta); audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError); };
-  }, [queue, currentIndex, repeat, next, playTrack, startResolvedTrack, radio, fetchRadio, shufflePos, shuffleOrder, rememberId]);
+  }, [queue, currentIndex, repeat, next, playTrack, startResolvedTrack, shufflePos, shuffleOrder, rememberId]);
 
   useEffect(() => {
     if (!currentTrack) return undefined;
@@ -1441,7 +1444,7 @@ const linkCover = (link) => link?.cover || link?.tracks?.[0]?.cover;
   const trackRows = (tracks, mode) => { const activeIndex = activeRow(tracks, mode); return tracks.map((_, i) => trackRow(tracks, mode, i, activeIndex)); };
 
   const renderMain = () => {
-    if (view.type === 'playlist')    return <><div id="plhead" style={{ background: `linear-gradient(180deg,hsl(${hue(view.name)},65%,30%),hsl(${(hue(view.name) + 40) % 360},60%,22%) 60%,#12121200)` }}><div id="plx" style={{ background: coverBackground(linkCover(links.find((l) => l.name === view.name)), view.name) }}>{coverInitial(view.name, linkCover(links.find((l) => l.name === view.name)))}</div><div className="plinfo"><h1>{view.name}</h1><p>{playlist.length} song{playlist.length === 1 ? '' : 's'}</p></div></div><div id="plactions" className={plStuck ? 'stuck' : ''}><button id="bigplay" onClick={(!!currentTrack && playingPlaylist === view.name) ? togglePlay : playList} data-tooltip={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'Pause' : 'Play'} aria-label={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'Pause' : 'Play'}><PillFace icon={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'pause' : 'play'} label={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'Pause' : 'Play'} labels={['Play', 'Pause']}/></button><b className="plstick">{view.name}</b><button id="shuf2" className={`aicon ${shuffle ? 'on' : ''}`} aria-pressed={shuffle} onClick={toggleShuffle} data-tooltip="Shuffle" aria-label="Shuffle"><Icon name="shuffle" size={20}/></button><button id="rb2" className={`aicon ${repeat ? 'on' : ''}`} aria-pressed={repeat !== 0} onClick={toggleRepeat} data-tooltip="Repeat" aria-label="Repeat"><Icon name="repeat" size={20}/></button></div><div id="tbl" className={playlist.some((t) => t.album) ? '' : 'no-album'}><div className="tr-head"><span>#</span><span>Title</span><span>Album</span><span className="tdur" aria-label="Duration"><Icon name="clock" size={16}/></span></div>{playlist.length > WINDOW_ROWS ? <WindowList count={playlist.length} renderRow={(i) => trackRow(playlist, 'playlist', i)} /> : trackRows(playlist, 'playlist')}</div></>;
+    if (view.type === 'playlist')    return <><div id="plhead" style={{ background: `linear-gradient(180deg,hsl(${hue(view.name)},65%,30%),hsl(${(hue(view.name) + 40) % 360},60%,22%) 60%,#12121200)` }}><div id="plx" style={{ background: coverBackground(linkCover(links.find((l) => l.name === view.name)), view.name) }}>{coverInitial(view.name, linkCover(links.find((l) => l.name === view.name)))}</div><div className="plinfo"><h1>{view.name}</h1><p>{playlist.length} song{playlist.length === 1 ? '' : 's'}</p></div></div><div id="plactions" className={plStuck ? 'stuck' : ''}><button id="bigplay" onClick={(!!currentTrack && playingPlaylist === view.name) ? togglePlay : playList} data-tooltip={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'Pause' : 'Play'} aria-label={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'Pause' : 'Play'}><PillFace icon={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'pause' : 'play'} label={(!!currentTrack && playingPlaylist === view.name) && !paused ? 'Pause' : 'Play'} labels={['Play', 'Pause']}/></button><b className="plstick">{view.name}</b>{shuffleButton('shuf2', 20)}<button id="rb2" className={`aicon ${repeat ? 'on' : ''}`} aria-pressed={repeat !== 0} onClick={toggleRepeat} data-tooltip="Repeat" aria-label="Repeat"><Icon name="repeat" size={20}/></button></div><div id="tbl" className={playlist.some((t) => t.album) ? '' : 'no-album'}><div className="tr-head"><span>#</span><span>Title</span><span>Album</span><span className="tdur" aria-label="Duration"><Icon name="clock" size={16}/></span></div>{playlist.length > WINDOW_ROWS ? <WindowList count={playlist.length} renderRow={(i) => trackRow(playlist, 'playlist', i)} /> : trackRows(playlist, 'playlist')}</div></>;
     if (view.type === 'search') return <div id="search-results">{searching ? <div id="homeView"><h2>Searching “{view.query}”…</h2></div> : <><div id="homeView"><h2>Results for “{view.query}”</h2></div><div id="tbl" style={{ paddingTop: 0 }}>{results.length ? <><div className="tr-head"><span></span><span>Title</span><span>Source</span><span></span></div>{results.length > WINDOW_ROWS ? <WindowList count={results.length} renderRow={(i) => trackRow(results, 'search', i)} /> : trackRows(results, 'search')}</> : <div id="empty">No results from any source.</div>}</div></>}</div>;
     const featured = links.length ? Math.max(0, links.findIndex((l) => l.name === (playingPlaylist || lastPlaylist))) : -1;
     const feature = featured < 0 ? null : (() => {
@@ -1461,7 +1464,9 @@ const linkCover = (link) => link?.cover || link?.tracks?.[0]?.cover;
   };
 
   const repeatButton = (fullscreen = false) => <button id={fullscreen ? 'fsRepeat' : 'repeatb'} className={`aicon ${repeat ? 'on' : ''}`} aria-pressed={repeat !== 0} onClick={toggleRepeat} data-tooltip={`Repeat ${repeat === 0 ? 'off' : repeat === 1 ? 'all' : 'one'}`} aria-label={`Repeat ${repeat === 0 ? 'off' : repeat === 1 ? 'all' : 'one'}`}>{repeat === 2 ? <Repeat1 size={fullscreen ? 24 : 20} strokeWidth={2}/> : <Repeat size={fullscreen ? 24 : 20} strokeWidth={2}/>}</button>;
-  const controls = (fullscreen = false) => <div className={fullscreen ? 'fs-controls' : ''} id={fullscreen ? 'fsBtns' : 'btns'}><button id={fullscreen ? 'fsShuf' : 'shufb'} className={`aicon ${shuffle ? 'on' : ''}`} aria-pressed={shuffle} onClick={toggleShuffle} data-tooltip="Shuffle" aria-label="Shuffle"><Icon name="shuffle" size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsprev' : 'prevb'} className="aicon" onClick={previous} disabled={!currentTrack || (currentIndex <= 0 && !(repeat === 1 && queue.length > 1))} data-tooltip="Previous" aria-label="Previous"><Icon name="prev" size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsPlay' : 'playb'} className={fullscreen ? 'fs-play' : ''} onClick={togglePlay} disabled={!currentTrack} data-tooltip={paused ? 'Play' : 'Pause'} aria-label={paused ? 'Play' : 'Pause'}><Icon name={paused ? 'play' : 'pause'} size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsnext' : 'nextb'} className="aicon" onClick={next} data-tooltip="Next" aria-label="Next" disabled={!currentTrack || (nextIndex < 0 && !radio)}><Icon name="next" size={fullscreen ? 24 : 20}/></button>{repeatButton(fullscreen)}</div>;
+  const shuffleLabel = ['Shuffle off', 'Shuffle on', 'Smart shuffle'][shuffleMode];
+  const shuffleButton = (id, size) => <button id={id} className={`aicon ${shuffle ? 'on' : ''}`} aria-pressed={shuffle} onClick={toggleShuffle} data-tooltip={shuffleLabel} aria-label={smartShuffle ? 'Smart shuffle' : 'Shuffle'}><Icon name={smartShuffle ? 'smartShuffle' : 'shuffle'} size={size}/></button>;
+  const controls = (fullscreen = false) => <div className={fullscreen ? 'fs-controls' : ''} id={fullscreen ? 'fsBtns' : 'btns'}>{shuffleButton(fullscreen ? 'fsShuf' : 'shufb', fullscreen ? 24 : 20)}<button id={fullscreen ? 'fsprev' : 'prevb'} className="aicon" onClick={previous} disabled={!currentTrack || (currentIndex <= 0 && !(repeat === 1 && queue.length > 1))} data-tooltip="Previous" aria-label="Previous"><Icon name="prev" size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsPlay' : 'playb'} className={fullscreen ? 'fs-play' : ''} onClick={togglePlay} disabled={!currentTrack} data-tooltip={paused ? 'Play' : 'Pause'} aria-label={paused ? 'Play' : 'Pause'}><Icon name={paused ? 'play' : 'pause'} size={fullscreen ? 24 : 20}/></button><button id={fullscreen ? 'fsnext' : 'nextb'} className="aicon" onClick={next} data-tooltip="Next" aria-label="Next" disabled={!currentTrack || (nextIndex < 0 && !smartShuffle)}><Icon name="next" size={fullscreen ? 24 : 20}/></button>{repeatButton(fullscreen)}</div>;
   const volumeRow = (full = false) => <div id={full ? 'fsVol' : undefined} className={full ? 'fs-volume' : 'volume-row'}><button className="aicon" onClick={toggleVolume} data-tooltip={muted ? 'Unmute' : 'Mute'} aria-label={muted ? 'Unmute' : 'Mute'} aria-pressed={muted}><span id={full ? 'volIcon2' : 'volIcon'}>{icon('volume', full ? 24 : 20)}</span></button><div className={full ? 'fs-volume-bar' : ''} id={full ? 'fsVolBar' : 'vol'} {...volumeHandlers()} role="slider" tabIndex={0} aria-label="Volume level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((muted ? 0 : Math.sqrt(volume)) * 100)} aria-valuetext={`${Math.round((muted ? 0 : Math.sqrt(volume)) * 100)}%`} onKeyDown={(event) => {
     const now = (muted ? 0 : Math.sqrt(volume)) * 100;
     const to = { ArrowRight: now + 5, ArrowUp: now + 5, ArrowLeft: now - 5, ArrowDown: now - 5, PageUp: now + 20, PageDown: now - 20, Home: 0, End: 100 }[event.key];
@@ -1511,9 +1516,9 @@ const linkCover = (link) => link?.cover || link?.tracks?.[0]?.cover;
         <div className="toast-body"><b>{download.status === 'done' ? 'Download ready' : download.status === 'queued' ? 'Starting download' : 'Downloading'}</b><span>{download.label || 'Track'}</span><div className="toast-progress" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(download.pct)}><i style={{ width: `${download.pct}%` }}/></div></div>
         <small className="toast-percent">{Math.round(download.pct)}%</small>
       </div>}
-      {(upNext || (radio && !nextTrack && currentTrack)) && currentTrack && !desktopPlayer && !upNextDismissed && <div id="upnext" className="toast-card toast-upnext" role="status">
+      {(upNext || (smartShuffleSearching && currentTrack)) && currentTrack && !desktopPlayer && !upNextDismissed && <div id="upnext" className="toast-card toast-upnext" role="status">
         <span className="toast-icon toast-upnext-icon" aria-hidden="true">♫</span>
-        <div className="toast-body"><b>Up next</b><span>{radioSearching ? 'Finding radio tracks…' : `${displayNextTrack?.t || ''}${displayNextTrack?.a ? ` · ${displayNextTrack.a}` : ''}`}</span></div>
+        <div className="toast-body"><b>Up next</b><span>{smartShuffleSearching ? 'Smart shuffle is finding songs…' : `${displayNextTrack?.t || ''}${displayNextTrack?.a ? ` · ${displayNextTrack.a}` : ''}`}</span></div>
         <button className="toast-close" type="button" aria-label="Dismiss up next notification" onClick={() => { upNextGone.current = true; setUpNext(false); setUpNextDismissed(true); }}><Icon name="close" size={16}/></button>
       </div>}
       {toastItems.map((item) => <div key={item.id} className={`toast-card toast-${item.variant}`} role={item.variant === 'error' ? 'alert' : 'status'}>
