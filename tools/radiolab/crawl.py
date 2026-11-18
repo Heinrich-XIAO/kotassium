@@ -6,9 +6,9 @@ then from tracks the stored radios recommend but nobody has crawled yet:
 half the most-recommended (dense overlap to learn from), half at random
 (coverage outside the roots' neighbourhoods).
 
-  venv/bin/python tools/radiolab/crawl.py --max 5000 [--workers 3] [--db PATH]
+  venv/bin/python tools/radiolab/crawl.py --max 5000 [--workers 3] [--db PATH] [--shard 1/2]
 """
-import argparse, os, random, sys, threading, time, urllib.error
+import argparse, os, random, sys, threading, time, urllib.error, zlib
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -33,10 +33,12 @@ ROOTS = ["Blinding Lights The Weeknd", "Jolene Dolly Parton", "Dynamite BTS", "S
 FAIL = "CREATE TABLE IF NOT EXISTS crawl_fail (seed TEXT PRIMARY KEY, error TEXT, at REAL)"
 
 
-def frontier(db, n, rng):
-    """Uncrawled tracks the stored radios recommend, ranked by how often."""
+def frontier(db, n, rng, shard=(0, 1)):
+    """Uncrawled tracks the stored radios recommend, ranked by how often.
+    With shard (k, n) only every n-th track by hash, so n crawlers split the work."""
     rows = db.execute("SELECT i.track, COUNT(*) c FROM radio_item i WHERE i.track NOT IN (SELECT seed FROM radio)"
                       " AND i.track NOT IN (SELECT seed FROM crawl_fail) GROUP BY i.track ORDER BY c DESC").fetchall()
+    rows = [r for r in rows if zlib.crc32(r[0].encode()) % shard[1] == shard[0]]
     dense = [t for t, _ in rows[: n // 2]]
     rest = [t for t, _ in rows[n // 2:]]
     return dense + rng.sample(rest, min(len(rest), n - len(dense)))
@@ -68,7 +70,9 @@ def main():
     ap.add_argument("--max", type=int, default=1000)
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--shard", default="0/1", help="k/n: crawl only this share of the frontier")
     a = ap.parse_args()
+    shard = tuple(int(x) for x in a.shard.split("/"))
     db = sg.radio_db(a.db)
     db.execute(FAIL)
     prov, rng, lock = sg.TokenProvider(), random.Random(a.seed), threading.Lock()
@@ -98,7 +102,7 @@ def main():
         list(ex.map(one, roots))
         while done[0] < a.max:
             with lock:
-                batch = frontier(db, min(60, a.max - done[0]), rng)
+                batch = frontier(db, min(60, a.max - done[0]), rng, shard)
             if not batch:
                 break
             list(ex.map(one, batch))
