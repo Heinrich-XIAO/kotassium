@@ -352,6 +352,8 @@ def fetch_radio(provider, seed_uri):
     d = pathfinder_query(provider, *FETCH_PLAYLIST_OP, {"uri": media[0]["uri"], "offset": 0, "limit": 100,
                                                         "enableWatchFeedEntrypoint": False})
     pv = d["data"]["playlistV2"]
+    if "content" not in pv:  # inspiredby-mix can name a radio playlist that answers NotFound
+        raise RuntimeError(f"spotify has no radio for {seed_uri}: {pv.get('message') or pv.get('__typename')}")
     items = []
     for it in pv["content"]["items"]:
         t = (it.get("itemV2") or {}).get("data") or {}

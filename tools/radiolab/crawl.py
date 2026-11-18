@@ -45,22 +45,25 @@ def frontier(db, n, rng, shard=(0, 1)):
 
 
 def fetch(prov, seed):
+    last = None
     for i in range(6):
         try:
             return sg.fetch_radio(prov, seed), None
         except urllib.error.HTTPError as e:
+            last = f"http {e.code}"
             if e.code == 429:
-                time.sleep(30 * (i + 1))
+                time.sleep(max(30 * (i + 1), int(e.headers.get("Retry-After") or 0)))
                 continue
             if e.code in (400, 404):
                 return None, f"http {e.code}"
             time.sleep(5)
         except Exception as e:
-            err = str(e)[:200]
+            err = last = str(e)[:200]
             if "no radio" in err:
                 return None, err
             time.sleep(5)
-    return None, "gave up after retries"
+    print(f"{seed}: gave up ({last}), will retry later", flush=True)
+    return None, None  # rate limited or flaky: not the seed's fault, try it again later
 
 
 def main():
@@ -84,7 +87,7 @@ def main():
             if rec and len(rec["items"]):
                 sg.record_radio(db, rec, "crawl")
                 done[0] += 1
-            else:
+            elif rec or err:
                 with db:
                     db.execute("INSERT OR REPLACE INTO crawl_fail VALUES (?,?,?)", (seed, err or "empty", time.time()))
 

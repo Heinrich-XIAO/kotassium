@@ -192,6 +192,18 @@ class RadioTests(unittest.TestCase):
         self.assertEqual([t["title"] for t in got], ["A"])
         self.assertEqual(got[0]["dur"], 120.0)
 
+    def test_a_radio_playlist_spotify_cannot_find_means_no_radio(self):
+        def fake_urlopen(req, timeout=None):
+            if "inspiredby-mix" in req.full_url:
+                body = {"total": 1, "mediaItems": [{"uri": "spotify:playlist:GONE"}]}
+            else:
+                body = {"data": {"playlistV2": {"__typename": "NotFound",
+                                                "message": "Object with uri 'spotify:playlist:GONE' not found"}}}
+            return io.BytesIO(json.dumps(body).encode())
+        with mock.patch.object(spotify_get.urlreq, "urlopen", fake_urlopen):
+            with self.assertRaisesRegex(RuntimeError, "no radio"):
+                spotify_get.fetch_radio(spotify_get.TokenProvider("tok"), "spotify:track:SEED")
+
     def fake_radio(self, revision="REV1"):
         def track(uri, name, bpm):
             return {"attributes": [{"key": "decision_id", "value": "ssp~" + name}],
